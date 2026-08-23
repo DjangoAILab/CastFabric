@@ -22,6 +22,8 @@ log = logging.getLogger("miair")
 class MiAir:
     """MiAir 主应用"""
 
+    AUTH_RETRY_DELAYS = (30, 120, 300, 900)
+
     def __init__(self, config: Config):
         self.config = config
         self.auth = AuthManager(config)
@@ -33,6 +35,7 @@ class MiAir:
         self._web_runner: web.AppRunner | None = None
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
+        self._auth_retry_task: asyncio.Task | None = None
 
     def get_renderer_by_did(self, did: str) -> DLNARenderer | None:
         """根据 DID 获取渲染器"""
@@ -54,9 +57,7 @@ class MiAir:
             return []
 
     async def _periodic_device_check(self):
-        """每分钟自主检查设备列表，如果为空且启动超过5分钟，则触发重启"""
-        import time
-        start_time = time.time()
+        """定期检查设备；异常时启动进程内恢复而非重启进程。"""
         while True:
             await asyncio.sleep(60)
             
@@ -68,21 +69,47 @@ class MiAir:
             if not self.config.account and not self.config.cookie:
                 continue
             
-            uptime = time.time() - start_time
-            if uptime < 300:
-                continue
-
             try:
                 devices = await self.get_all_devices()
                 if not devices:
-                    log.error("定期检查发现设备列表突然为空，判定为故障，触发自动重启以恢复服务...")
-                    from miair.web.api import _restart_process
-                    try:
-                        asyncio.get_running_loop().call_soon(_restart_process)
-                    except RuntimeError:
-                        _restart_process()
+                    log.warning("定期检查未获取到设备，启动进程内认证恢复")
+                    self._schedule_auth_retry()
             except Exception as e:
-                log.warning(f"定期检查设备列表异常: {e}")
+                log.warning(f"定期检查设备列表异常: {type(e).__name__}")
+                self._schedule_auth_retry()
+
+    def _schedule_auth_retry(self):
+        """启动唯一的、带上限退避的认证/DLNA 恢复任务。"""
+        if not self.config.auto_restart:
+            return
+        if self._auth_retry_task and not self._auth_retry_task.done():
+            return
+        self._auth_retry_task = asyncio.create_task(self._auth_retry_loop())
+
+    async def _auth_retry_loop(self):
+        attempt = 0
+        try:
+            while self.config.auto_restart:
+                delay = self.AUTH_RETRY_DELAYS[
+                    min(attempt, len(self.AUTH_RETRY_DELAYS) - 1)
+                ]
+                log.info(f"认证恢复将在 {delay} 秒后重试")
+                await asyncio.sleep(delay)
+
+                if not (self.config.account or self.config.cookie) or not self.config.mi_did:
+                    return
+
+                log.info(f"开始第 {attempt + 1} 次进程内认证恢复")
+                await self.restart_dlna_services()
+                if self.dlna_running:
+                    log.info("进程内认证恢复成功")
+                    return
+                attempt += 1
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if asyncio.current_task() is self._auth_retry_task:
+                self._auth_retry_task = None
 
     async def start(self):
         """启动所有服务"""
@@ -127,6 +154,7 @@ class MiAir:
                 self._did_to_udn.clear()
                 if hasattr(self, 'speaker_manager'):
                     self.speaker_manager.controllers.clear()
+                self._schedule_auth_retry()
                 return
 
             # 获取设备列表，确保能正常获取新账号的设备
@@ -139,11 +167,7 @@ class MiAir:
                 if hasattr(self, 'speaker_manager'):
                     self.speaker_manager.controllers.clear()
 
-                # 如果开启了自动重启，则尝试重启
-                if self.config.auto_restart:
-                    log.warning("未获取到设备列表，正在尝试自动重启程序...")
-                    from miair.web.api import _restart_process
-                    asyncio.get_running_loop().call_later(5, _restart_process)
+                self._schedule_auth_retry()
                 return
 
             # 初始化音箱
@@ -181,6 +205,16 @@ class MiAir:
             self.dlna_running = True
             self.config.save()
 
+            # 若服务通过手动配置更新恢复，取消尚未执行的后台重试；恢复
+            # 任务自身会在看到 dlna_running=True 后自然结束。
+            if (
+                self._auth_retry_task
+                and self._auth_retry_task is not asyncio.current_task()
+                and not self._auth_retry_task.done()
+            ):
+                self._auth_retry_task.cancel()
+                self._auth_retry_task = None
+
             # 启动 AirPlay 服务 - 每个音箱一个
             await self._start_airplay_for_speakers()
 
@@ -196,6 +230,7 @@ class MiAir:
             self._did_to_udn.clear()
             if hasattr(self, 'speaker_manager'):
                 self.speaker_manager.controllers.clear()
+            self._schedule_auth_retry()
 
     async def _start_airplay_for_speakers(self):
         """为每个音箱启动独立的 AirPlay 接收服务"""
@@ -211,6 +246,9 @@ class MiAir:
 
     async def restart_dlna_services(self):
         """重启 DLNA 服务 (用户通过 Web 修改配置后调用)"""
+        if self.airplay_manager:
+            await self.airplay_manager.stop()
+            self.airplay_manager = None
         # 先停止现有服务
         await self._stop_dlna_services()
         # 关闭并重新初始化 auth，确保账号切换生效
@@ -220,9 +258,6 @@ class MiAir:
         self.speaker_manager = SpeakerManager(self.config, self.auth)
         # 启动
         await self._start_dlna_services()
-        # 重启 AirPlay
-        if self.airplay_manager:
-            await self.airplay_manager.restart_for_speakers(self.speaker_manager.controllers)
 
     async def _stop_dlna_services(self):
         """停止 DLNA 服务"""
@@ -242,6 +277,9 @@ class MiAir:
 
         if hasattr(self, '_device_check_task') and self._device_check_task:
             self._device_check_task.cancel()
+        if self._auth_retry_task:
+            self._auth_retry_task.cancel()
+            self._auth_retry_task = None
 
         await self._stop_dlna_services()
         if self.airplay_manager:
