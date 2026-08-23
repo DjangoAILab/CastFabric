@@ -169,6 +169,7 @@ class DeviceServer:
         buf = MediaBuffer(remote_url)
         self._media_buffers[buffer_id] = buf
         self._url_to_buffer[remote_url] = buffer_id
+        self._buffer_created_time[buffer_id] = time.time()
         asyncio.get_running_loop().create_task(buf.start_download(self._get_proxy_session()))
 
         token = secrets.token_urlsafe(16)
@@ -191,17 +192,25 @@ class DeviceServer:
             buf = MediaBuffer(original_url)
             self._media_buffers[buffer_id] = buf
             self._url_to_buffer[original_url] = buffer_id
+            self._buffer_created_time[buffer_id] = time.time()
             # 启动下载
             asyncio.get_running_loop().create_task(buf.start_download(self._get_proxy_session()))
             log.info(f"Seek: 已启动新缓冲下载")
         else:
             buf = self._media_buffers.get(buffer_id)
         
-        if not buf or buf.error:
+        if not buf:
             log.warning(f"Seek: 缓冲无效或出错")
             return None
-        if buf.total_size <= 0:
-            log.warning(f"Seek: 缓冲大小为0")
+
+        # 新建缓冲的下载任务是异步启动的。恢复播放可能紧接着到达，
+        # 此时 HEAD 尚未返回，不能把暂时的 total_size=0 当成无效缓存。
+        if not buf._headers_event.is_set():
+            log.info("Seek: 等待缓冲响应头...")
+            await buf.wait_for_headers(timeout=15.0)
+
+        if buf.error:
+            log.warning(f"Seek: 缓冲无效或出错: {buf.error}")
             return None
         if duration <= 0 or seek_seconds < 0:
             log.warning(f"Seek: 无效的时间参数 {seek_seconds}/{duration}")
@@ -210,17 +219,18 @@ class DeviceServer:
             log.warning(f"Seek: 时间超出范围 {seek_seconds}/{duration}")
             return None
 
-        # 等待缓冲完成（最多等待15秒）
+        # Seek 必须基于完整文件。旧逻辑在响应头未返回时直接失败，随后
+        # renderer 会退回普通 URL 并错误上报 PLAYING。
         if not buf.download_complete:
-            log.info(f"Seek: 等待缓冲完成...")
-            try:
-                await asyncio.wait_for(buf._complete_event.wait(), timeout=15.0)
-            except asyncio.TimeoutError:
-                log.warning(f"Seek: 缓冲等待超时，尝试使用当前可用数据")
-                # 如果缓冲未完成但有足够数据（至少2MB），继续处理
-                if len(buf.data) < 2 * 1024 * 1024:
-                    log.warning(f"Seek: 缓冲数据不足 ({len(buf.data)} bytes)")
-                    return None
+            log.info("Seek: 等待缓冲完成...")
+            await buf.wait_for_completion(timeout=30.0)
+
+        if buf.error or not buf.download_complete:
+            log.warning(f"Seek: 缓冲未完成: {buf.error or 'download incomplete'}")
+            return None
+        if buf.total_size <= 0:
+            log.warning(f"Seek: 缓冲大小为0")
+            return None
 
         seek_ratio = seek_seconds / duration
         fmt = self._detect_audio_format(buf.data)
@@ -575,7 +585,9 @@ class DeviceServer:
     def _cleanup_old_buffers(self):
         """清理旧缓冲，保持数量不超过 _MAX_BUFFERS 且内存不超限"""
         while len(self._media_buffers) >= _MAX_BUFFERS:
-            oldest_id = next(iter(self._media_buffers))
+            oldest_id = self._oldest_removable_buffer_id()
+            if oldest_id is None:
+                break
             self._remove_buffer(oldest_id)
         # 按内存上限清理
         self._cleanup_by_memory()
@@ -584,11 +596,44 @@ class DeviceServer:
         """清理缓冲直到总内存用量低于上限"""
         total_mem = sum(len(buf.data) for buf in self._media_buffers.values())
         while total_mem > self._max_buffer_memory and self._media_buffers:
-            oldest_id = next(iter(self._media_buffers))
+            oldest_id = self._oldest_removable_buffer_id()
+            if oldest_id is None:
+                break
             buf = self._media_buffers.get(oldest_id)
             freed = len(buf.data) if buf else 0
             self._remove_buffer(oldest_id)
             total_mem -= freed
+
+    def _protected_buffer_ids(self) -> set[str]:
+        """返回当前/下一曲及活跃代理正在使用的缓冲 ID。"""
+        protected: set[str] = set()
+
+        for renderer in self.renderers.values():
+            for url in (renderer.current_uri, renderer.next_uri):
+                if url:
+                    buffer_id = self._url_to_buffer.get(url)
+                    if buffer_id in self._media_buffers:
+                        protected.add(buffer_id)
+
+        active_udns = {
+            udn
+            for udn, tasks in self._active_proxy_tasks.items()
+            if any(not task.done() for task in tasks)
+        }
+        if active_udns:
+            for buffer_id, _, udn in self._proxy_tokens.values():
+                if udn in active_udns and buffer_id in self._media_buffers:
+                    protected.add(buffer_id)
+
+        return protected
+
+    def _oldest_removable_buffer_id(self) -> str | None:
+        """选择最旧的非活动缓冲；全部受保护时不强行删除。"""
+        protected = self._protected_buffer_ids()
+        return next(
+            (bid for bid in self._media_buffers if bid not in protected),
+            None,
+        )
 
     def _remove_buffer(self, buffer_id: str):
         """移除一个缓冲及其关联的 token 和时间戳"""
@@ -632,10 +677,13 @@ class DeviceServer:
                         active_urls.add(renderer.current_uri)
                     if renderer.next_uri:
                         active_urls.add(renderer.next_uri)
+                protected_ids = self._protected_buffer_ids()
                 
                 # 清理过时缓冲（创建超过 120 秒且已完成下载的）
                 to_remove = []
                 for bid, buf in self._media_buffers.items():
+                    if bid in protected_ids:
+                        continue
                     if not buf.download_complete:
                         continue
                     # 跳过最近 120 秒内被代理访问过的缓冲（正在被流式传输）
@@ -666,6 +714,8 @@ class DeviceServer:
                     for bid in to_remove:
                         buf = self._media_buffers.get(bid)
                         if not buf or not buf.download_complete:
+                            continue
+                        if bid in protected_ids:
                             continue
                         # 跳过最近被访问的缓冲
                         la = self._buffer_last_accessed.get(bid, 0)

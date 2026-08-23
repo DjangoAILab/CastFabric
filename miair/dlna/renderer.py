@@ -186,34 +186,42 @@ class DLNARenderer:
             if self._play_start_time > 0:
                 resume_position += time.time() - self._play_start_time
 
-            # 通过本地代理转发 URL (避免音箱直接拉取远端长 URL 失败)
-            play_url = self.current_uri
-            if self.proxy_url_func:
-                play_url = self.proxy_url_func(self.current_uri, self.udn)
-                log.info(f"[{self.friendly_name}] 代理 URL: {play_url}")
-
-            # 如果有累计播放时间，使用seek功能从该位置继续播放
+            # 恢复播放时必须先生成有效的 seek 媒体。不能先创建普通代理
+            # 再在 seek 失败时静默从头播放并向控制端上报 PLAYING。
+            play_url = None
             if resume_position > 0 and self.seek_url_func:
                 log.info(f"[{self.friendly_name}] 从 {self._format_time(resume_position)} 继续播放")
                 track_duration = self._track_duration if self._track_duration > 0 else 3600.0
-                seek_url = await self.seek_url_func(
+                play_url = await self.seek_url_func(
                     self.current_uri, resume_position, track_duration, self.udn
                 )
-                if seek_url:
-                    play_url = seek_url
+                if play_url:
                     log.info(f"[{self.friendly_name}] Seek URL: {play_url}")
+                else:
+                    self.transport_state = TRANSPORT_STATE_STOPPED
+                    self._play_grace_until = 0.0
+                    log.error(f"[{self.friendly_name}] 恢复播放失败: Seek 媒体未就绪")
+            else:
+                play_url = self.current_uri
+                if self.proxy_url_func:
+                    play_url = self.proxy_url_func(self.current_uri, self.udn)
+                    log.info(f"[{self.friendly_name}] 代理 URL: {play_url}")
 
             # 转码模式: 立即标记为 PLAYING 并设置宽限期
             # 让手机端先收到 PLAYING 通知，避免转码期间手机显示暂停
             # WAV 转码很快（1-2秒），8秒宽限期绰绰有余
-            if needs_transcode:
+            if needs_transcode and play_url:
                 self.transport_state = TRANSPORT_STATE_PLAYING
                 self._play_grace_until = time.time() + 8.0
                 log.info(f"[{self.friendly_name}] 转码模式: 先返回 PLAYING 状态")
 
         # 转码模式: 释放锁后立即推送 PLAYING 给手机端
-        if needs_transcode:
+        if needs_transcode and play_url:
             await self.notify_state_change()
+
+        if not play_url:
+            await self.notify_state_change()
+            return False
 
         # 发送实际播放指令
         async with self._lock:
