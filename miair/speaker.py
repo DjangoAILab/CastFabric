@@ -14,6 +14,10 @@ log = logging.getLogger("miair")
 class SpeakerController:
     """单个小爱音箱的控制接口"""
 
+    # 这些老款音箱使用 play_by_url 播放正常，但 pause 指令不会真正停止音频。
+    # 使用 stop 实现暂停，渲染器会记录位置并在恢复时生成 seek URL。
+    _STOP_AS_PAUSE_HARDWARE = {"M01", "XMYX01JY"}
+
     # 连续登录失败计数（所有实例共享，因为登录状态是全局的）
     _consecutive_login_failures: int = 0
     _LOGIN_FAILURE_RESTART_THRESHOLD = 6  # 连续失败 6 次后触发重启
@@ -49,6 +53,20 @@ class SpeakerController:
             return False
         return True
 
+    def _should_stop_for_pause(self) -> bool:
+        if self._should_use_music_api():
+            return True
+        hardware = self.speaker.hardware or ""
+        return any(model in hardware for model in self._STOP_AS_PAUSE_HARDWARE)
+
+    @staticmethod
+    def _mina_request_succeeded(ret) -> bool:
+        """检查 MiNA 代理响应以及设备内层响应。"""
+        if not isinstance(ret, dict) or ret.get("code") != 0:
+            return False
+        data = ret.get("data")
+        return not isinstance(data, dict) or data.get("code", 0) == 0
+
     async def play_url(self, url: str) -> bool:
         """让音箱播放指定 URL"""
         try:
@@ -61,7 +79,7 @@ class SpeakerController:
             else:
                 ret = await self.auth.mina_service.play_by_url(self.device_id, url)
                 log.info(f"play_by_url device_id={self.device_id} ret={ret}")
-            return ret is not None
+            return self._mina_request_succeeded(ret)
         except Exception as e:
             log.error(f"play_url 失败: {e}")
             # 检查是否是登录失败的错误
@@ -79,7 +97,7 @@ class SpeakerController:
                         )
                     else:
                         ret = await self.auth.mina_service.play_by_url(self.device_id, url)
-                    return ret is not None
+                    return self._mina_request_succeeded(ret)
                 except Exception as e2:
                     log.error(f"重新登录后 play_url 仍然失败: {e2}")
                     return False
@@ -89,14 +107,18 @@ class SpeakerController:
         """暂停播放"""
         try:
             await self.auth.ensure_login()
-            if self._should_use_music_api():
+            if self._should_stop_for_pause():
                 # 某些使用 play_by_music_url 的设备，调用 pause 后 API 状态不会
-                # 正确更新为 paused (status=2)，需改用 stop 来实现暂停语义
+                # 正确更新为 paused (status=2)，M01 等老款固件也会忽略
+                # pause 指令，需改用 stop 来实现暂停语义。
                 ret = await self.auth.mina_service.player_stop(self.device_id)
                 log.info(f"player_stop(as pause) device_id={self.device_id} ret={ret}")
             else:
                 ret = await self.auth.mina_service.player_pause(self.device_id)
                 log.info(f"player_pause device_id={self.device_id} ret={ret}")
+            if not self._mina_request_succeeded(ret):
+                log.warning(f"pause 设备执行失败: {ret}")
+                return False
             return True
         except Exception as e:
             log.error(f"pause 失败: {e}")
@@ -109,11 +131,11 @@ class SpeakerController:
                 # 重新尝试暂停
                 try:
                     await self.auth.ensure_login()
-                    if self._should_use_music_api():
-                        await self.auth.mina_service.player_stop(self.device_id)
+                    if self._should_stop_for_pause():
+                        ret = await self.auth.mina_service.player_stop(self.device_id)
                     else:
-                        await self.auth.mina_service.player_pause(self.device_id)
-                    return True
+                        ret = await self.auth.mina_service.player_pause(self.device_id)
+                    return self._mina_request_succeeded(ret)
                 except Exception as e2:
                     log.error(f"重新登录后 pause 仍然失败: {e2}")
                     return False
