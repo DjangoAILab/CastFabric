@@ -228,7 +228,12 @@ LABEL maintainer="MiAir"
 LABEL description="DLNA/AirPlay receiver for Xiaomi AI Speaker"
 
 # 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i \\
+    -e 's|http://deb.debian.org/debian-security|https://mirrors.ustc.edu.cn/debian-security|g' \\
+    -e 's|http://deb.debian.org/debian|https://mirrors.ustc.edu.cn/debian|g' \\
+    /etc/apt/sources.list.d/debian.sources \\
+    && apt-get -o Acquire::Retries=5 update \\
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
     ffmpeg \
     libportaudio2 \
     dnsutils \
@@ -238,9 +243,12 @@ WORKDIR /app
 
 # 安装 Python 依赖
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir \\
+    --index-url https://mirrors.aliyun.com/pypi/simple \\
+    . --root-user-action=ignore
 
-# 复制应用代码
+# 复制应用代码和默认配置
+COPY config-example.json .env.example ./
 COPY miair.py ./
 COPY miair/ ./miair/
 
@@ -250,7 +258,7 @@ RUN mkdir -p /app/conf
 # 暴露端口
 EXPOSE 8200 8300
 
-ENTRYPOINT ["python", "miair.py", "--conf-path", "/app/conf"]
+ENTRYPOINT ["/bin/sh", "-c", "if [ ! -f /app/conf/config.json ]; then cp /app/config-example.json /app/conf/config.json; fi && if [ ! -f /app/conf/.env ]; then cp /app/.env.example /app/conf/.env; fi && exec python miair.py --conf-path /app/conf"]
 DOCKERFILE_EOF
 
 echo -e "${GREEN}✓ Dockerfile 创建完成${NC}"

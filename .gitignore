@@ -1,4 +1,5 @@
 .env
+conf/
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/

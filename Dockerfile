@@ -3,16 +3,24 @@ FROM python:3.12-slim
 LABEL maintainer="MiAir"
 LABEL description="DLNA/AirPlay receiver for Xiaomi AI Speaker"
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libportaudio2 \
-    dnsutils \
+# 安装系统依赖
+RUN sed -i \
+    -e 's|http://deb.debian.org/debian-security|https://mirrors.ustc.edu.cn/debian-security|g' \
+    -e 's|http://deb.debian.org/debian|https://mirrors.ustc.edu.cn/debian|g' \
+    /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        ffmpeg \
+        libportaudio2 \
+        dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir . --root-user-action=ignore
+RUN pip install --no-cache-dir \
+    --index-url https://mirrors.aliyun.com/pypi/simple \
+    . --root-user-action=ignore
 
 # 这里明确把示例配置文件也拷贝进镜像的备用区
 COPY config-example.json .env.example ./
