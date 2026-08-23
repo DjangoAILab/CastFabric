@@ -3,6 +3,7 @@ import os
 import stat
 import tempfile
 import unittest
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
@@ -37,6 +38,35 @@ class AtomicTokenStoreTests(unittest.TestCase):
 
 
 class AuthManagerPersistenceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_login_is_single_flight_and_rate_limited(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = Config(
+                hostname="127.0.0.1",
+                conf_path=temp_dir,
+                cookie="userId=100200; passToken=bootstrap-token",
+                mi_did="123",
+            )
+            manager = AuthManager(config)
+            try:
+                async def fail_once():
+                    await asyncio.sleep(0.01)
+                    return False
+
+                manager._login_once = AsyncMock(side_effect=fail_once)
+
+                with patch.object(
+                    PersistentMiAccount, "login", new=AsyncMock(return_value=False)
+                ):
+                    results = await asyncio.gather(
+                        *(manager.login() for _ in range(5))
+                    )
+
+                self.assertEqual(results, [False] * 5)
+                manager._login_once.assert_awaited_once()
+                self.assertGreater(manager._next_login_attempt, 0)
+            finally:
+                await manager.close()
+
     async def test_matching_complete_stored_token_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             stored = token(pass_token="rotated-token")

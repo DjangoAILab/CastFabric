@@ -1,5 +1,6 @@
 """小米账号认证管理"""
 
+import asyncio
 import copy
 import json
 import logging
@@ -7,6 +8,7 @@ import os
 import re
 import secrets
 import tempfile
+import time
 
 import aiohttp
 from miservice import MiAccount, MiIOService, MiNAService
@@ -203,6 +205,8 @@ def parse_cookie_string(cookie_str: str) -> dict:
 class AuthManager:
     """管理小米账号认证和设备服务"""
 
+    LOGIN_RETRY_DELAYS = (30, 120, 300, 900)
+
     def __init__(self, config: Config):
         self.config = config
         self.session: aiohttp.ClientSession | None = None
@@ -210,8 +214,38 @@ class AuthManager:
         self.mina_service: MiNAService | None = None
         self.miio_service: MiIOService | None = None
         self._logged_in = False
+        self._login_lock = asyncio.Lock()
+        self._login_failures = 0
+        self._next_login_attempt = 0.0
 
     async def login(self):
+        """单飞登录并在失败后限流，防止 Web 轮询触发请求风暴。"""
+        if self._logged_in:
+            return True
+        if time.monotonic() < self._next_login_attempt:
+            return False
+
+        async with self._login_lock:
+            if self._logged_in:
+                return True
+            if time.monotonic() < self._next_login_attempt:
+                return False
+
+            success = bool(await self._login_once())
+            if success:
+                self._login_failures = 0
+                self._next_login_attempt = 0.0
+                return True
+
+            delay = self.LOGIN_RETRY_DELAYS[
+                min(self._login_failures, len(self.LOGIN_RETRY_DELAYS) - 1)
+            ]
+            self._login_failures += 1
+            self._next_login_attempt = time.monotonic() + delay
+            log.warning(f"小米认证失败，{delay} 秒内不再发起登录请求")
+            return False
+
+    async def _login_once(self):
         """登录小米账号并初始化服务"""
         os.makedirs(self.config.conf_path, exist_ok=True)
 
@@ -296,11 +330,13 @@ class AuthManager:
         # 无论是否登录成功，都设置 service (方便后续重试)
         self.mina_service = MiNAService(self.account)
         self.miio_service = MiIOService(self.account)
+        return self._logged_in
 
     async def ensure_login(self):
         """确保已登录，未登录则尝试登录"""
         if self.mina_service is None or not self._logged_in:
-            await self.login()
+            return await self.login()
+        return True
 
     @staticmethod
     def _has_service_token(token: dict | None, sid: str) -> bool:
