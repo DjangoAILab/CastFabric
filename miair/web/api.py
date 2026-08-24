@@ -211,6 +211,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
     async def handle_get_setting(request):
         """获取当前设置和设备列表 (类似 xiaomusic /getsetting)"""
         need_device_list = request.query.get("need_device_list", "false") == "true"
+        auth_status = app_instance.auth.get_auth_status()
 
         data = {
             "version": VERSION,
@@ -224,6 +225,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "cookie": _mask_cookie(config.cookie),
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
+            **auth_status,
             # 实验性功能
             "auto_resume_on_interrupt": config.auto_resume_on_interrupt,
             "resume_delay_seconds": config.resume_delay_seconds,
@@ -325,9 +327,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         try:
             devices = await app_instance.get_all_devices()
             if not devices and not app_instance.auth.is_logged_in():
+                auth_status = app_instance.auth.get_auth_status()
                 return web.json_response({
                     "devices": [],
-                    "error": "登录失败，请检查账号密码或尝试使用 Cookie 登录"
+                    "error": auth_status["auth_error_message"] or "小米账号认证失败",
+                    "error_code": auth_status["auth_error_code"],
+                    "retry_after": auth_status["auth_retry_after"],
                 })
             return web.json_response({"devices": _mask_devices(devices)})
         except Exception as e:
@@ -399,6 +404,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "hostname": config.hostname,
             "dlna_port": config.dlna_port,
             "web_port": config.web_port,
+            **app_instance.auth.get_auth_status(),
         })
 
     async def handle_execute_update(request):

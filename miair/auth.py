@@ -93,6 +93,18 @@ class PersistentMiAccount(MiAccount):
             self.token = None
 
         self._last_known_token = copy.deepcopy(self.token)
+        self.last_login_response: dict = {}
+
+    async def _serviceLogin(self, uri, data=None):
+        """记录不含凭据的登录结果，供 Web 状态页准确展示失败原因。"""
+        response = await super()._serviceLogin(uri, data)
+        self.last_login_response = {
+            "code": response.get("code"),
+            "description": response.get("description") or response.get("desc") or "",
+            "securityStatus": response.get("securityStatus"),
+            "has_notification": bool(response.get("notificationUrl")),
+        }
+        return response
 
     @staticmethod
     def _deduplicate_tokens(tokens: list[dict]) -> list[dict]:
@@ -189,7 +201,7 @@ class PersistentMiAccount(MiAccount):
 
 
 def parse_cookie_string(cookie_str: str) -> dict:
-    """解析 cookie 字符串，提取 userId 和 passToken"""
+    """解析 Cookie 登录所需的 userId、passToken 和可选 deviceId。"""
     result = {}
     for item in cookie_str.split(";"):
         item = item.strip()
@@ -197,7 +209,7 @@ def parse_cookie_string(cookie_str: str) -> dict:
             key, value = item.split("=", 1)
             key = key.strip()
             value = value.strip()
-            if key in ("userId", "passToken"):
+            if key in ("userId", "passToken", "deviceId"):
                 result[key] = value
     return result
 
@@ -217,6 +229,8 @@ class AuthManager:
         self._login_lock = asyncio.Lock()
         self._login_failures = 0
         self._next_login_attempt = 0.0
+        self.last_error_code = ""
+        self.last_error_message = ""
 
     async def login(self):
         """单飞登录并在失败后限流，防止 Web 轮询触发请求风暴。"""
@@ -235,6 +249,8 @@ class AuthManager:
             if success:
                 self._login_failures = 0
                 self._next_login_attempt = 0.0
+                self.last_error_code = ""
+                self.last_error_message = ""
                 return True
 
             delay = self.LOGIN_RETRY_DELAYS[
@@ -266,10 +282,13 @@ class AuthManager:
         expected_user_id = ""
         if token_data.get("userId") and token_data.get("passToken"):
             expected_user_id = token_data["userId"]
-            bootstrap_tokens.append({
+            bootstrap_token = {
                 "userId": token_data["userId"],
                 "passToken": token_data["passToken"],
-            })
+            }
+            if token_data.get("deviceId"):
+                bootstrap_token["deviceId"] = token_data["deviceId"]
+            bootstrap_tokens.append(bootstrap_token)
             username = ""
             password = ""
             log.info("使用 cookie 登录")
@@ -300,11 +319,14 @@ class AuthManager:
                 if self._logged_in:
                     log.info("小米服务凭据换取成功")
                 else:
+                    self._remember_login_failure()
                     log.warning("小米服务凭据换取失败")
             except Exception as e:
                 self._logged_in = False
                 err_msg = str(e)
                 err_code = self._extract_error_code(err_msg)
+                self.last_error_code = err_code
+                self.last_error_message = self._friendly_error_message(err_code)
                 if err_code == "87001" or "captcha" in err_msg.lower():
                     log.error(
                         "登录需要验证码! 请在浏览器访问 https://account.xiaomi.com 完成验证后重试，"
@@ -331,6 +353,37 @@ class AuthManager:
         self.mina_service = MiNAService(self.account)
         self.miio_service = MiIOService(self.account)
         return self._logged_in
+
+    def _remember_login_failure(self):
+        response = getattr(self.account, "last_login_response", {}) or {}
+        code = response.get("code")
+        self.last_error_code = str(code) if code is not None else ""
+        self.last_error_message = self._friendly_error_message(self.last_error_code)
+
+    @staticmethod
+    def _friendly_error_message(error_code: str) -> str:
+        if error_code == "70016":
+            return "网页登录凭据不能用于小爱音箱服务，请重新完成 micoapi 授权"
+        if error_code == "70022":
+            return "小米登录请求过于频繁，请稍后重试"
+        if error_code == "87001":
+            return "小米账号需要验证码验证"
+        return "小米账号认证失败"
+
+    def get_auth_status(self) -> dict:
+        if self._logged_in:
+            state = "authenticated"
+        elif self.last_error_code:
+            state = "cooldown" if time.monotonic() < self._next_login_attempt else "failed"
+        else:
+            state = "pending"
+        retry_after = max(0, int(self._next_login_attempt - time.monotonic()))
+        return {
+            "auth_state": state,
+            "auth_error_code": self.last_error_code,
+            "auth_error_message": self.last_error_message,
+            "auth_retry_after": retry_after,
+        }
 
     async def ensure_login(self):
         """确保已登录，未登录则尝试登录"""

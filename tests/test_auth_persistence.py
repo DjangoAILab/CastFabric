@@ -9,7 +9,12 @@ from unittest.mock import AsyncMock, patch
 import aiohttp
 from miservice import MiAccount
 
-from miair.auth import AtomicTokenStore, AuthManager, PersistentMiAccount
+from miair.auth import (
+    AtomicTokenStore,
+    AuthManager,
+    PersistentMiAccount,
+    parse_cookie_string,
+)
 from miair.config import Config
 
 
@@ -35,6 +40,12 @@ class AtomicTokenStoreTests(unittest.TestCase):
             self.assertEqual(store.load_token(), expected)
             mode = stat.S_IMODE(os.stat(path).st_mode)
             self.assertEqual(mode, 0o600)
+
+    def test_cookie_parser_preserves_browser_device_id(self):
+        parsed = parse_cookie_string(
+            "userId=100200; passToken=token; deviceId=wb_browser-device"
+        )
+        self.assertEqual(parsed["deviceId"], "wb_browser-device")
 
 
 class AuthManagerPersistenceTests(unittest.IsolatedAsyncioTestCase):
@@ -66,6 +77,27 @@ class AuthManagerPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreater(manager._next_login_attempt, 0)
             finally:
                 await manager.close()
+
+    async def test_failed_login_exposes_safe_actionable_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = Config(
+                hostname="127.0.0.1",
+                conf_path=temp_dir,
+                cookie="userId=100200; passToken=bootstrap-token",
+                mi_did="123",
+            )
+            manager = AuthManager(config)
+            manager._login_once = AsyncMock(return_value=False)
+            manager.last_error_code = "70016"
+            manager.last_error_message = manager._friendly_error_message("70016")
+
+            await manager.login()
+
+            status = manager.get_auth_status()
+            self.assertEqual(status["auth_state"], "cooldown")
+            self.assertEqual(status["auth_error_code"], "70016")
+            self.assertIn("micoapi", status["auth_error_message"])
+            self.assertGreater(status["auth_retry_after"], 0)
 
     async def test_matching_complete_stored_token_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temp_dir:
