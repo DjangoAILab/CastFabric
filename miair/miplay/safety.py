@@ -148,7 +148,10 @@ class ModernSafetyReceiver:
         self.auth_key = derive_type1_auth_key(local_endpoint, peer_endpoint)
         key = self.auth_key[:16]
         nominal_iv = self.auth_key[16:]
-        self._encrypt = SafetyCipher(key, nominal_iv)
+        # Real Xiaomi receiver captures use the type-1 material as the initial
+        # outbound IV even after selecting aesIvType=2.  Phone sources mirror
+        # that native quirk when decrypting a receiver challenge.
+        self._encrypt = SafetyCipher(key, key)
         # Some released senders label type-2 while using the type-1 IV inbound.
         self._decrypt_candidates = {
             "type-2": SafetyCipher(key, nominal_iv),
@@ -157,6 +160,10 @@ class ModernSafetyReceiver:
         self._decrypt: SafetyCipher | None = None
         self.inbound_iv_mode: str | None = None
         self.local_auth_message: str | None = None
+        self.peer_auth_message: str | None = None
+        self.peer_auth_sequence: int | None = None
+        self.auth_key_mode: str | None = None
+        self.peer_ack_shape: str | None = None
         self.peer_challenge_acknowledged = False
         self.local_challenge_verified = False
         self.phase = "created"
@@ -170,6 +177,9 @@ class ModernSafetyReceiver:
             "phase": self.phase,
             "mutual_auth_complete": self.mutual_auth_complete,
             "inbound_iv_mode": self.inbound_iv_mode,
+            "outbound_iv_mode": "type-1-compat",
+            "auth_key_mode": self.auth_key_mode,
+            "peer_ack_shape": self.peer_ack_shape,
         }
 
     def accept_info(self, frame: CommandFrame) -> SafetyResult:
@@ -207,7 +217,9 @@ class ModernSafetyReceiver:
             challenge = _decode_json(payload).get("authMsg")
             if not isinstance(challenge, str) or len(challenge) != 32:
                 raise ProtocolError("peer SafetyAuth challenge is invalid")
-            digest = hmac.new(self.auth_key, challenge.encode("utf-8"), hashlib.sha256).hexdigest()
+            self.peer_auth_message = challenge
+            self.peer_auth_sequence = frame.sequence
+            digest = self._auth_digest(challenge, "ascii-full")
             ack = encode_envelope(
                 _json_bytes({"result": "1", "authMsgAck": digest}),
                 acknowledgement=True,
@@ -223,16 +235,35 @@ class ModernSafetyReceiver:
                 raise ProtocolError("unsolicited or duplicate SafetyAuth acknowledgement")
             payload = self._decrypt_envelope(frame.payload, acknowledgement=True)
             value = _decode_json(payload)
-            expected = hmac.new(
-                self.auth_key,
-                self.local_auth_message.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
             received = value.get("authMsgAck")
-            if str(value.get("result")) not in {"0", "1"} or not isinstance(received, str) or not hmac.compare_digest(received, expected):
+            if not isinstance(received, str):
+                self.peer_ack_shape = "non-string"
+            elif len(received) == 64 and all(char in "0123456789abcdef" for char in received):
+                self.peer_ack_shape = "lower-hex-64"
+            elif len(received) == 64 and all(char in "0123456789ABCDEF" for char in received):
+                self.peer_ack_shape = "upper-hex-64"
+            else:
+                self.peer_ack_shape = f"other-{len(received)}"
+            mode = self._match_auth_ack(received) if isinstance(received, str) else None
+            if str(value.get("result")) not in {"0", "1"} or mode is None:
                 raise ProtocolError("peer SafetyAuth acknowledgement failed verification")
+            self.auth_key_mode = mode
             self.local_challenge_verified = True
             self._update_phase()
+            # The K60 source sends its acknowledgement after receiving our
+            # standards-profile acknowledgement.  If it proves that it uses a
+            # different native key representation, immediately repeat the peer
+            # acknowledgement with that representation and continued CBC state.
+            if mode != "ascii-full" and self.peer_auth_message is not None:
+                digest = self._auth_digest(self.peer_auth_message, mode)
+                ack = encode_envelope(
+                    _json_bytes({"result": "1", "authMsgAck": digest}),
+                    acknowledgement=True,
+                )
+                sequence = self.peer_auth_sequence if self.peer_auth_sequence is not None else frame.sequence
+                return SafetyResult(
+                    [encode_command(Command.SAFETY_AUTH_ACK, sequence, self._encrypt.encrypt(ack))]
+                )
             return SafetyResult([])
 
         if not self.mutual_auth_complete:
@@ -277,3 +308,22 @@ class ModernSafetyReceiver:
 
     def _update_phase(self) -> None:
         self.phase = "ready" if self.mutual_auth_complete else "awaiting-mutual-auth"
+
+    def _match_auth_ack(self, received: str) -> str | None:
+        assert self.local_auth_message is not None
+        for mode in ("ascii-full", "ascii-half", "binary-md5"):
+            expected = self._auth_digest(self.local_auth_message, mode)
+            if hmac.compare_digest(received.lower(), expected):
+                return mode
+        return None
+
+    def _auth_digest(self, message: str, mode: str) -> str:
+        if mode == "ascii-full":
+            key = self.auth_key
+        elif mode == "ascii-half":
+            key = self.auth_key[:16]
+        elif mode == "binary-md5":
+            key = bytes.fromhex(self.auth_key.decode("ascii"))
+        else:
+            raise ValueError("unsupported SafetyAuth key representation")
+        return hmac.new(key, message.encode("utf-8"), hashlib.sha256).hexdigest()

@@ -14,6 +14,7 @@ from miair.miplay.protocol import (
     legacy_challenge_response,
 )
 from miair.miplay.safety import (
+    ModernSafetyReceiver,
     SafetyCipher,
     crc32_mpeg2,
     decode_envelope,
@@ -60,6 +61,27 @@ def test_safety_cipher_is_stateful_and_rejects_tampering():
     assert crc32_mpeg2(b"123456789") == 0x0376E6E7
 
 
+@pytest.mark.parametrize(
+    ("mode", "key_factory"),
+    [
+        ("ascii-full", lambda value: value),
+        ("ascii-half", lambda value: value[:16]),
+        ("binary-md5", lambda value: bytes.fromhex(value.decode("ascii"))),
+    ],
+)
+def test_safety_auth_recognizes_native_key_representations(mode, key_factory):
+    receiver = ModernSafetyReceiver(
+        ("192.168.133.5", 8899), ("192.168.133.225", 43720)
+    )
+    receiver.local_auth_message = "0123456789abcdef0123456789abcdef"
+    received = hmac.new(
+        key_factory(receiver.auth_key),
+        receiver.local_auth_message.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    assert receiver._match_auth_ack(received) == mode
+
+
 def test_modern_safety_mutual_auth_then_encrypted_business_command():
     local = ("192.168.133.5", 8899)
     peer = ("192.168.133.225", 43720)
@@ -93,7 +115,7 @@ def test_modern_safety_mutual_auth_then_encrypted_business_command():
     assert _json(decode_envelope(info_ack.payload, acknowledgement=True))["authAlgorithmType"] == "4"
 
     auth_key = derive_type1_auth_key(local, peer)
-    phone_inbound = SafetyCipher(auth_key[:16], auth_key[16:])
+    phone_inbound = SafetyCipher(auth_key[:16], auth_key[:16])
     phone_outbound = SafetyCipher(auth_key[:16], auth_key[16:])
     local_challenge = _json(
         decode_envelope(phone_inbound.decrypt(receiver_challenge.payload), acknowledgement=False)
