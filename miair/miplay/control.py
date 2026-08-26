@@ -125,6 +125,7 @@ class LegacyReceiverSession:
         handlers = {
             Command.GET_DEVICE_INFO: self._get_device_info,
             Command.SET_LOCAL_DEVICE_INFO: self._set_local_device_info,
+            Command.SOURCE_CAPABILITY_UPDATE: self._source_capability_update,
             Command.GET_MIRROR_MODE: self._get_mirror_mode,
             Command.GET_VOLUME: self._get_volume,
             Command.GET_STATE: self._get_state,
@@ -232,6 +233,15 @@ class LegacyReceiverSession:
         if isinstance(source_name, str) and source_name:
             self.source_name = source_name[:120]
         return self._ack(Command.SET_LOCAL_DEVICE_INFO_ACK, frame.sequence)
+
+    def _source_capability_update(self, frame: CommandFrame) -> ControlResult:
+        """Accept the post-auth capability update observed from current MIUI.
+
+        The K60 source does not wait for an acknowledgement, so this remains a
+        receive-only compatibility boundary until a 0x0417 wire response is
+        observed from an official receiver.
+        """
+        return self._ok([], "source capability update observed")
 
     def _get_mirror_mode(self, frame: CommandFrame) -> ControlResult:
         return self._empty_query_ack(frame, Command.GET_MIRROR_MODE_ACK, encode_scalar(2))

@@ -58,6 +58,8 @@ class Command(enum.IntEnum):
     SET_PLAY_SOURCE_ACK = 0x0041
     SET_LOCAL_DEVICE_INFO = 0x0058
     SET_LOCAL_DEVICE_INFO_ACK = 0x0059
+    SOURCE_CAPABILITY_UPDATE = 0x0416
+    SOURCE_CAPABILITY_UPDATE_ACK = 0x0417
     SAFETY_INFO = 0x1400
     SAFETY_INFO_ACK = 0x1401
     SAFETY_AUTH = 0x1402
@@ -223,4 +225,3 @@ def encode_notify_scalar(label: str, value: int) -> bytes:
     if not 1 <= len(label_bytes) <= 255 or not 0 <= value <= 255:
         raise ProtocolError("notify scalar out of range")
     return bytes([len(label_bytes)]) + label_bytes + b"\x03" + bytes([value])
-

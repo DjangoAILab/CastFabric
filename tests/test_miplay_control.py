@@ -138,3 +138,15 @@ def test_media_started_notifications_are_emitted_once():
     assert b"first-audiopcm" in first[0].payload
     assert b"state" in first[1].payload
     assert second == []
+
+
+def test_current_miui_source_capability_update_is_non_fatal():
+    session = authenticated_session()
+
+    result = session.process(
+        CommandFrame(Command.SOURCE_CAPABILITY_UPDATE, 15, b'{"capability":1}')
+    )
+
+    assert result.accepted
+    assert result.writes == []
+    assert session.phase == ControlPhase.READY

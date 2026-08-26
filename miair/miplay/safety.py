@@ -164,6 +164,7 @@ class ModernSafetyReceiver:
         self.peer_auth_sequence: int | None = None
         self.auth_key_mode: str | None = None
         self.peer_ack_shape: str | None = None
+        self.peer_ack_result: str | None = None
         self.peer_challenge_acknowledged = False
         self.local_challenge_verified = False
         self.phase = "created"
@@ -180,6 +181,7 @@ class ModernSafetyReceiver:
             "outbound_iv_mode": "type-1-compat",
             "auth_key_mode": self.auth_key_mode,
             "peer_ack_shape": self.peer_ack_shape,
+            "peer_ack_result": self.peer_ack_result,
         }
 
     def accept_info(self, frame: CommandFrame) -> SafetyResult:
@@ -221,7 +223,7 @@ class ModernSafetyReceiver:
             self.peer_auth_sequence = frame.sequence
             digest = self._auth_digest(challenge, "ascii-full")
             ack = encode_envelope(
-                _json_bytes({"result": "1", "authMsgAck": digest}),
+                _json_bytes({"result": "0", "authMsgAck": digest}),
                 acknowledgement=True,
             )
             self.peer_challenge_acknowledged = True
@@ -235,6 +237,7 @@ class ModernSafetyReceiver:
                 raise ProtocolError("unsolicited or duplicate SafetyAuth acknowledgement")
             payload = self._decrypt_envelope(frame.payload, acknowledgement=True)
             value = _decode_json(payload)
+            self.peer_ack_result = str(value.get("result"))
             received = value.get("authMsgAck")
             if not isinstance(received, str):
                 self.peer_ack_shape = "non-string"
@@ -257,7 +260,7 @@ class ModernSafetyReceiver:
             if mode != "ascii-full" and self.peer_auth_message is not None:
                 digest = self._auth_digest(self.peer_auth_message, mode)
                 ack = encode_envelope(
-                    _json_bytes({"result": "1", "authMsgAck": digest}),
+                    _json_bytes({"result": "0", "authMsgAck": digest}),
                     acknowledgement=True,
                 )
                 sequence = self.peer_auth_sequence if self.peer_auth_sequence is not None else frame.sequence
