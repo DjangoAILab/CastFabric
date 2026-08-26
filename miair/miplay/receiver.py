@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import inspect
 import logging
 import secrets
 import socket
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from zeroconf import IPVersion, Zeroconf
 
@@ -19,7 +20,7 @@ from .media import (
     PcmSink,
     decode_rtp_mpegts,
 )
-from .protocol import CommandFrameBuffer, OpenDeviceRequest, ProtocolError
+from .protocol import Command, CommandFrameBuffer, OpenDeviceRequest, ProtocolError
 from .rtsp import ReceiverRtspSession, RtspBuffer
 
 
@@ -39,6 +40,7 @@ class MiPlayReceiver:
         advertise: bool = True,
         advertise_address: str | None = None,
         ffmpeg: str = "ffmpeg",
+        volume_setter: Callable[[int], Awaitable[object]] | None = None,
     ):
         self.host = host
         self.port = port
@@ -47,6 +49,7 @@ class MiPlayReceiver:
         self.advertise = advertise
         self.advertise_address = advertise_address
         self.ffmpeg = ffmpeg
+        self.volume_setter = volume_setter
         self._server: asyncio.AbstractServer | None = None
         self._zeroconf: Zeroconf | None = None
         self._service_info = None
@@ -55,6 +58,9 @@ class MiPlayReceiver:
         self._idle.set()
         self._active_session = False
         self._last_session: dict | None = None
+        self._pending_volume: int | None = None
+        self._volume_event = asyncio.Event()
+        self._volume_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         if self._server is not None:
@@ -79,6 +85,10 @@ class MiPlayReceiver:
             await asyncio.to_thread(
                 self._zeroconf.register_service, self._service_info
             )
+        if self.volume_setter is not None:
+            self._pending_volume = None
+            self._volume_event.clear()
+            self._volume_task = asyncio.create_task(self._volume_worker())
         log.info("MiPlay 接收服务已启动: %s:%s", self.host, self.port)
 
     async def stop(self) -> None:
@@ -90,6 +100,10 @@ class MiPlayReceiver:
             task.cancel()
         if self._session_tasks:
             await asyncio.gather(*self._session_tasks, return_exceptions=True)
+        if self._volume_task is not None:
+            self._volume_task.cancel()
+            await asyncio.gather(self._volume_task, return_exceptions=True)
+            self._volume_task = None
         if self._zeroconf is not None:
             if self._service_info is not None:
                 await asyncio.to_thread(
@@ -186,6 +200,8 @@ class MiPlayReceiver:
                         await write_control(result.writes)
                     if not result.accepted:
                         raise ProtocolError(result.reason)
+                    if frame.command == Command.SET_VOLUME:
+                        self._queue_volume(session.volume)
                     if result.open_request is not None:
                         if wfd_task is not None:
                             if not wfd_task.done():
@@ -223,6 +239,34 @@ class MiPlayReceiver:
             self._session_tasks.discard(task)
             if not self._session_tasks:
                 self._idle.set()
+
+    def _queue_volume(self, volume: int) -> None:
+        """Coalesce rapid key presses while preserving the newest volume."""
+        if self.volume_setter is None:
+            return
+        self._pending_volume = volume
+        self._volume_event.set()
+
+    async def _volume_worker(self) -> None:
+        assert self.volume_setter is not None
+        while True:
+            await self._volume_event.wait()
+            self._volume_event.clear()
+            volume = self._pending_volume
+            if volume is None:
+                continue
+            try:
+                result = self.volume_setter(volume)
+                if inspect.isawaitable(result):
+                    result = await result
+                if result is False:
+                    log.warning("MiPlay 音量下发失败: %s%%", volume)
+                else:
+                    log.info("MiPlay 音量已同步到音箱: %s%%", volume)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("MiPlay 音量下发异常 (%s%%): %s", volume, exc)
 
     async def _run_wfd(
         self,

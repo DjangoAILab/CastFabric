@@ -127,4 +127,7 @@ def test_complete_miplay_wire_reaches_live_http_stream():
     assert controller.url and "/miplay/stream.wav" in controller.url
     assert controller.audio[:4] == b"RIFF"
     assert controller.audio[8:12] == b"WAVE"
-    assert len(controller.audio) > 44 + 48_000 * 2 * 2 // 5
+    # The production sink intentionally retains at most ~160 ms of PCM.  The
+    # simulator writes faster than real time, so asserting 200 ms made this
+    # test scheduler-dependent after the low-latency queue was introduced.
+    assert len(controller.audio) > 44 + 48_000 * 2 * 2 // 10

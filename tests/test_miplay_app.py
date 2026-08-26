@@ -20,7 +20,10 @@ def test_app_starts_miplay_for_first_configured_speaker():
             miplay_name="OpenXiaoCast Test",
         )
         app = MiAir(config)
-        controller = SimpleNamespace(speaker=FakeSpeaker())
+        controller = SimpleNamespace(
+            speaker=FakeSpeaker(),
+            set_volume=AsyncMock(return_value=True),
+        )
         app.speaker_manager.controllers = {"speaker-did": controller}
 
         with patch("miair.app.MiPlayReceiver") as receiver_type:
@@ -34,6 +37,7 @@ def test_app_starts_miplay_for_first_configured_speaker():
             assert kwargs["advertise_address"] == "192.168.31.9"
             assert kwargs["identity"].friendly_name == "OpenXiaoCast Test · 书房 M01"
             assert kwargs["sink_factory"]().controller is controller
+            assert kwargs["volume_setter"] is controller.set_volume
             receiver.start.assert_awaited_once()
 
     asyncio.run(scenario())

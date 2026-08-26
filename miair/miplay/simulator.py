@@ -76,6 +76,7 @@ class MiPlaySourceSimulator:
         tone_frequency: int = 440,
         duration: float = 0.5,
         ffmpeg: str = "ffmpeg",
+        volume: int | None = None,
     ):
         self.target_host = target_host
         self.target_port = target_port
@@ -83,6 +84,7 @@ class MiPlaySourceSimulator:
         self.tone_frequency = tone_frequency
         self.duration = duration
         self.ffmpeg = ffmpeg
+        self.volume = volume
 
     async def run(self) -> SimulationResult:
         reverse_queue: asyncio.Queue = asyncio.Queue()
@@ -148,6 +150,16 @@ class MiPlaySourceSimulator:
                     Command.GET_STATE_ACK,
                 },
             )
+
+            if self.volume is not None:
+                await control.send(
+                    encode_command(
+                        Command.SET_VOLUME,
+                        16,
+                        self.volume.to_bytes(4, "big"),
+                    )
+                )
+                await self._expect(control, Command.SET_VOLUME_ACK)
 
             await control.send(
                 encode_command(

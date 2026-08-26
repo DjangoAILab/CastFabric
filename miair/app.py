@@ -273,6 +273,7 @@ class MiAir:
             sink_factory=lambda: MiAirLiveAudioSink(
                 self.config.hostname, controller
             ),
+            volume_setter=controller.set_volume,
             identity=identity,
             advertise_address=self.config.hostname,
         )
