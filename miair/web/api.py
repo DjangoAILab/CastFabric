@@ -232,6 +232,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "default_volume": config.default_volume,
             "follow_device_volume": config.follow_device_volume,
             "auto_restart": config.auto_restart,
+            "enable_miplay": config.enable_miplay,
+            "miplay_port": config.miplay_port,
+            "miplay_name": config.miplay_name,
+            "miplay": app_instance.miplay_receiver.diagnostics()
+            if app_instance.miplay_receiver
+            else {"running": False},
         }
 
         # 返回已配置的 speakers 信息
@@ -295,6 +301,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             config.follow_device_volume = data["follow_device_volume"]
         if "auto_restart" in data:
             config.auto_restart = data["auto_restart"]
+        if "enable_miplay" in data:
+            config.enable_miplay = bool(data["enable_miplay"])
+        if "miplay_port" in data:
+            config.miplay_port = max(0, min(65535, int(data["miplay_port"])))
+        if "miplay_name" in data:
+            config.miplay_name = str(data["miplay_name"]).strip()[:80] or "OpenXiaoCast"
 
         # 更新 speaker 名称和兼容模式
         if "speakers" in data:
@@ -404,8 +416,17 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "hostname": config.hostname,
             "dlna_port": config.dlna_port,
             "web_port": config.web_port,
+            "miplay": app_instance.miplay_receiver.diagnostics()
+            if app_instance.miplay_receiver
+            else {"running": False},
             **app_instance.auth.get_auth_status(),
         })
+
+    async def handle_miplay_status(request):
+        receiver = app_instance.miplay_receiver
+        return web.json_response(
+            receiver.diagnostics() if receiver else {"running": False}
+        )
 
     async def handle_execute_update(request):
         """执行一键更新：从 GitHub 下载最新代码覆盖后重启"""
@@ -494,6 +515,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
     web_app.router.add_get("/api/speakers", handle_get_speakers)
     web_app.router.add_post("/api/speakers/{did}/rename", handle_rename_speaker)
     web_app.router.add_get("/api/status", handle_status)
+    web_app.router.add_get("/api/miplay/status", handle_miplay_status)
     web_app.router.add_post("/api/update", handle_execute_update)
 
     # 静态文件

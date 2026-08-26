@@ -31,10 +31,19 @@ class AudioStreamServer:
     根据音箱型号选择 MP3 (ffmpeg 转码) 或 WAV (直接输出) 格式。
     """
 
-    def __init__(self, hostname: str, port: int = 0, audio_format: str = "wav"):
+    def __init__(
+        self,
+        hostname: str,
+        port: int = 0,
+        audio_format: str = "wav",
+        stream_path: str = "/airplay",
+        source_name: str = "AirPlay",
+    ):
         self.hostname = hostname
         self.port = port
         self._audio_format = audio_format  # "mp3" or "wav"
+        self._stream_path = "/" + stream_path.strip("/")
+        self._source_name = source_name
         self._app = web.Application()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
@@ -54,14 +63,21 @@ class AudioStreamServer:
 
     def _setup_routes(self):
         if self._audio_format == "mp3":
-            self._app.router.add_get("/airplay/stream.mp3", self._handle_stream_mp3)
+            self._app.router.add_get(
+                f"{self._stream_path}/stream.mp3", self._handle_stream_mp3
+            )
         else:
-            self._app.router.add_get("/airplay/stream.wav", self._handle_stream_wav)
+            self._app.router.add_get(
+                f"{self._stream_path}/stream.wav", self._handle_stream_wav
+            )
 
     @property
     def stream_url(self) -> str:
         ext = "mp3" if self._audio_format == "mp3" else "wav"
-        return f"http://{self.hostname}:{self.port}/airplay/stream.{ext}?sid={self._session_id}"
+        return (
+            f"http://{self.hostname}:{self.port}{self._stream_path}/"
+            f"stream.{ext}?sid={self._session_id}"
+        )
 
     async def start(self):
         self._runner = web.AppRunner(self._app, access_log=None)
@@ -69,7 +85,14 @@ class AudioStreamServer:
         self._site = web.TCPSite(self._runner, "0.0.0.0", self.port)
         await self._site.start()
         self.port = self._site._server.sockets[0].getsockname()[1]
-        log.info(f"AirPlay 音频流服务器: http://{self.hostname}:{self.port} (格式: {self._audio_format})")
+        log.info(
+            "%s 音频流服务器: http://%s:%s%s (格式: %s)",
+            self._source_name,
+            self.hostname,
+            self.port,
+            self._stream_path,
+            self._audio_format,
+        )
 
     async def stop(self):
         self._active = False

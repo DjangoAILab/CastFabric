@@ -94,6 +94,10 @@ class Config:
     # 自动重启（当登录失败或服务异常时）
     auto_restart: bool = False
     voice_poll_interval: int = 1
+    # MiPlay 原生接收入口
+    enable_miplay: bool = True
+    miplay_port: int = 8899
+    miplay_name: str = "OpenXiaoCast"
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -106,6 +110,8 @@ class Config:
 
     def __post_init__(self):
         self.resume_delay_seconds = max(1, min(15, self.resume_delay_seconds))
+        self.miplay_port = max(0, min(65535, int(self.miplay_port)))
+        self.miplay_name = (self.miplay_name or "OpenXiaoCast").strip()[:80]
         if not self.account:
             self.account = os.getenv("MI_USER", "")
         if not self.password:

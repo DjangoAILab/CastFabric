@@ -14,5 +14,8 @@
     "resume_delay_seconds": 5,
     "enable_voice_control": false,
     "voice_poll_interval": 1,
+    "enable_miplay": true,
+    "miplay_port": 8899,
+    "miplay_name": "OpenXiaoCast",
     "speakers": {}
 }

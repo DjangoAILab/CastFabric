@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+import uuid
 
 from aiohttp import web
 
@@ -15,6 +16,9 @@ from miair.dlna.ssdp import SSDPServer
 from miair.speaker import SpeakerManager
 from miair.web.api import create_web_app
 from miair.airplay.speaker_airplay import AirPlayManager
+from miair.miplay.mdns import MiPlayIdentity
+from miair.miplay.receiver import MiPlayReceiver
+from miair.streaming.sink import MiAirLiveAudioSink
 
 log = logging.getLogger("miair")
 
@@ -35,6 +39,7 @@ class MiAir:
         self._web_runner: web.AppRunner | None = None
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
+        self.miplay_receiver: MiPlayReceiver | None = None
         self._auth_retry_task: asyncio.Task | None = None
 
     def get_renderer_by_did(self, did: str) -> DLNARenderer | None:
@@ -217,6 +222,7 @@ class MiAir:
 
             # 启动 AirPlay 服务 - 每个音箱一个
             await self._start_airplay_for_speakers()
+            await self._start_miplay_for_speaker()
 
             log.info(f"MiAir 服务启动完成! 共 {len(self.renderers)} 个音箱")
             log.info("手机 DLNA / AirPlay 现在应该能发现这些设备了")
@@ -244,6 +250,41 @@ class MiAir:
         except Exception as e:
             log.error(f"启动 AirPlay 服务失败: {e}")
 
+    async def _start_miplay_for_speaker(self):
+        """发布单个 MiPlay 网关，并把音频送到首个已配置音箱。"""
+        if not self.config.enable_miplay:
+            log.info("MiPlay 接收服务已禁用")
+            return
+        if self.miplay_receiver is not None or not self.speaker_manager.controllers:
+            return
+        did, controller = next(iter(self.speaker_manager.controllers.items()))
+        speaker_name = controller.speaker.get_dlna_name()
+        identity = MiPlayIdentity(
+            address=self.config.hostname,
+            friendly_name=f"{self.config.miplay_name} · {speaker_name}",
+            instance=f"OpenXiaoCast-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
+            host=f"openxiaocast-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
+            device_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"openxiaocast-miplay-{did}"),
+            control_port=self.config.miplay_port,
+        )
+        receiver = MiPlayReceiver(
+            host="0.0.0.0",
+            port=self.config.miplay_port,
+            sink_factory=lambda: MiAirLiveAudioSink(
+                self.config.hostname, controller
+            ),
+            identity=identity,
+            advertise_address=self.config.hostname,
+        )
+        try:
+            await receiver.start()
+        except Exception as exc:
+            log.error("启动 MiPlay 接收服务失败: %s", exc)
+            await receiver.stop()
+            return
+        self.miplay_receiver = receiver
+        log.info("MiPlay 网关已映射到音箱: %s", speaker_name)
+
     async def restart_dlna_services(self):
         """重启 DLNA 服务 (用户通过 Web 修改配置后调用)"""
         if self.airplay_manager:
@@ -261,6 +302,9 @@ class MiAir:
 
     async def _stop_dlna_services(self):
         """停止 DLNA 服务"""
+        if self.miplay_receiver:
+            await self.miplay_receiver.stop()
+            self.miplay_receiver = None
         if self.ssdp_server:
             await self.ssdp_server.stop()
             self.ssdp_server = None
