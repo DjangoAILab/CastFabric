@@ -274,8 +274,11 @@ class AirPlayManager:
         """为所有音箱启动 AirPlay 服务"""
         # 创建一个共享的 Zeroconf 实例
         if not self._shared_zeroconf:
-            self._shared_zeroconf = Zeroconf(ip_version=IPVersion.All)
-            log.info("创建共享 Zeroconf 实例用于所有音箱")
+            self._shared_zeroconf = Zeroconf(
+                interfaces=[self.hostname],
+                ip_version=IPVersion.V4Only,
+            )
+            log.info("创建共享 Zeroconf 实例用于所有音箱，接口: %s", self.hostname)
 
         for did, controller in controllers.items():
             if did in self.speaker_airplays:

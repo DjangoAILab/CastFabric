@@ -72,7 +72,10 @@ class MiPlayReceiver:
             )
             self.identity = identity
             self._service_info = identity.service_info()
-            self._zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+            self._zeroconf = Zeroconf(
+                interfaces=[address],
+                ip_version=IPVersion.V4Only,
+            )
             await asyncio.to_thread(
                 self._zeroconf.register_service, self._service_info
             )

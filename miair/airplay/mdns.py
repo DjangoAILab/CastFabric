@@ -53,8 +53,11 @@ class AirPlayMDNS:
                 self.zeroconf = self.shared_zeroconf
                 log.info("使用共享 Zeroconf 实例")
             else:
-                self.zeroconf = Zeroconf(ip_version=IPVersion.All)
-                log.info("创建新的 Zeroconf 实例")
+                self.zeroconf = Zeroconf(
+                    interfaces=[ip],
+                    ip_version=IPVersion.V4Only,
+                )
+                log.info("创建新的 Zeroconf 实例，接口: %s", ip)
 
             # 构建设备 ID (去掉冒号的 MAC 地址格式，用于 RAOP 服务名)
             device_id_clean = self.device_id.replace(":", "")
