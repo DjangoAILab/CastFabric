@@ -106,7 +106,7 @@ def test_wrong_or_duplicate_auth_stops_session_without_echoing_secrets():
     assert "wrong" not in repr(session.diagnostics)
 
 
-def test_open_before_auth_and_modern_safety_are_rejected_cleanly():
+def test_open_before_auth_and_safety_without_endpoint_context_are_rejected_cleanly():
     early = LegacyReceiverSession(challenge=b"123456789012")
     early.start()
     result = early.process(
@@ -119,7 +119,7 @@ def test_open_before_auth_and_modern_safety_are_rejected_cleanly():
     safety.start()
     result = safety.process(CommandFrame(Command.SAFETY_INFO, 1, b"sensitive"))
     assert not result.accepted
-    assert result.reason == "modern Safety protocol requires real-device validation"
+    assert result.reason == "SafetyInfo arrived before legacy authentication"
     assert safety.diagnostics[-1]["payload_bytes"] == 9
     assert "sensitive" not in repr(safety.diagnostics)
 

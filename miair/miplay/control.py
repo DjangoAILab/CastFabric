@@ -18,6 +18,7 @@ from .protocol import (
     encode_scalar,
     legacy_challenge_response,
 )
+from .safety import ModernSafetyReceiver
 
 
 class ControlPhase(enum.Enum):
@@ -46,6 +47,8 @@ class LegacyReceiverSession:
         challenge_sequence: int = 0,
         friendly_name: str = "OpenXiaoCast",
         volume: int = 38,
+        local_endpoint: tuple[str, int] | None = None,
+        peer_endpoint: tuple[str, int] | None = None,
     ):
         if not 12 <= len(challenge) <= 17 or not challenge.isdigit():
             raise ValueError("legacy challenge must be 12 to 17 ASCII digits")
@@ -62,6 +65,9 @@ class LegacyReceiverSession:
         self.set_play_source_seen = False
         self._media_started = False
         self._notification_sequence = 1
+        self._local_endpoint = local_endpoint
+        self._peer_endpoint = peer_endpoint
+        self.safety: ModernSafetyReceiver | None = None
         self.diagnostics: list[dict[str, int | str | bool]] = []
 
     def start(self) -> list[bytes]:
@@ -81,13 +87,12 @@ class LegacyReceiverSession:
         if self.phase is ControlPhase.STOPPED:
             return ControlResult(False, [], "control session is stopped")
 
-        if frame.command in {
-            Command.SAFETY_INFO,
-            Command.SAFETY_INFO_ACK,
-            Command.SAFETY_AUTH,
-            Command.SAFETY_AUTH_ACK,
-        }:
-            return self._stop("modern Safety protocol requires real-device validation")
+        if frame.command == Command.SAFETY_INFO:
+            return self._start_safety(frame)
+        if frame.command in {Command.SAFETY_AUTH, Command.SAFETY_AUTH_ACK}:
+            return self._process_safety(frame)
+        if frame.command == Command.SAFETY_INFO_ACK:
+            return self._stop("unexpected SafetyInfo acknowledgement")
 
         if frame.command == Command.SOURCE_VERSION:
             return self._source_version(frame)
@@ -98,6 +103,24 @@ class LegacyReceiverSession:
             return self._stop("authentication must complete before business commands")
         if self.phase not in {ControlPhase.READY, ControlPhase.OPENED}:
             return self._stop("business command arrived in an invalid phase")
+
+        if self.safety is not None:
+            try:
+                decoded = self.safety.process(frame)
+            except ProtocolError as exc:
+                return self._stop(str(exc))
+            assert decoded.plaintext is not None
+            frame = decoded.plaintext
+
+        result = self._process_business(frame)
+        if result.accepted and self.safety is not None and result.writes:
+            try:
+                result.writes = self.safety.wrap_writes(result.writes)
+            except ProtocolError as exc:
+                return self._stop(str(exc))
+        return result
+
+    def _process_business(self, frame: CommandFrame) -> ControlResult:
 
         handlers = {
             Command.GET_DEVICE_INFO: self._get_device_info,
@@ -128,7 +151,36 @@ class LegacyReceiverSession:
         self._media_started = True
         first = self._notify("first-audiopcm", 1)
         state = self._notify("state", 2)
-        return [first, state]
+        writes = [first, state]
+        if self.safety is not None:
+            return self.safety.wrap_writes(writes)
+        return writes
+
+    def safety_diagnostics(self) -> dict[str, str | bool | None] | None:
+        return self.safety.diagnostics() if self.safety is not None else None
+
+    def _start_safety(self, frame: CommandFrame) -> ControlResult:
+        if not self.authenticated:
+            return self._stop("SafetyInfo arrived before legacy authentication")
+        if self.safety is not None:
+            return self._stop("duplicate SafetyInfo offer")
+        if self._local_endpoint is None or self._peer_endpoint is None:
+            return self._stop("modern Safety protocol requires TCP endpoint context")
+        try:
+            self.safety = ModernSafetyReceiver(self._local_endpoint, self._peer_endpoint)
+            result = self.safety.accept_info(frame)
+        except ProtocolError as exc:
+            return self._stop(str(exc))
+        return self._ok(result.writes, "SafetyInfo negotiated")
+
+    def _process_safety(self, frame: CommandFrame) -> ControlResult:
+        if self.safety is None:
+            return self._stop("SafetyAuth arrived before SafetyInfo")
+        try:
+            result = self.safety.process(frame)
+        except ProtocolError as exc:
+            return self._stop(str(exc))
+        return self._ok(result.writes, self.safety.phase)
 
     def _source_version(self, frame: CommandFrame) -> ControlResult:
         if self.source_version is not None:

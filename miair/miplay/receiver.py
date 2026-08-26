@@ -117,6 +117,7 @@ class MiPlayReceiver:
         self._session_tasks.add(task)
         self._idle.clear()
         peer = writer.get_extra_info("peername")
+        local = writer.get_extra_info("sockname")
         if self._active_session:
             log.warning("MiPlay 拒绝并发发送端: %s", peer)
             writer.close()
@@ -128,11 +129,19 @@ class MiPlayReceiver:
         self._active_session = True
         write_lock = asyncio.Lock()
         challenge = str(secrets.randbelow(10**15 - 10**14) + 10**14).encode()
-        session = LegacyReceiverSession(challenge=challenge)
+        local_endpoint = (str(local[0]), int(local[1])) if local else None
+        peer_endpoint = (str(peer[0]), int(peer[1])) if peer else None
+        session = LegacyReceiverSession(
+            challenge=challenge,
+            local_endpoint=local_endpoint,
+            peer_endpoint=peer_endpoint,
+        )
         report = {
             "peer": str(peer[0]) if peer else "unknown",
             "authenticated": False,
             "control_frames": 0,
+            "control_trace": [],
+            "safety": None,
             "rtsp_ready": False,
             "media_frames": 0,
             "media_bytes": 0,
@@ -156,8 +165,18 @@ class MiPlayReceiver:
                     break
                 for frame in decoder.feed(data):
                     report["control_frames"] += 1
+                    report["control_trace"].append(
+                        {
+                            "command": f"0x{frame.command:04x}",
+                            "sequence": frame.sequence,
+                            "payload_bytes": len(frame.payload),
+                        }
+                    )
+                    if len(report["control_trace"]) > 64:
+                        del report["control_trace"][:-64]
                     result = session.process(frame)
                     report["authenticated"] = session.authenticated
+                    report["safety"] = session.safety_diagnostics()
                     if result.writes:
                         await write_control(result.writes)
                     if not result.accepted:
@@ -294,4 +313,3 @@ class MiPlayReceiver:
             return socket.gethostbyname(socket.gethostname())
         except OSError:
             return "127.0.0.1"
-
