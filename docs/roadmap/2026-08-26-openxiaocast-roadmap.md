@@ -36,6 +36,10 @@ the receiver reaches RTSP Ready and records non-silent 48 kHz stereo PCM.
 **Fallback:** retain the protocol transcript and media decoder tests separately
 if an OS multicast restriction prevents the optional loopback mDNS assertion.
 
+**Status:** complete. The source simulator and receiver pass over real loopback
+sockets, and a live LAN mDNS advertise/scan round trip discovers the same
+identity at the selected host address.
+
 ## Stage 2 — MiAir output integration
 
 **Deliverables**
@@ -51,6 +55,9 @@ physical Xiaomi account or speaker is needed.
 
 **Fallback:** recording sink remains available to isolate MiPlay ingress from
 speaker-cloud/API failures during real-device diagnosis.
+
+**Status:** complete. The full wire simulator reaches the fake Xiaomi speaker
+controller through a valid, non-silent HTTP WAV stream.
 
 ## Stage 3 — Productization and release
 
@@ -70,6 +77,9 @@ secrets.
 
 **Fallback:** keep the existing `miair` image alias documented for one release
 if a repository rename would otherwise break installations.
+
+**Status:** complete on the feature branch. The local arm64 image, in-image
+MiPlay self-test, container health check and GitHub branch workflow all pass.
 
 ## Stage 4 — K60 and M01 real-device certification
 
@@ -91,6 +101,10 @@ encrypted framing and implement that branch from verified endpoint-derived
 vectors before changing the legacy path. If MiPlay ingress succeeds but M01 is
 silent, diagnose only the downstream HTTP/speaker path using the recording
 sink and direct stream client.
+
+**Status:** prepared and awaiting access to the K60/M01. Follow
+`docs/testing/miplay-real-device-checklist.md`; this is the only remaining
+promotion gate for the first public preview.
 
 ## Release sequence
 

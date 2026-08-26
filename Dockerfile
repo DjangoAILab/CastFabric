@@ -1,15 +1,5 @@
 FROM python:3.12-slim
 
-ARG BUILD_DATE=""
-ARG VCS_REF=""
-ARG PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple"
-
-LABEL org.opencontainers.image.title="OpenXiaoCast" \
-      org.opencontainers.image.description="Multi-protocol LAN casting gateway for Xiaomi AI speakers" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.source="https://github.com/wangerzi/MiAir"
-
 RUN sed -i \
     -e 's|http://deb.debian.org/debian-security|https://mirrors.ustc.edu.cn/debian-security|g' \
     -e 's|http://deb.debian.org/debian|https://mirrors.ustc.edu.cn/debian|g' \
@@ -26,12 +16,21 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY miair.py ./
 COPY miair/ ./miair/
+ARG PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple"
 RUN pip install --no-cache-dir \
     --index-url "${PIP_INDEX_URL}" \
     . --root-user-action=ignore
 
 COPY config-example.json .env.example ./
 RUN mkdir -p /app/conf
+
+ARG BUILD_DATE=""
+ARG VCS_REF=""
+LABEL org.opencontainers.image.title="OpenXiaoCast" \
+      org.opencontainers.image.description="Multi-protocol LAN casting gateway for Xiaomi AI speakers" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.source="https://github.com/wangerzi/MiAir"
 
 EXPOSE 8200/tcp 8300/tcp 8899/tcp 5353/udp 56666/udp
 
