@@ -60,6 +60,26 @@ def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
     assert sink.diagnostics()["active"] is False
 
 
+def test_live_audio_sink_can_advertise_finite_http_content_length():
+    async def scenario():
+        controller = FakeSpeakerController()
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1", controller, http_mode="content-length"
+        )
+        await sink.start(48_000, 2, 2)
+        await sink.write(struct.pack("<1920h", *([1000] * 1920)))
+        await asyncio.wait_for(controller.fetch_task, timeout=3)
+        await sink.stop()
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    assert controller.response_headers["Content-Length"] == str(
+        44 + 0x7FFFFF00
+    )
+    assert "Transfer-Encoding" not in controller.response_headers
+
+
 def test_live_audio_sink_cleans_up_when_speaker_rejects_url():
     class RejectingController:
         async def play_url(self, url, *, play_type=2):

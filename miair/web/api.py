@@ -236,6 +236,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "miplay_port": config.miplay_port,
             "miplay_name": config.miplay_name,
             "miplay_play_type": config.miplay_play_type,
+            "miplay_http_mode": config.miplay_http_mode,
             "miplay": app_instance.miplay_receiver.diagnostics()
             if app_instance.miplay_receiver
             else {"running": False},
@@ -312,6 +313,13 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             requested_type = int(data["miplay_play_type"])
             config.miplay_play_type = (
                 requested_type if requested_type in (0, 1, 2) else 2
+            )
+        if "miplay_http_mode" in data:
+            requested_mode = str(data["miplay_http_mode"]).lower()
+            config.miplay_http_mode = (
+                requested_mode
+                if requested_mode in ("close", "content-length")
+                else "close"
             )
 
         # 更新 speaker 名称和兼容模式

@@ -274,6 +274,7 @@ class MiAir:
                 self.config.hostname,
                 controller,
                 play_type=self.config.miplay_play_type,
+                http_mode=self.config.miplay_http_mode,
             ),
             volume_setter=controller.set_volume,
             identity=identity,

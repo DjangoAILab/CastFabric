@@ -18,11 +18,13 @@ class MiAirLiveAudioSink:
         controller,
         audio_format: str = "wav",
         play_type: int = 2,
+        http_mode: str = "close",
     ):
         self.hostname = hostname
         self.controller = controller
         self.audio_format = audio_format
         self.play_type = play_type
+        self.http_mode = http_mode
         self.stream_server: AudioStreamServer | None = None
         self._play_started = False
         self._active = False
@@ -43,6 +45,7 @@ class MiAirLiveAudioSink:
             stream_path="/miplay",
             source_name="MiPlay",
             close_delimited=True,
+            wav_http_mode=self.http_mode,
             queue_maxsize=8,
         )
         self.stream_server = server
@@ -58,9 +61,11 @@ class MiAirLiveAudioSink:
                 raise RuntimeError("Xiaomi speaker rejected the MiPlay live URL")
             self._play_started = True
             log.info(
-                "MiPlay 音频已请求音箱拉流: %s (player_play_url type=%s)",
+                "MiPlay 音频已请求音箱拉流: %s "
+                "(player_play_url type=%s, HTTP=%s)",
                 server.stream_url,
                 self.play_type,
+                self.http_mode,
             )
         except Exception:
             self._active = False

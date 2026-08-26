@@ -18,5 +18,6 @@
     "miplay_port": 8899,
     "miplay_name": "OpenXiaoCast",
     "miplay_play_type": 2,
+    "miplay_http_mode": "close",
     "speakers": {}
 }

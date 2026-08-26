@@ -100,6 +100,8 @@ class Config:
     miplay_name: str = "OpenXiaoCast"
     # player_play_url 的播放类型。仅用于 MiPlay 实时流实验；DLNA/AirPlay 保持默认值 2。
     miplay_play_type: int = 2
+    # MiPlay 实时 WAV 的 HTTP 定界方式：close（连接关闭）或 content-length。
+    miplay_http_mode: str = "close"
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -120,6 +122,9 @@ class Config:
             self.miplay_play_type = 2
         if self.miplay_play_type not in (0, 1, 2):
             self.miplay_play_type = 2
+        self.miplay_http_mode = str(self.miplay_http_mode or "close").lower()
+        if self.miplay_http_mode not in ("close", "content-length"):
+            self.miplay_http_mode = "close"
         if not self.account:
             self.account = os.getenv("MI_USER", "")
         if not self.password:

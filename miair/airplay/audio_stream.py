@@ -22,6 +22,7 @@ log = logging.getLogger("miair")
 # 每个 ALAC 包约 8ms (352 samples @ 44100Hz)
 # 100 个包 ≈ 800ms 的缓冲上限，兼顾低延迟与抗 WiFi 抖动
 _QUEUE_MAXSIZE = 100
+_WAV_STREAM_DATA_SIZE = 0x7FFFFF00
 
 
 class AudioStreamServer:
@@ -39,6 +40,7 @@ class AudioStreamServer:
         stream_path: str = "/airplay",
         source_name: str = "AirPlay",
         close_delimited: bool = False,
+        wav_http_mode: str | None = None,
         queue_maxsize: int = _QUEUE_MAXSIZE,
     ):
         self.hostname = hostname
@@ -46,7 +48,9 @@ class AudioStreamServer:
         self._audio_format = audio_format  # "mp3" or "wav"
         self._stream_path = "/" + stream_path.strip("/")
         self._source_name = source_name
-        self._close_delimited = close_delimited
+        self._wav_http_mode = wav_http_mode or (
+            "close" if close_delimited else "chunked"
+        )
         self._app = web.Application()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
@@ -174,7 +178,7 @@ class AudioStreamServer:
             return web.Response(status=404, headers={"Connection": "close"})
         return None
 
-    def _build_wav_header(self, data_size: int = 0x7FFFFF00) -> bytes:
+    def _build_wav_header(self, data_size: int = _WAV_STREAM_DATA_SIZE) -> bytes:
         byte_rate = self._sample_rate * self._channels * self._sample_width
         block_align = self._channels * self._sample_width
         bits_per_sample = self._sample_width * 8
@@ -196,19 +200,26 @@ class AudioStreamServer:
         if rejected is not None:
             return rejected
 
+        headers = {
+            "Content-Type": "audio/wav",
+            "Cache-Control": "no-cache, no-store",
+            "Pragma": "no-cache",
+            "Connection": "close",
+            "Accept-Ranges": "none",
+            "transferMode.dlna.org": "Streaming",
+            "contentFeatures.dlna.org": "DLNA.ORG_OP=00;DLNA.ORG_CI=0",
+        }
+        if self._wav_http_mode == "content-length":
+            # The WAV header already advertises this same finite virtual size.
+            # Some embedded players select their buffering policy from the HTTP
+            # body framing rather than from the RIFF header.
+            headers["Content-Length"] = str(44 + _WAV_STREAM_DATA_SIZE)
+
         response = web.StreamResponse(
             status=200,
-            headers={
-                "Content-Type": "audio/wav",
-                "Cache-Control": "no-cache, no-store",
-                "Pragma": "no-cache",
-                "Connection": "close",
-                "Accept-Ranges": "none",
-                "transferMode.dlna.org": "Streaming",
-                "contentFeatures.dlna.org": "DLNA.ORG_OP=00;DLNA.ORG_CI=0",
-            },
+            headers=headers,
         )
-        if self._close_delimited:
+        if self._wav_http_mode == "close":
             # A close-delimited HTTP/1.1 body matches the sender-paced live WAV
             # streams used by low-latency DLNA bridges. aiohttp otherwise adds
             # Transfer-Encoding: chunked, which makes some embedded players
@@ -231,7 +242,11 @@ class AudioStreamServer:
             self._has_clients = True
         self._abort = False  # 重置中断标志，允许续播
 
-        log.info("AirPlay: 音箱开始拉取 WAV 音频流 (零编码延迟)")
+        log.info(
+            "%s: 音箱开始拉取 WAV 音频流 (HTTP=%s, 零编码延迟)",
+            self._source_name,
+            self._wav_http_mode,
+        )
 
         # 使用 asyncio.Event 在写入线程和事件循环间通信
         loop = asyncio.get_event_loop()
