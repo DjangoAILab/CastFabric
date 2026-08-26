@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from miair.airplay.audio_stream import AudioStreamServer
 
@@ -19,12 +20,15 @@ class MiAirLiveAudioSink:
         self._play_started = False
         self._active = False
         self._pcm_bytes = 0
+        self._started_at: float | None = None
+        self._first_pcm_at: float | None = None
 
     async def start(
         self, sample_rate: int, channels: int, sample_width: int
     ) -> None:
         if self._active:
             raise RuntimeError("live audio sink is already active")
+        self._started_at = time.monotonic()
         server = AudioStreamServer(
             self.hostname,
             0,
@@ -54,6 +58,14 @@ class MiAirLiveAudioSink:
         if not self._active or self.stream_server is None:
             raise RuntimeError("live audio sink is not active")
         payload = bytes(data)
+        if self._first_pcm_at is None:
+            self._first_pcm_at = time.monotonic()
+            elapsed_ms = (
+                (self._first_pcm_at - self._started_at) * 1000
+                if self._started_at is not None
+                else 0
+            )
+            log.info("MiPlay 首个 PCM 已送入音箱拉流: 启动后 %.0fms", elapsed_ms)
         self._pcm_bytes += len(payload)
         self.stream_server.write_pcm(payload)
 
@@ -76,6 +88,11 @@ class MiAirLiveAudioSink:
             "active": self._active,
             "play_started": self._play_started,
             "pcm_bytes": self._pcm_bytes,
+            "first_pcm_ms": round(
+                (self._first_pcm_at - self._started_at) * 1000
+            )
+            if self._first_pcm_at is not None and self._started_at is not None
+            else None,
             "stream_url": self.stream_server.stream_url
             if self.stream_server
             else None,

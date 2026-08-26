@@ -149,6 +149,7 @@ class MiPlayReceiver:
             "wfd_restarts": 0,
             "media_frames": 0,
             "media_bytes": 0,
+            "decoder": None,
             "error": None,
         }
         wfd_task: asyncio.Task | None = None
@@ -267,6 +268,7 @@ class MiPlayReceiver:
                         first_media = False
                         await write_control(control_session.media_started())
             await decoder.stop()
+            report["decoder"] = decoder.diagnostics()
             decoder = None
         finally:
             if decoder is not None:
@@ -274,6 +276,7 @@ class MiPlayReceiver:
                     await decoder.stop()
                 except Exception:
                     pass
+                report["decoder"] = decoder.diagnostics()
             if rtsp_task is not None:
                 rtsp_task.cancel()
                 await asyncio.gather(rtsp_task, return_exceptions=True)

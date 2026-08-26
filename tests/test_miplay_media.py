@@ -6,6 +6,7 @@ import subprocess
 import pytest
 
 from miair.miplay.media import (
+    FFMPEG_LOW_LATENCY_INPUT_ARGS,
     FfmpegMpegTsDecoder,
     MediaFrameBuffer,
     MediaProtocolError,
@@ -14,6 +15,17 @@ from miair.miplay.media import (
     encode_media_frame,
     encode_rtp_mpegts,
 )
+
+
+def test_ffmpeg_decoder_uses_bounded_low_latency_probe():
+    assert FFMPEG_LOW_LATENCY_INPUT_ARGS == (
+        "-flags",
+        "low_delay",
+        "-probesize",
+        "4096",
+        "-analyzeduration",
+        "0",
+    )
 
 
 def make_ts_packet(pid=0x1100):
@@ -90,3 +102,49 @@ def test_ffmpeg_decoder_delivers_non_silent_48khz_stereo_pcm():
     assert sink.channels == 2
     assert len(pcm) >= 48_000 * 2 * 2 // 10
     assert max(abs(value) for value in samples) > 500
+    assert sink.chunks
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg unavailable")
+def test_ffmpeg_decoder_emits_pcm_before_large_realtime_probe_buffer():
+    encoded = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=2",
+            "-ac",
+            "2",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-f",
+            "mpegts",
+            "pipe:1",
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+    async def run():
+        sink = RecordingPcmSink()
+        decoder = FfmpegMpegTsDecoder(sink)
+        await decoder.start()
+        for offset in range(0, len(encoded), 188 * 7):
+            await decoder.write(encoded[offset : offset + 188 * 7])
+            await asyncio.sleep(0.01)
+            if sink.chunks:
+                break
+        diagnostics = decoder.diagnostics()
+        await decoder.stop()
+        return diagnostics
+
+    diagnostics = asyncio.run(run())
+
+    assert diagnostics["emitted_pcm"] is True
+    assert diagnostics["input_bytes_at_first_pcm"] <= 16 * 1024

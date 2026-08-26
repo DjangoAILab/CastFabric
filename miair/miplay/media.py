@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import struct
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -16,6 +18,22 @@ RTP_HEADER_SIZE = 12
 RTP_MPEGTS_PAYLOAD_TYPE = 33
 MPEGTS_PACKET_SIZE = 188
 MAX_TS_PACKETS_PER_RTP = 7
+
+
+log = logging.getLogger("miair")
+
+# FFmpeg otherwise spends roughly five seconds probing a real-time MPEG-TS
+# stream before emitting its first decoded sample. MiPlay always gives us a
+# validated MPEG-TS/AAC stream, so a small probe is sufficient and avoids
+# adding on-demand playback latency.
+FFMPEG_LOW_LATENCY_INPUT_ARGS = (
+    "-flags",
+    "low_delay",
+    "-probesize",
+    "4096",
+    "-analyzeduration",
+    "0",
+)
 
 
 class MediaProtocolError(ValueError):
@@ -155,10 +173,16 @@ class FfmpegMpegTsDecoder:
         self._stdout_task: asyncio.Task | None = None
         self._stderr_task: asyncio.Task | None = None
         self._stopped = False
+        self._started_at: float | None = None
+        self._first_input_at: float | None = None
+        self._first_pcm_at: float | None = None
+        self._input_bytes = 0
+        self._input_bytes_at_first_pcm: int | None = None
 
     async def start(self) -> None:
         if self.process is not None:
             raise RuntimeError("decoder already started")
+        self._started_at = time.monotonic()
         await self.sink.start(48_000, 2, 2)
         self.process = await asyncio.create_subprocess_exec(
             self.ffmpeg,
@@ -167,6 +191,7 @@ class FfmpegMpegTsDecoder:
             "error",
             "-f",
             "mpegts",
+            *FFMPEG_LOW_LATENCY_INPUT_ARGS,
             "-i",
             "pipe:0",
             "-vn",
@@ -191,8 +216,24 @@ class FfmpegMpegTsDecoder:
         if self.process is None or self.process.stdin is None or self._stopped:
             raise RuntimeError("decoder is not running")
         _validate_transport_stream(bytes(transport_stream))
+        if self._first_input_at is None:
+            self._first_input_at = time.monotonic()
+        self._input_bytes += len(transport_stream)
         self.process.stdin.write(transport_stream)
         await self.process.stdin.drain()
+
+    def diagnostics(self) -> dict:
+        first_pcm_ms = None
+        if self._first_input_at is not None and self._first_pcm_at is not None:
+            first_pcm_ms = round(
+                (self._first_pcm_at - self._first_input_at) * 1000
+            )
+        return {
+            "first_pcm_ms": first_pcm_ms,
+            "input_bytes_at_first_pcm": self._input_bytes_at_first_pcm,
+            "received_input": self._first_input_at is not None,
+            "emitted_pcm": self._first_pcm_at is not None,
+        }
 
     async def stop(self) -> None:
         if self._stopped:
@@ -220,6 +261,15 @@ class FfmpegMpegTsDecoder:
             chunk = await self.process.stdout.read(16 * 1024)
             if not chunk:
                 return
+            if self._first_pcm_at is None:
+                self._first_pcm_at = time.monotonic()
+                self._input_bytes_at_first_pcm = self._input_bytes
+                elapsed_ms = (
+                    (self._first_pcm_at - self._first_input_at) * 1000
+                    if self._first_input_at is not None
+                    else 0
+                )
+                log.info("MiPlay FFmpeg 首个 PCM: MPEG-TS 输入后 %.0fms", elapsed_ms)
             result = self.sink.write(chunk)
             if inspect.isawaitable(result):
                 await result
