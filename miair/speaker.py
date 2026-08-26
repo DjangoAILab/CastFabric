@@ -67,18 +67,33 @@ class SpeakerController:
         data = ret.get("data")
         return not isinstance(data, dict) or data.get("code", 0) == 0
 
-    async def play_url(self, url: str) -> bool:
+    async def play_url(self, url: str, *, play_type: int = 2) -> bool:
         """让音箱播放指定 URL"""
         try:
             await self.auth.ensure_login()
             if self._should_use_music_api():
                 ret = await self.auth.mina_service.play_by_music_url(
-                    self.device_id, url, audio_id=DEFAULT_AUDIO_ID
+                    self.device_id,
+                    url,
+                    _type=play_type,
+                    audio_id=DEFAULT_AUDIO_ID,
                 )
-                log.info(f"play_by_music_url device_id={self.device_id} ret={ret}")
+                log.info(
+                    "play_by_music_url device_id=%s type=%s ret=%s",
+                    self.device_id,
+                    play_type,
+                    ret,
+                )
             else:
-                ret = await self.auth.mina_service.play_by_url(self.device_id, url)
-                log.info(f"play_by_url device_id={self.device_id} ret={ret}")
+                ret = await self.auth.mina_service.play_by_url(
+                    self.device_id, url, _type=play_type
+                )
+                log.info(
+                    "play_by_url device_id=%s type=%s ret=%s",
+                    self.device_id,
+                    play_type,
+                    ret,
+                )
             return self._mina_request_succeeded(ret)
         except Exception as e:
             log.error(f"play_url 失败: {e}")
@@ -93,10 +108,15 @@ class SpeakerController:
                     await self.auth.ensure_login()
                     if self._should_use_music_api():
                         ret = await self.auth.mina_service.play_by_music_url(
-                            self.device_id, url, audio_id=DEFAULT_AUDIO_ID
+                            self.device_id,
+                            url,
+                            _type=play_type,
+                            audio_id=DEFAULT_AUDIO_ID,
                         )
                     else:
-                        ret = await self.auth.mina_service.play_by_url(self.device_id, url)
+                        ret = await self.auth.mina_service.play_by_url(
+                            self.device_id, url, _type=play_type
+                        )
                     return self._mina_request_succeeded(ret)
                 except Exception as e2:
                     log.error(f"重新登录后 play_url 仍然失败: {e2}")

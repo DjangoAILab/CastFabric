@@ -12,10 +12,17 @@ log = logging.getLogger("miair")
 
 
 class MiAirLiveAudioSink:
-    def __init__(self, hostname: str, controller, audio_format: str = "wav"):
+    def __init__(
+        self,
+        hostname: str,
+        controller,
+        audio_format: str = "wav",
+        play_type: int = 2,
+    ):
         self.hostname = hostname
         self.controller = controller
         self.audio_format = audio_format
+        self.play_type = play_type
         self.stream_server: AudioStreamServer | None = None
         self._play_started = False
         self._active = False
@@ -44,11 +51,17 @@ class MiAirLiveAudioSink:
             server.set_audio_params(sample_rate, channels, sample_width)
             server.start_streaming()
             self._active = True
-            accepted = await self.controller.play_url(server.stream_url)
+            accepted = await self.controller.play_url(
+                server.stream_url, play_type=self.play_type
+            )
             if not accepted:
                 raise RuntimeError("Xiaomi speaker rejected the MiPlay live URL")
             self._play_started = True
-            log.info("MiPlay 音频已请求音箱拉流: %s", server.stream_url)
+            log.info(
+                "MiPlay 音频已请求音箱拉流: %s (player_play_url type=%s)",
+                server.stream_url,
+                self.play_type,
+            )
         except Exception:
             self._active = False
             server.stop_streaming()

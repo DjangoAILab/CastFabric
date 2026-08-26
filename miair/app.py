@@ -271,7 +271,9 @@ class MiAir:
             host="0.0.0.0",
             port=self.config.miplay_port,
             sink_factory=lambda: MiAirLiveAudioSink(
-                self.config.hostname, controller
+                self.config.hostname,
+                controller,
+                play_type=self.config.miplay_play_type,
             ),
             volume_setter=controller.set_volume,
             identity=identity,

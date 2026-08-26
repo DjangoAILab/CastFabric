@@ -235,6 +235,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "enable_miplay": config.enable_miplay,
             "miplay_port": config.miplay_port,
             "miplay_name": config.miplay_name,
+            "miplay_play_type": config.miplay_play_type,
             "miplay": app_instance.miplay_receiver.diagnostics()
             if app_instance.miplay_receiver
             else {"running": False},
@@ -307,6 +308,11 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             config.miplay_port = max(0, min(65535, int(data["miplay_port"])))
         if "miplay_name" in data:
             config.miplay_name = str(data["miplay_name"]).strip()[:80] or "OpenXiaoCast"
+        if "miplay_play_type" in data:
+            requested_type = int(data["miplay_play_type"])
+            config.miplay_play_type = (
+                requested_type if requested_type in (0, 1, 2) else 2
+            )
 
         # 更新 speaker 名称和兼容模式
         if "speakers" in data:

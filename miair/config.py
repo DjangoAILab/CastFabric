@@ -98,6 +98,8 @@ class Config:
     enable_miplay: bool = True
     miplay_port: int = 8899
     miplay_name: str = "OpenXiaoCast"
+    # player_play_url 的播放类型。仅用于 MiPlay 实时流实验；DLNA/AirPlay 保持默认值 2。
+    miplay_play_type: int = 2
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -112,6 +114,12 @@ class Config:
         self.resume_delay_seconds = max(1, min(15, self.resume_delay_seconds))
         self.miplay_port = max(0, min(65535, int(self.miplay_port)))
         self.miplay_name = (self.miplay_name or "OpenXiaoCast").strip()[:80]
+        try:
+            self.miplay_play_type = int(self.miplay_play_type)
+        except (TypeError, ValueError):
+            self.miplay_play_type = 2
+        if self.miplay_play_type not in (0, 1, 2):
+            self.miplay_play_type = 2
         if not self.account:
             self.account = os.getenv("MI_USER", "")
         if not self.password:

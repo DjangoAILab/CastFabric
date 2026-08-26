@@ -15,9 +15,11 @@ class FakeSpeakerController:
         self.fetch_task = None
         self.stop_calls = 0
         self.response_headers = None
+        self.play_type = None
 
-    async def play_url(self, url):
+    async def play_url(self, url, *, play_type=2):
         self.url = url
+        self.play_type = play_type
         self.fetch_task = asyncio.create_task(self._fetch(url))
         return True
 
@@ -35,7 +37,7 @@ class FakeSpeakerController:
 def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
     async def scenario():
         controller = FakeSpeakerController()
-        sink = MiAirLiveAudioSink("127.0.0.1", controller)
+        sink = MiAirLiveAudioSink("127.0.0.1", controller, play_type=1)
         await sink.start(48_000, 2, 2)
         assert "/miplay/stream.wav" in controller.url
         await sink.write(struct.pack("<1920h", *([1000] * 1920)))
@@ -54,12 +56,13 @@ def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
         "DLNA.ORG_OP=00;DLNA.ORG_CI=0"
     )
     assert controller.stop_calls == 1
+    assert controller.play_type == 1
     assert sink.diagnostics()["active"] is False
 
 
 def test_live_audio_sink_cleans_up_when_speaker_rejects_url():
     class RejectingController:
-        async def play_url(self, url):
+        async def play_url(self, url, *, play_type=2):
             return False
 
         async def stop(self):
@@ -85,7 +88,7 @@ def test_complete_miplay_wire_reaches_live_http_stream():
             self.audio = b""
             self.fetch_task = None
 
-        async def play_url(self, url):
+        async def play_url(self, url, *, play_type=2):
             self.url = url
             self.fetch_task = asyncio.create_task(self._fetch(url))
             return True
