@@ -7,10 +7,12 @@ import hashlib
 import ipaddress
 import json
 import struct
+import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 
-from zeroconf import ServiceInfo
+from zeroconf import IPVersion, ServiceBrowser, ServiceInfo, Zeroconf
 
 
 MIPLAY_SERVICE_TYPE = "_mi-connect._udp.local."
@@ -135,3 +137,41 @@ def device_from_service_info(info: ServiceInfo) -> MiPlayDevice:
         security_mode=int(properties.get("sec", "0")),
         properties=properties,
     )
+
+
+def scan_miplay(timeout: float = 3.0) -> list[MiPlayDevice]:
+    """Browse MiPlay services for a bounded interval and return valid devices."""
+
+    if timeout <= 0 or timeout > 60:
+        raise ValueError("scan timeout must be between 0 and 60 seconds")
+    devices: dict[str, MiPlayDevice] = {}
+    lock = threading.Lock()
+    zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+
+    class Listener:
+        def add_service(self, zc, service_type, name):
+            self.update_service(zc, service_type, name)
+
+        def update_service(self, zc, service_type, name):
+            info = zc.get_service_info(service_type, name, timeout=1000)
+            if info is None:
+                return
+            try:
+                device = device_from_service_info(info)
+            except (ValueError, KeyError, json.JSONDecodeError):
+                return
+            with lock:
+                devices[name] = device
+
+        def remove_service(self, zc, service_type, name):
+            with lock:
+                devices.pop(name, None)
+
+    browser = ServiceBrowser(zeroconf, MIPLAY_SERVICE_TYPE, Listener())
+    try:
+        time.sleep(timeout)
+    finally:
+        browser.cancel()
+        zeroconf.close()
+    with lock:
+        return sorted(devices.values(), key=lambda item: item.friendly_name)
