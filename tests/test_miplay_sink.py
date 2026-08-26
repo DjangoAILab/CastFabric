@@ -9,12 +9,14 @@ from miair.streaming.sink import MiAirLiveAudioSink
 
 
 class FakeSpeakerController:
-    def __init__(self):
+    def __init__(self, request_headers=None):
         self.url = None
         self.audio = b""
         self.fetch_task = None
         self.stop_calls = 0
         self.response_headers = None
+        self.response_status = None
+        self.request_headers = request_headers
         self.play_type = None
 
     async def play_url(self, url, *, play_type=2):
@@ -25,7 +27,8 @@ class FakeSpeakerController:
 
     async def _fetch(self, url):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
+            async with session.get(url, headers=self.request_headers) as response:
+                self.response_status = response.status
                 self.response_headers = response.headers
                 self.audio = await response.content.readexactly(44 + 3840)
 
@@ -78,6 +81,30 @@ def test_live_audio_sink_can_advertise_finite_http_content_length():
         44 + 0x7FFFFF00
     )
     assert "Transfer-Encoding" not in controller.response_headers
+
+
+def test_live_audio_sink_supports_initial_open_byte_range():
+    async def scenario():
+        controller = FakeSpeakerController({"Range": "bytes=0-"})
+        sink = MiAirLiveAudioSink("127.0.0.1", controller, http_mode="range")
+        await sink.start(48_000, 2, 2)
+        await sink.write(struct.pack("<1920h", *([1000] * 1920)))
+        await asyncio.wait_for(controller.fetch_task, timeout=3)
+        await sink.stop()
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    virtual_length = 44 + 0x7FFFFF00
+    assert controller.response_status == 206
+    assert controller.response_headers["Accept-Ranges"] == "bytes"
+    assert controller.response_headers["Content-Range"] == (
+        f"bytes 0-{virtual_length - 1}/{virtual_length}"
+    )
+    assert controller.response_headers["Content-Length"] == str(virtual_length)
+    assert controller.response_headers["contentFeatures.dlna.org"] == (
+        "DLNA.ORG_OP=01;DLNA.ORG_CI=0"
+    )
 
 
 def test_live_audio_sink_cleans_up_when_speaker_rejects_url():

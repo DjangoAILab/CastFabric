@@ -209,14 +209,46 @@ class AudioStreamServer:
             "transferMode.dlna.org": "Streaming",
             "contentFeatures.dlna.org": "DLNA.ORG_OP=00;DLNA.ORG_CI=0",
         }
-        if self._wav_http_mode == "content-length":
+        status = 200
+        if self._wav_http_mode in ("content-length", "range"):
             # The WAV header already advertises this same finite virtual size.
             # Some embedded players select their buffering policy from the HTTP
             # body framing rather than from the RIFF header.
             headers["Content-Length"] = str(44 + _WAV_STREAM_DATA_SIZE)
+        if self._wav_http_mode == "range":
+            headers["Accept-Ranges"] = "bytes"
+            headers["contentFeatures.dlna.org"] = (
+                "DLNA.ORG_OP=01;DLNA.ORG_CI=0"
+            )
+            range_header = request.headers.get("Range")
+            log.info(
+                "%s: WAV HTTP 请求 Range=%s",
+                self._source_name,
+                range_header or "<none>",
+            )
+            if range_header:
+                # Initial playback may legitimately ask for the complete
+                # virtual WAV starting at byte zero. Random access to older
+                # live PCM cannot be fulfilled, so reject any other range.
+                if range_header.strip().lower() != "bytes=0-":
+                    return web.Response(
+                        status=416,
+                        headers={
+                            "Content-Range": (
+                                f"bytes */{44 + _WAV_STREAM_DATA_SIZE}"
+                            ),
+                            "Connection": "close",
+                        },
+                    )
+                status = 206
+                headers["Content-Range"] = (
+                    "bytes 0-"
+                    f"{43 + _WAV_STREAM_DATA_SIZE}/"
+                    f"{44 + _WAV_STREAM_DATA_SIZE}"
+                )
 
         response = web.StreamResponse(
-            status=200,
+            status=status,
             headers=headers,
         )
         if self._wav_http_mode == "close":

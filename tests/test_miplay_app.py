@@ -66,9 +66,12 @@ def test_miplay_config_bounds_port_and_name():
         miplay_port=100_000,
         miplay_name="  " + "X" * 100,
         miplay_play_type=99,
-        miplay_http_mode="invalid",
+        miplay_http_mode="range",
     )
     assert config.miplay_port == 65535
     assert config.miplay_name == "X" * 80
     assert config.miplay_play_type == 2
-    assert config.miplay_http_mode == "close"
+    assert config.miplay_http_mode == "range"
+
+    invalid = Config(hostname="127.0.0.1", miplay_http_mode="invalid")
+    assert invalid.miplay_http_mode == "close"

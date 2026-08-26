@@ -318,7 +318,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             requested_mode = str(data["miplay_http_mode"]).lower()
             config.miplay_http_mode = (
                 requested_mode
-                if requested_mode in ("close", "content-length")
+                if requested_mode in ("close", "content-length", "range")
                 else "close"
             )
 
