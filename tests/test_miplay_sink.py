@@ -107,6 +107,25 @@ def test_live_audio_sink_supports_initial_open_byte_range():
     )
 
 
+def test_live_audio_sink_can_use_x_wav_content_type_without_changing_body():
+    async def scenario():
+        controller = FakeSpeakerController()
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1", controller, content_type="audio/x-wav"
+        )
+        await sink.start(48_000, 2, 2)
+        await sink.write(struct.pack("<1920h", *([1000] * 1920)))
+        await asyncio.wait_for(controller.fetch_task, timeout=3)
+        await sink.stop()
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    assert controller.response_headers["Content-Type"] == "audio/x-wav"
+    assert controller.audio[:4] == b"RIFF"
+    assert controller.audio[8:12] == b"WAVE"
+
+
 def test_live_audio_sink_cleans_up_when_speaker_rejects_url():
     class RejectingController:
         async def play_url(self, url, *, play_type=2):

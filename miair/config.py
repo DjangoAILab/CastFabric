@@ -102,6 +102,8 @@ class Config:
     miplay_play_type: int = 2
     # MiPlay 实时 WAV 的 HTTP 方式：close、content-length 或 range。
     miplay_http_mode: str = "close"
+    # WAV MIME 对照实验；不改变 WAV/PCM 内容。
+    miplay_content_type: str = "audio/wav"
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -125,6 +127,11 @@ class Config:
         self.miplay_http_mode = str(self.miplay_http_mode or "close").lower()
         if self.miplay_http_mode not in ("close", "content-length", "range"):
             self.miplay_http_mode = "close"
+        self.miplay_content_type = str(
+            self.miplay_content_type or "audio/wav"
+        ).lower()
+        if self.miplay_content_type not in ("audio/wav", "audio/x-wav"):
+            self.miplay_content_type = "audio/wav"
         if not self.account:
             self.account = os.getenv("MI_USER", "")
         if not self.password:

@@ -19,12 +19,14 @@ class MiAirLiveAudioSink:
         audio_format: str = "wav",
         play_type: int = 2,
         http_mode: str = "close",
+        content_type: str = "audio/wav",
     ):
         self.hostname = hostname
         self.controller = controller
         self.audio_format = audio_format
         self.play_type = play_type
         self.http_mode = http_mode
+        self.content_type = content_type
         self.stream_server: AudioStreamServer | None = None
         self._play_started = False
         self._active = False
@@ -46,6 +48,7 @@ class MiAirLiveAudioSink:
             source_name="MiPlay",
             close_delimited=True,
             wav_http_mode=self.http_mode,
+            wav_content_type=self.content_type,
             queue_maxsize=8,
         )
         self.stream_server = server
@@ -62,10 +65,11 @@ class MiAirLiveAudioSink:
             self._play_started = True
             log.info(
                 "MiPlay 音频已请求音箱拉流: %s "
-                "(player_play_url type=%s, HTTP=%s)",
+                "(player_play_url type=%s, HTTP=%s, Content-Type=%s)",
                 server.stream_url,
                 self.play_type,
                 self.http_mode,
+                self.content_type,
             )
         except Exception:
             self._active = False

@@ -41,6 +41,7 @@ class AudioStreamServer:
         source_name: str = "AirPlay",
         close_delimited: bool = False,
         wav_http_mode: str | None = None,
+        wav_content_type: str = "audio/wav",
         queue_maxsize: int = _QUEUE_MAXSIZE,
     ):
         self.hostname = hostname
@@ -51,6 +52,7 @@ class AudioStreamServer:
         self._wav_http_mode = wav_http_mode or (
             "close" if close_delimited else "chunked"
         )
+        self._wav_content_type = wav_content_type
         self._app = web.Application()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
@@ -201,7 +203,7 @@ class AudioStreamServer:
             return rejected
 
         headers = {
-            "Content-Type": "audio/wav",
+            "Content-Type": self._wav_content_type,
             "Cache-Control": "no-cache, no-store",
             "Pragma": "no-cache",
             "Connection": "close",
@@ -275,9 +277,11 @@ class AudioStreamServer:
         self._abort = False  # 重置中断标志，允许续播
 
         log.info(
-            "%s: 音箱开始拉取 WAV 音频流 (HTTP=%s, 零编码延迟)",
+            "%s: 音箱开始拉取 WAV 音频流 "
+            "(HTTP=%s, Content-Type=%s, 零编码延迟)",
             self._source_name,
             self._wav_http_mode,
+            self._wav_content_type,
         )
 
         # 使用 asyncio.Event 在写入线程和事件循环间通信

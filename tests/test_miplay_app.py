@@ -20,6 +20,7 @@ def test_app_starts_miplay_for_first_configured_speaker():
             miplay_name="OpenXiaoCast Test",
             miplay_play_type=1,
             miplay_http_mode="content-length",
+            miplay_content_type="audio/x-wav",
         )
         app = MiAir(config)
         controller = SimpleNamespace(
@@ -42,6 +43,7 @@ def test_app_starts_miplay_for_first_configured_speaker():
             assert sink.controller is controller
             assert sink.play_type == 1
             assert sink.http_mode == "content-length"
+            assert sink.content_type == "audio/x-wav"
             assert kwargs["volume_setter"] is controller.set_volume
             receiver.start.assert_awaited_once()
 
@@ -75,3 +77,8 @@ def test_miplay_config_bounds_port_and_name():
 
     invalid = Config(hostname="127.0.0.1", miplay_http_mode="invalid")
     assert invalid.miplay_http_mode == "close"
+
+    invalid_mime = Config(
+        hostname="127.0.0.1", miplay_content_type="application/octet-stream"
+    )
+    assert invalid_mime.miplay_content_type == "audio/wav"

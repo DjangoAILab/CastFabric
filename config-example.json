@@ -19,5 +19,6 @@
     "miplay_name": "OpenXiaoCast",
     "miplay_play_type": 2,
     "miplay_http_mode": "close",
+    "miplay_content_type": "audio/wav",
     "speakers": {}
 }
