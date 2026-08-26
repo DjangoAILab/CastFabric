@@ -178,6 +178,8 @@ class FfmpegMpegTsDecoder:
         self._first_pcm_at: float | None = None
         self._input_bytes = 0
         self._input_bytes_at_first_pcm: int | None = None
+        self._first_audible_pcm_ms: int | None = None
+        self._pcm_peak = 0
 
     async def start(self) -> None:
         if self.process is not None:
@@ -231,6 +233,8 @@ class FfmpegMpegTsDecoder:
         return {
             "first_pcm_ms": first_pcm_ms,
             "input_bytes_at_first_pcm": self._input_bytes_at_first_pcm,
+            "first_audible_pcm_ms": self._first_audible_pcm_ms,
+            "pcm_peak": self._pcm_peak,
             "received_input": self._first_input_at is not None,
             "emitted_pcm": self._first_pcm_at is not None,
         }
@@ -270,6 +274,20 @@ class FfmpegMpegTsDecoder:
                     else 0
                 )
                 log.info("MiPlay FFmpeg 首个 PCM: MPEG-TS 输入后 %.0fms", elapsed_ms)
+            if self._first_audible_pcm_ms is None:
+                samples = memoryview(chunk[: len(chunk) & ~1]).cast("h")
+                peak = max((abs(sample) for sample in samples), default=0)
+                self._pcm_peak = max(self._pcm_peak, peak)
+                if peak >= 128:
+                    audible_at = time.monotonic()
+                    self._first_audible_pcm_ms = round(
+                        (audible_at - self._first_input_at) * 1000
+                    ) if self._first_input_at is not None else 0
+                    log.info(
+                        "MiPlay 检测到非静音 PCM: 输入后 %sms, peak=%s",
+                        self._first_audible_pcm_ms,
+                        peak,
+                    )
             result = self.sink.write(chunk)
             if inspect.isawaitable(result):
                 await result

@@ -92,9 +92,9 @@ def test_ffmpeg_decoder_delivers_non_silent_48khz_stereo_pcm():
         await decoder.start()
         await decoder.write(encoded)
         await decoder.stop()
-        return sink
+        return sink, decoder.diagnostics()
 
-    sink = asyncio.run(run())
+    sink, diagnostics = asyncio.run(run())
     pcm = b"".join(sink.chunks)
     samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
 
@@ -103,6 +103,8 @@ def test_ffmpeg_decoder_delivers_non_silent_48khz_stereo_pcm():
     assert len(pcm) >= 48_000 * 2 * 2 // 10
     assert max(abs(value) for value in samples) > 500
     assert sink.chunks
+    assert diagnostics["pcm_peak"] > 500
+    assert diagnostics["first_audible_pcm_ms"] is not None
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg unavailable")

@@ -12,6 +12,7 @@ from .protocol import (
     CommandFrame,
     OpenDeviceRequest,
     ProtocolError,
+    decode_scalar,
     encode_command,
     encode_device_info,
     encode_notify_scalar,
@@ -128,6 +129,7 @@ class LegacyReceiverSession:
             Command.SOURCE_CAPABILITY_UPDATE: self._source_capability_update,
             Command.GET_MIRROR_MODE: self._get_mirror_mode,
             Command.GET_VOLUME: self._get_volume,
+            Command.SET_VOLUME: self._set_volume,
             Command.GET_STATE: self._get_state,
             Command.GET_MEDIA_INFO: self._get_media_info,
             Command.HEARTBEAT: self._heartbeat,
@@ -248,6 +250,16 @@ class LegacyReceiverSession:
 
     def _get_volume(self, frame: CommandFrame) -> ControlResult:
         return self._empty_query_ack(frame, Command.GET_VOLUME_ACK, encode_scalar(self.volume))
+
+    def _set_volume(self, frame: CommandFrame) -> ControlResult:
+        try:
+            volume = decode_scalar(frame.payload)
+        except ProtocolError as exc:
+            return self._stop(str(exc))
+        if not 0 <= volume <= 100:
+            return self._stop("volume out of range")
+        self.volume = volume
+        return self._ack(Command.SET_VOLUME_ACK, frame.sequence)
 
     def _get_state(self, frame: CommandFrame) -> ControlResult:
         state = 2 if self._media_started else 3
