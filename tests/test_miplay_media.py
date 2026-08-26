@@ -7,6 +7,7 @@ import pytest
 
 from miair.miplay.media import (
     FFMPEG_LOW_LATENCY_INPUT_ARGS,
+    PCM_READ_SIZE,
     FfmpegMpegTsDecoder,
     MediaFrameBuffer,
     MediaProtocolError,
@@ -26,6 +27,7 @@ def test_ffmpeg_decoder_uses_bounded_low_latency_probe():
         "-analyzeduration",
         "0",
     )
+    assert PCM_READ_SIZE == 3840
 
 
 def make_ts_packet(pid=0x1100):

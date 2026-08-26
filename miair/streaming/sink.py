@@ -35,6 +35,8 @@ class MiAirLiveAudioSink:
             audio_format=self.audio_format,
             stream_path="/miplay",
             source_name="MiPlay",
+            close_delimited=True,
+            queue_maxsize=8,
         )
         self.stream_server = server
         try:

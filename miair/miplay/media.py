@@ -34,6 +34,7 @@ FFMPEG_LOW_LATENCY_INPUT_ARGS = (
     "-analyzeduration",
     "0",
 )
+PCM_READ_SIZE = 48_000 * 2 * 2 // 50  # 20 ms of 48 kHz stereo s16le
 
 
 class MediaProtocolError(ValueError):
@@ -262,7 +263,7 @@ class FfmpegMpegTsDecoder:
     async def _read_pcm(self) -> None:
         assert self.process is not None and self.process.stdout is not None
         while True:
-            chunk = await self.process.stdout.read(16 * 1024)
+            chunk = await self.process.stdout.read(PCM_READ_SIZE)
             if not chunk:
                 return
             if self._first_pcm_at is None:

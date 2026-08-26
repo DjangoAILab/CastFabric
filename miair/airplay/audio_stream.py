@@ -38,18 +38,24 @@ class AudioStreamServer:
         audio_format: str = "wav",
         stream_path: str = "/airplay",
         source_name: str = "AirPlay",
+        close_delimited: bool = False,
+        queue_maxsize: int = _QUEUE_MAXSIZE,
     ):
         self.hostname = hostname
         self.port = port
         self._audio_format = audio_format  # "mp3" or "wav"
         self._stream_path = "/" + stream_path.strip("/")
         self._source_name = source_name
+        self._close_delimited = close_delimited
         self._app = web.Application()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
 
         # 音频数据队列 - 小队列 = 低延迟
-        self._audio_queue: queue.Queue[bytes | None] = queue.Queue(maxsize=_QUEUE_MAXSIZE)
+        self._queue_maxsize = max(2, queue_maxsize)
+        self._audio_queue: queue.Queue[bytes | None] = queue.Queue(
+            maxsize=self._queue_maxsize
+        )
         self._sample_rate = 44100
         self._channels = 2
         self._sample_width = 2  # 16-bit
@@ -143,7 +149,7 @@ class AudioStreamServer:
         except queue.Full:
             # 批量丢弃旧数据，一次性腾出足够空间，避免反复 put/get 开销
             dropped = 0
-            target = _QUEUE_MAXSIZE // 4  # 丢弃 25% 腾出充裕空间
+            target = max(1, self._queue_maxsize // 4)  # 丢弃 25% 腾出空间
             try:
                 for _ in range(target):
                     self._audio_queue.get_nowait()
@@ -197,10 +203,21 @@ class AudioStreamServer:
                 "Cache-Control": "no-cache, no-store",
                 "Pragma": "no-cache",
                 "Connection": "close",
-                "Transfer-Encoding": "chunked",
+                "Accept-Ranges": "none",
+                "transferMode.dlna.org": "Streaming",
+                "contentFeatures.dlna.org": "DLNA.ORG_OP=00;DLNA.ORG_CI=0",
             },
         )
+        if self._close_delimited:
+            # A close-delimited HTTP/1.1 body matches the sender-paced live WAV
+            # streams used by low-latency DLNA bridges. aiohttp otherwise adds
+            # Transfer-Encoding: chunked, which makes some embedded players
+            # treat the response as a generic progressive download.
+            response._length_check = False
         await response.prepare(request)
+
+        if request.method == "HEAD":
+            return response
 
         # 关闭 Nagle 算法，让小包立即发送而不等待合并
         transport = request.transport

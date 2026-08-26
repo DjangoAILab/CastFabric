@@ -70,7 +70,7 @@ def test_complete_legacy_receiver_transcript_reaches_open():
     assert decode_scalar(decoded(volume.writes)[0].payload) == 38
 
     set_volume = session.process(
-        CommandFrame(Command.SET_VOLUME, 6, b"\0\0\0\0\x2b")
+        CommandFrame(Command.SET_VOLUME, 6, b"\0\0\0\x2b")
     )
     assert decoded(set_volume.writes) == [
         CommandFrame(Command.SET_VOLUME_ACK, 6, b"")
@@ -173,11 +173,11 @@ def test_set_volume_rejects_malformed_or_out_of_range_values():
     malformed = authenticated_session()
     result = malformed.process(CommandFrame(Command.SET_VOLUME, 1, b"43"))
     assert not result.accepted
-    assert "five-byte scalar" in result.reason
+    assert "four-byte integer" in result.reason
 
     out_of_range = authenticated_session()
     result = out_of_range.process(
-        CommandFrame(Command.SET_VOLUME, 2, b"\0\0\0\0\x65")
+        CommandFrame(Command.SET_VOLUME, 2, b"\0\0\0\x65")
     )
     assert not result.accepted
     assert result.reason == "volume out of range"

@@ -14,6 +14,7 @@ class FakeSpeakerController:
         self.audio = b""
         self.fetch_task = None
         self.stop_calls = 0
+        self.response_headers = None
 
     async def play_url(self, url):
         self.url = url
@@ -23,6 +24,7 @@ class FakeSpeakerController:
     async def _fetch(self, url):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
+                self.response_headers = response.headers
                 self.audio = await response.content.readexactly(44 + 3840)
 
     async def stop(self):
@@ -46,6 +48,11 @@ def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
     assert controller.audio[:4] == b"RIFF"
     assert controller.audio[8:12] == b"WAVE"
     assert controller.audio[44:] == struct.pack("<1920h", *([1000] * 1920))
+    assert "Transfer-Encoding" not in controller.response_headers
+    assert controller.response_headers["transferMode.dlna.org"] == "Streaming"
+    assert controller.response_headers["contentFeatures.dlna.org"] == (
+        "DLNA.ORG_OP=00;DLNA.ORG_CI=0"
+    )
     assert controller.stop_calls == 1
     assert sink.diagnostics()["active"] is False
 

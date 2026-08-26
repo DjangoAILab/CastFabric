@@ -12,7 +12,6 @@ from .protocol import (
     CommandFrame,
     OpenDeviceRequest,
     ProtocolError,
-    decode_scalar,
     encode_command,
     encode_device_info,
     encode_notify_scalar,
@@ -252,10 +251,9 @@ class LegacyReceiverSession:
         return self._empty_query_ack(frame, Command.GET_VOLUME_ACK, encode_scalar(self.volume))
 
     def _set_volume(self, frame: CommandFrame) -> ControlResult:
-        try:
-            volume = decode_scalar(frame.payload)
-        except ProtocolError as exc:
-            return self._stop(str(exc))
+        if len(frame.payload) != 4:
+            return self._stop("setVolume payload must be a four-byte integer")
+        volume = int.from_bytes(frame.payload, "big")
         if not 0 <= volume <= 100:
             return self._stop("volume out of range")
         self.volume = volume
