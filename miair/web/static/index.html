@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiAir</title>
+    <title>OpenXiaoCast</title>
     <meta name="color-scheme" content="light dark">
     <link rel="icon" type="image/png" href="./static/weblogo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1099,7 +1099,7 @@
         <nav>
             <div class="nav-top">
                 <div class="logo">
-                    MiAir
+                    OpenXiaoCast
                     <span id="update-link"></span>
                 </div>
                 <div class="nav-actions">
@@ -1113,7 +1113,7 @@
                     </button>
                 </div>
             </div>
-            <div class="tagline">为小爱音箱添加 DLNA / AirPlay 投送支持</div>
+            <div class="tagline">小爱音箱的 DLNA / AirPlay / 妙播局域网投送网关</div>
         </nav>
 
         <div id="status-bar" class="status-bar status-stopped">
@@ -1236,6 +1236,23 @@
                         <label class="form-label">Web 管理端口</label>
                         <input type="number" class="form-input" id="input-web-port" placeholder="8300">
                     </div>
+                    <div class="toggle-row" style="margin-top: 16px;">
+                        <div class="toggle-info">
+                            <div class="toggle-desc">启用妙播接收（实验性）</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="chk-enable-miplay">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-top: 16px;">
+                        <label class="form-label">妙播设备名称</label>
+                        <input type="text" class="form-input" id="input-miplay-name" placeholder="OpenXiaoCast">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">妙播控制端口</label>
+                        <input type="number" class="form-input" id="input-miplay-port" placeholder="8899">
+                    </div>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end;">
@@ -1249,9 +1266,8 @@
         </div>
 
         <div style="text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 12px;">
-            <a href="https://github.com/KiriChen-Wind/MiAir" class="footer-link" target="_blank">MiAir</a>
-            <span id="version-text">V0.8.5-alpha</span> by
-            <a href="https://github.com/KiriChen-Wind" class="footer-link" target="_blank">KiriChen</a>
+            <a href="https://github.com/wangerzi/MiAir" class="footer-link" target="_blank">OpenXiaoCast</a>
+            <span id="version-text">V0.9.0a1</span>
         </div>
     </div>
 
@@ -1405,6 +1421,11 @@
             }
             if (data.dlna_port) document.getElementById('input-dlna-port').value = data.dlna_port;
             if (data.web_port) document.getElementById('input-web-port').value = data.web_port;
+            if (data.enable_miplay !== undefined) {
+                document.getElementById('chk-enable-miplay').checked = data.enable_miplay;
+            }
+            if (data.miplay_name) document.getElementById('input-miplay-name').value = data.miplay_name;
+            if (data.miplay_port !== undefined) document.getElementById('input-miplay-port').value = data.miplay_port;
             if (data.auto_resume_on_interrupt !== undefined) {
                 document.getElementById('chk-auto-resume').checked = data.auto_resume_on_interrupt;
             }
@@ -1432,6 +1453,9 @@
                 auto_restart: document.getElementById('chk-auto-restart').checked,
                 dlna_port: parseInt(document.getElementById('input-dlna-port').value),
                 web_port: parseInt(document.getElementById('input-web-port').value),
+                enable_miplay: document.getElementById('chk-enable-miplay').checked,
+                miplay_name: document.getElementById('input-miplay-name').value.trim(),
+                miplay_port: parseInt(document.getElementById('input-miplay-port').value),
             };
         }
 
@@ -1450,7 +1474,7 @@
         async function checkUpdate(currentVersion) {
             try {
                 // 使用 GitHub API 获取最新 release
-                const resp = await fetch('https://api.github.com/repos/KiriChen-Wind/MiAir/releases/latest');
+                const resp = await fetch('https://api.github.com/repos/wangerzi/MiAir/releases/latest');
                 if (!resp.ok) return;
                 const data = await resp.json();
                 const latestVersion = data.tag_name; // 例如 v0.3.2
@@ -1891,6 +1915,9 @@
                 auto_restart: document.getElementById('chk-auto-restart').checked,
                 dlna_port: parseInt(document.getElementById('input-dlna-port').value),
                 web_port: parseInt(document.getElementById('input-web-port').value),
+                enable_miplay: document.getElementById('chk-enable-miplay').checked,
+                miplay_name: document.getElementById('input-miplay-name').value.trim(),
+                miplay_port: parseInt(document.getElementById('input-miplay-port').value),
             };
 
             // 检查是否有变更

@@ -206,7 +206,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         index_path = os.path.join(static_dir, "index.html")
         if os.path.exists(index_path):
             return web.FileResponse(index_path)
-        return web.Response(text="MiAir Web UI", content_type="text/html")
+        return web.Response(text="OpenXiaoCast Web UI", content_type="text/html")
 
     async def handle_get_setting(request):
         """获取当前设置和设备列表 (类似 xiaomusic /getsetting)"""
@@ -432,7 +432,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         """执行一键更新：从 GitHub 下载最新代码覆盖后重启"""
         app_dir = _get_app_dir()
         in_docker = _is_docker()
-        url = "https://github.com/KiriChen-Wind/MiAir/archive/refs/heads/main.tar.gz"
+        url = "https://github.com/wangerzi/MiAir/archive/refs/heads/main.tar.gz"
 
         log.info(f"开始一键更新 (目录: {app_dir}, Docker: {in_docker})")
 

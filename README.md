@@ -1,65 +1,79 @@
-# MiAir - 为小爱音箱添加 DLNA 与 AirPlay 支持
+# OpenXiaoCast
 
-## 引用以下开源项目代码 由衷感谢
+OpenXiaoCast 是面向小爱音箱的多协议局域网投送网关。它保留 MiAir 的
+DLNA 与 AirPlay 能力，并新增实验性的妙播（MiPlay）接收链路，让手机发现
+OpenXiaoCast 后，音频经过统一的实时流通道送到已配置的小米音箱。
 
-**[XiaoMusic](https://github.com/hanxi/xiaomusic "XiaoMusic")** &ensp; **[AirPlay2 Receiver](https://github.com/openairplay/airplay2-receiver "AirPlay2 Receiver")** &ensp; **[MaCast](https://github.com/xfangfang/Macast "MaCast")**
+> 妙播的离线完整链路已经通过自动化验证；K60/M01 真机兼容性仍需按
+> [真机认证清单](docs/testing/miplay-real-device-checklist.md)完成最终确认。
 
-## 快速开始
-## Windows
-*确保设备已安装 Python 3.12+*
+## 当前能力
 
-前往Release页面下载最新版本\
-进入项目目录，使用终端执行
-```python
-python miair.py
-```
-程序将自动安装相关依赖库，请确保网络畅通\
-安装完成后访问 `http://主机IP:8300` 即可打开 Web 管理界面。
+- DLNA 音频渲染器
+- AirPlay 音频接收
+- 妙播设备发现、控制协商、反向 WFD/RTSP 和 AAC 媒体接收（实验性）
+- 妙播 AAC → 48 kHz 双声道 PCM → HTTP WAV → 小米音箱
+- Web 配置、状态诊断与无需真机的妙播链路自测
+- amd64/arm64 Docker 镜像构建和 GHCR 发布流水线
 
-## Docker (Thanks @SyunSS)
+## Docker 部署
 
-支持平台：Linux / OpenWrt / macOS
+局域网发现依赖 mDNS，推荐在 Linux 主机上使用 host 网络：
 
-### 使用脚本部署
 ```bash
-# 安装 Git
-opkg update
-opkg install git
-opkg install git-http
-
-# 克隆项目
-rm -rf MiAir # 如果是更新，需要清理旧的部署目录
-git clone https://github.com/KiriChen-Wind/MiAir.git
-cd MiAir
-
-# 赋予权限并运行安装脚本
-chmod +x deploy.sh manage.sh
-./deploy.sh
+git clone https://github.com/wangerzi/MiAir.git OpenXiaoCast
+cd OpenXiaoCast
+docker compose up -d
 ```
 
-安装完成后访问 `http://容器宿主机IP:8300` 即可打开 Web 管理界面。
-请确保容器网络为Host。\
-请确保 Docker 容器重启策略设定为 Unless Stopped。\
-部分情况下，修改配置后容器可能无法自动重启，请手动重启容器。
+管理页面为 `http://宿主机IP:8300`。首次启动会在 `./conf` 生成配置文件；
+在 Web 页面填写小米账号并选择目标音箱。妙播默认名称为 `OpenXiaoCast`，
+控制端口为 `8899`。
 
+已有部署在仓库改名之前仍可继续使用兼容镜像名
+`ghcr.io/wangerzi/miair:latest`。Docker Desktop 使用 host 网络时，需先确认
+当前版本已启用 host networking；否则建议直接在 Linux/OpenWrt 主机部署。
 
-### Docker 相关命令
+## 本地开发与诊断
+
+需要 Python 3.10+ 和 FFmpeg：
+
 ```bash
-docker logs -f miair     # 查看日志
-docker stop miair        # 停止
-docker start miair       # 启动
-docker restart miair     # 重启
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[test]'
+openxiaocast --conf-path conf
 ```
 
-## 我们
-**[需要帮助&交流&测试版本发布](https://qun.qq.com/universal-share/share?ac=1&authKey=1zXhx2zxgw9GG2mkecypT9clD7q0B3W3l4K0D4fQirmpDWakz0Oy2BI3ocDrgzbh&busi_data=eyJncm91cENvZGUiOiI3NDEyNjcyOTgiLCJ0b2tlbiI6InYwbitXQTF5cE9MaUJCR0hMUk03OWV0WkFoMThxbjJRaWI4dHVlbUpGdW5OdEZBVEpXMXF0T1dQUnRmRXRzYVgiLCJ1aW4iOiIxODQxOTM4MDQwIn0%3D&data=_OrA-eASJMwYwx-Uj-BReC1Xh3zGAdkn8CQskbEsQ5S66bhqvvO6dJ-QrSlRl-Ks00l5XDw1FANE8Um0w5yB8Q&svctype=4&tempid=h5_group_info "需要帮助&交流&测试版本发布")**
+无需手机或音箱即可运行完整的 TCP 控制、RTSP、RTP/MPEG-TS、解码链路：
 
-## 后续 可能 添加的功能
+```bash
+openxiaocast-miplay self-test --duration 0.35
+```
 
-- ~~支持 Docker 部署~~ ✅ 已支持
-- 支持 OpenWrt 部署
-- ~~支持 MacOS 部署~~
-- ......
+扫描局域网中的妙播接收端：
 
+```bash
+openxiaocast-miplay scan --timeout 5
+```
 
-[![preview](https://raw.githubusercontent.com/KiriChen-Wind/MiAir/main/preview.png "preview")](https://raw.githubusercontent.com/KiriChen-Wind/MiAir/main/preview.png "preview")
+向另一台 OpenXiaoCast 接收端推送测试音（只用于诊断）：
+
+```bash
+openxiaocast-miplay simulate --target 192.168.1.20 --duration 1
+```
+
+## 交付状态
+
+实现阶段、验收门槛和失败回退策略维护在
+[OpenXiaoCast 路线图](docs/roadmap/2026-08-26-openxiaocast-roadmap.md)。协议研究来源与
+独立实现边界见[研究说明](docs/research/miplay-protocol-sources.md)。
+
+## 兼容与致谢
+
+为兼容现有安装，Python 包名与 `miair` 命令暂时保留。项目延续并感谢
+[MiAir](https://github.com/KiriChen-Wind/MiAir)、
+[XiaoMusic](https://github.com/hanxi/xiaomusic)、
+[AirPlay2 Receiver](https://github.com/openairplay/airplay2-receiver) 和
+[Macast](https://github.com/xfangfang/Macast) 的既有工作。妙播部分没有直接引入
+许可证不明确的第三方实现代码。

@@ -1,7 +1,7 @@
 [project]
 name = "miair"
-version = "0.5.4"
-description = "Make Xiaomi AI speakers act as Music renderers"
+version = "0.9.0a1"
+description = "OpenXiaoCast multi-protocol casting gateway for Xiaomi AI speakers"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -15,6 +15,14 @@ dependencies = [
 
 [project.scripts]
 miair = "miair.cli:main"
+openxiaocast = "miair.cli:main"
+openxiaocast-miplay = "miair.miplay.probe:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -22,3 +30,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["miair*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

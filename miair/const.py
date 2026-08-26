@@ -1,6 +1,6 @@
 """MiAir 常量定义"""
 
-VERSION = "0.8.5-alpha"
+VERSION = "0.9.0a1"
 
 
 # SSDP 相关
@@ -85,5 +85,4 @@ GET_ASK_BY_MINA = {
     "LX04", "L05B", "L05C", "S12", "S12A",
     "LX5A", "L15A", "L16A", "X6A",
 }
-
 

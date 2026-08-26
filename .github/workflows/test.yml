@@ -1,0 +1,44 @@
+name: Test OpenXiaoCast
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install project and test dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[test]'
+      - name: Run unit and integration tests
+        run: python -m pytest -q
+      - name: Run offline MiPlay wire self-test
+        run: python -m miair.miplay.probe self-test --duration 0.35
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: openxiaocast:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run MiPlay self-test in image
+        run: docker run --rm --entrypoint python openxiaocast:test -m miair.miplay.probe self-test --duration 0.35

@@ -1,0 +1,12 @@
+services:
+  openxiaocast:
+    image: ghcr.io/wangerzi/miair:latest
+    build:
+      context: .
+    container_name: openxiaocast
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      MIAIR_DOCKER: "1"
+    volumes:
+      - ./conf:/app/conf

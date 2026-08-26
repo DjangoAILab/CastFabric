@@ -24,7 +24,9 @@ if sys.platform == "win32":
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="MiAir - 让小爱音箱成为 DLNA 渲染器")
+    parser = argparse.ArgumentParser(
+        description="OpenXiaoCast - 小米音箱多协议局域网投送网关"
+    )
     parser.add_argument("--conf-path", default="conf", help="配置文件目录 (默认: conf)")
     parser.add_argument("--hostname", default="", help="本机 IP 地址 (留空自动检测)")
     parser.add_argument("--dlna-port", type=int, default=0, help="DLNA HTTP 端口 (默认: 8200)")
