@@ -154,3 +154,13 @@ def test_modern_safety_mutual_auth_then_encrypted_business_command():
     encrypted_response = _decode(response.writes)[0]
     assert encrypted_response.command == Command.GET_DEVICE_INFO_ACK
     assert decode_device_info(phone_inbound.decrypt(encrypted_response.payload))["support"] == "audio"
+
+    opened = session.process(
+        CommandFrame(
+            Command.OPEN,
+            12,
+            phone_outbound.encrypt(b"wfd://192.168.133.225:7274?mirrorMode=1"),
+        )
+    )
+    assert opened.accepted
+    assert opened.open_request is not None

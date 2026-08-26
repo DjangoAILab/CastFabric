@@ -146,6 +146,7 @@ class MiPlayReceiver:
             "control_trace": [],
             "safety": None,
             "rtsp_ready": False,
+            "wfd_restarts": 0,
             "media_frames": 0,
             "media_bytes": 0,
             "error": None,
@@ -186,7 +187,10 @@ class MiPlayReceiver:
                         raise ProtocolError(result.reason)
                     if result.open_request is not None:
                         if wfd_task is not None:
-                            raise ProtocolError("duplicate Open command")
+                            if not wfd_task.done():
+                                wfd_task.cancel()
+                            await asyncio.gather(wfd_task, return_exceptions=True)
+                            report["wfd_restarts"] += 1
                         wfd_task = asyncio.create_task(
                             self._run_wfd(
                                 result.open_request,

@@ -93,6 +93,15 @@ def test_complete_legacy_receiver_transcript_reaches_open():
     assert opened.open_request == OpenDeviceRequest("127.0.0.1", 37274, 1)
     assert session.phase == ControlPhase.OPENED
 
+    reopened = session.process(
+        CommandFrame(
+            Command.OPEN,
+            15,
+            b"wfd://127.0.0.1:37274?mirrorMode=1\0",
+        )
+    )
+    assert reopened.accepted
+    assert reopened.open_request == opened.open_request
 
 def test_wrong_or_duplicate_auth_stops_session_without_echoing_secrets():
     session = LegacyReceiverSession(challenge=b"123456789012")

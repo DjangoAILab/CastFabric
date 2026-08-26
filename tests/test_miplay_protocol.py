@@ -80,3 +80,8 @@ def test_open_device_request_requires_ipv4_wfd_url_and_nul():
     with pytest.raises(ProtocolError, match="NUL"):
         OpenDeviceRequest.parse(b"wfd://192.168.31.8:7274?mirrorMode=1")
 
+    modern = OpenDeviceRequest.parse(
+        b"wfd://192.168.31.8:7274?mirrorMode=1",
+        allow_missing_nul=True,
+    )
+    assert modern == request

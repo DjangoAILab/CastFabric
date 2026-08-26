@@ -195,13 +195,17 @@ class OpenDeviceRequest:
     mirror_mode: int
 
     @classmethod
-    def parse(cls, payload: bytes) -> "OpenDeviceRequest":
-        if not payload.endswith(b"\0"):
+    def parse(
+        cls, payload: bytes, *, allow_missing_nul: bool = False
+    ) -> "OpenDeviceRequest":
+        has_terminator = payload.endswith(b"\0")
+        if not has_terminator and not allow_missing_nul:
             raise ProtocolError("Open payload must have one NUL terminator")
-        if b"\0" in payload[:-1]:
+        content = payload[:-1] if has_terminator else payload
+        if b"\0" in content:
             raise ProtocolError("Open payload contains an embedded NUL")
         try:
-            text = payload[:-1].decode("utf-8")
+            text = content.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise ProtocolError("Open payload is not UTF-8") from exc
         match = _OPEN_RE.fullmatch(text)

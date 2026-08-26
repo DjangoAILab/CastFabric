@@ -271,10 +271,13 @@ class LegacyReceiverSession:
         return self._ok([], "play source observed")
 
     def _open(self, frame: CommandFrame) -> ControlResult:
-        if not self.set_play_source_seen:
+        if not self.set_play_source_seen and self.safety is None:
             return self._stop("Open arrived before setPlaySource")
         try:
-            request = OpenDeviceRequest.parse(frame.payload)
+            request = OpenDeviceRequest.parse(
+                frame.payload,
+                allow_missing_nul=self.safety is not None,
+            )
         except ProtocolError as exc:
             return self._stop(str(exc))
         self.phase = ControlPhase.OPENED
