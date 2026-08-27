@@ -79,13 +79,18 @@ class AudioStreamServer:
                 f"{self._stream_path}/stream.mp3", self._handle_stream_mp3
             )
         else:
+            ext = "l16" if self._audio_format == "l16" else "wav"
             self._app.router.add_get(
-                f"{self._stream_path}/stream.wav", self._handle_stream_wav
+                f"{self._stream_path}/stream.{ext}", self._handle_stream_wav
             )
 
     @property
     def stream_url(self) -> str:
-        ext = "mp3" if self._audio_format == "mp3" else "wav"
+        ext = (
+            self._audio_format
+            if self._audio_format in ("mp3", "l16")
+            else "wav"
+        )
         return (
             f"http://{self.hostname}:{self.port}{self._stream_path}/"
             f"stream.{ext}?sid={self._session_id}"
@@ -116,6 +121,8 @@ class AudioStreamServer:
             await self._runner.cleanup()
 
     def set_audio_params(self, sample_rate: int, channels: int, sample_width: int = 2):
+        if self._audio_format == "l16" and sample_width != 2:
+            raise ValueError("audio/L16 requires 16-bit PCM input")
         self._sample_rate = sample_rate
         self._channels = channels
         self._sample_width = sample_width
@@ -150,6 +157,13 @@ class AudioStreamServer:
         """写入 PCM 音频数据 — 非阻塞，队列满时批量丢弃旧数据腾出空间"""
         if not self._active:
             return
+        if self._audio_format == "l16":
+            # FFmpeg emits s16le. RFC 2586 L16 uses network byte order.
+            even_length = len(data) & ~1
+            converted = bytearray(even_length)
+            converted[0::2] = data[1:even_length:2]
+            converted[1::2] = data[0:even_length:2]
+            data = bytes(converted)
         try:
             self._audio_queue.put_nowait(data)
         except queue.Full:
@@ -193,7 +207,7 @@ class AudioStreamServer:
         )
 
     async def _handle_stream_wav(self, request: web.Request) -> web.StreamResponse:
-        """WAV 模式: 直接输出 PCM 数据，零编码延迟
+        """WAV/L16 模式: 直接输出 PCM 数据，零编码延迟
 
         使用专用写入线程从队列批量读取数据，通过 asyncio 事件写回 HTTP 响应，
         避免每个包都经过 asyncio.to_thread 的调度开销。
@@ -202,8 +216,16 @@ class AudioStreamServer:
         if rejected is not None:
             return rejected
 
+        is_l16 = self._audio_format == "l16"
+        content_type = (
+            f"audio/L16;rate={self._sample_rate};channels={self._channels}"
+            if is_l16
+            else self._wav_content_type
+        )
+        prefix_size = 0 if is_l16 else 44
+        virtual_length = prefix_size + _WAV_STREAM_DATA_SIZE
         headers = {
-            "Content-Type": self._wav_content_type,
+            "Content-Type": content_type,
             "Cache-Control": "no-cache, no-store",
             "Pragma": "no-cache",
             "Connection": "close",
@@ -213,10 +235,9 @@ class AudioStreamServer:
         }
         status = 200
         if self._wav_http_mode in ("content-length", "range"):
-            # The WAV header already advertises this same finite virtual size.
-            # Some embedded players select their buffering policy from the HTTP
-            # body framing rather than from the RIFF header.
-            headers["Content-Length"] = str(44 + _WAV_STREAM_DATA_SIZE)
+            # WAV uses the same virtual size in its RIFF header. L16 has no
+            # header, but uses the same finite HTTP framing for comparison.
+            headers["Content-Length"] = str(virtual_length)
         if self._wav_http_mode == "range":
             headers["Accept-Ranges"] = "bytes"
             headers["contentFeatures.dlna.org"] = (
@@ -224,8 +245,9 @@ class AudioStreamServer:
             )
             range_header = request.headers.get("Range")
             log.info(
-                "%s: WAV HTTP 请求 Range=%s",
+                "%s: %s HTTP 请求 Range=%s",
                 self._source_name,
+                "L16" if is_l16 else "WAV",
                 range_header or "<none>",
             )
             if range_header:
@@ -237,7 +259,7 @@ class AudioStreamServer:
                         status=416,
                         headers={
                             "Content-Range": (
-                                f"bytes */{44 + _WAV_STREAM_DATA_SIZE}"
+                                f"bytes */{virtual_length}"
                             ),
                             "Connection": "close",
                         },
@@ -245,8 +267,8 @@ class AudioStreamServer:
                 status = 206
                 headers["Content-Range"] = (
                     "bytes 0-"
-                    f"{43 + _WAV_STREAM_DATA_SIZE}/"
-                    f"{44 + _WAV_STREAM_DATA_SIZE}"
+                    f"{virtual_length - 1}/"
+                    f"{virtual_length}"
                 )
 
         response = web.StreamResponse(
@@ -277,11 +299,12 @@ class AudioStreamServer:
         self._abort = False  # 重置中断标志，允许续播
 
         log.info(
-            "%s: 音箱开始拉取 WAV 音频流 "
+            "%s: 音箱开始拉取 %s 音频流 "
             "(HTTP=%s, Content-Type=%s, 零编码延迟)",
             self._source_name,
+            "L16" if is_l16 else "WAV",
             self._wav_http_mode,
-            self._wav_content_type,
+            content_type,
         )
 
         # 使用 asyncio.Event 在写入线程和事件循环间通信
@@ -334,8 +357,8 @@ class AudioStreamServer:
         reader.start()
 
         try:
-            # 发送 WAV 头
-            await response.write(self._build_wav_header())
+            if not is_l16:
+                await response.write(self._build_wav_header())
 
             while not writer_done:
                 await data_ready.wait()

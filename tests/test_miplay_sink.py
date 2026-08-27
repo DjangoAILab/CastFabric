@@ -9,7 +9,7 @@ from miair.streaming.sink import MiAirLiveAudioSink
 
 
 class FakeSpeakerController:
-    def __init__(self, request_headers=None):
+    def __init__(self, request_headers=None, read_size=44 + 3840):
         self.url = None
         self.audio = b""
         self.fetch_task = None
@@ -17,6 +17,7 @@ class FakeSpeakerController:
         self.response_headers = None
         self.response_status = None
         self.request_headers = request_headers
+        self.read_size = read_size
         self.play_type = None
 
     async def play_url(self, url, *, play_type=2):
@@ -30,7 +31,7 @@ class FakeSpeakerController:
             async with session.get(url, headers=self.request_headers) as response:
                 self.response_status = response.status
                 self.response_headers = response.headers
-                self.audio = await response.content.readexactly(44 + 3840)
+                self.audio = await response.content.readexactly(self.read_size)
 
     async def stop(self):
         self.stop_calls += 1
@@ -124,6 +125,31 @@ def test_live_audio_sink_can_use_x_wav_content_type_without_changing_body():
     assert controller.response_headers["Content-Type"] == "audio/x-wav"
     assert controller.audio[:4] == b"RIFF"
     assert controller.audio[8:12] == b"WAVE"
+
+
+def test_live_audio_sink_can_stream_standard_network_order_l16():
+    async def scenario():
+        controller = FakeSpeakerController(
+            {"Range": "bytes=0-"}, read_size=3840
+        )
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1", controller, audio_format="l16", http_mode="range"
+        )
+        await sink.start(48_000, 2, 2)
+        await sink.write(struct.pack("<1920h", *([1000] * 1920)))
+        await asyncio.wait_for(controller.fetch_task, timeout=3)
+        await sink.stop()
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    assert controller.url and "/miplay/stream.l16" in controller.url
+    assert controller.response_status == 206
+    assert controller.response_headers["Content-Type"] == (
+        "audio/L16;rate=48000;channels=2"
+    )
+    assert controller.response_headers["Content-Length"] == str(0x7FFFFF00)
+    assert controller.audio == struct.pack(">1920h", *([1000] * 1920))
 
 
 def test_live_audio_sink_cleans_up_when_speaker_rejects_url():

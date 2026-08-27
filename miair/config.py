@@ -104,6 +104,8 @@ class Config:
     miplay_http_mode: str = "close"
     # WAV MIME 对照实验；不改变 WAV/PCM 内容。
     miplay_content_type: str = "audio/wav"
+    # MiPlay 到音箱的实时音频封装：wav 或标准 raw L16。
+    miplay_stream_format: str = "wav"
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -132,6 +134,11 @@ class Config:
         ).lower()
         if self.miplay_content_type not in ("audio/wav", "audio/x-wav"):
             self.miplay_content_type = "audio/wav"
+        self.miplay_stream_format = str(
+            self.miplay_stream_format or "wav"
+        ).lower()
+        if self.miplay_stream_format not in ("wav", "l16"):
+            self.miplay_stream_format = "wav"
         if not self.account:
             self.account = os.getenv("MI_USER", "")
         if not self.password:

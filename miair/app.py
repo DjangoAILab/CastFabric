@@ -273,6 +273,7 @@ class MiAir:
             sink_factory=lambda: MiAirLiveAudioSink(
                 self.config.hostname,
                 controller,
+                audio_format=self.config.miplay_stream_format,
                 play_type=self.config.miplay_play_type,
                 http_mode=self.config.miplay_http_mode,
                 content_type=self.config.miplay_content_type,

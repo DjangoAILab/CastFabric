@@ -20,5 +20,6 @@
     "miplay_play_type": 2,
     "miplay_http_mode": "close",
     "miplay_content_type": "audio/wav",
+    "miplay_stream_format": "wav",
     "speakers": {}
 }

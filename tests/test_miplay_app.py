@@ -21,6 +21,7 @@ def test_app_starts_miplay_for_first_configured_speaker():
             miplay_play_type=1,
             miplay_http_mode="content-length",
             miplay_content_type="audio/x-wav",
+            miplay_stream_format="l16",
         )
         app = MiAir(config)
         controller = SimpleNamespace(
@@ -44,6 +45,7 @@ def test_app_starts_miplay_for_first_configured_speaker():
             assert sink.play_type == 1
             assert sink.http_mode == "content-length"
             assert sink.content_type == "audio/x-wav"
+            assert sink.audio_format == "l16"
             assert kwargs["volume_setter"] is controller.set_volume
             receiver.start.assert_awaited_once()
 
@@ -82,3 +84,8 @@ def test_miplay_config_bounds_port_and_name():
         hostname="127.0.0.1", miplay_content_type="application/octet-stream"
     )
     assert invalid_mime.miplay_content_type == "audio/wav"
+
+    invalid_format = Config(
+        hostname="127.0.0.1", miplay_stream_format="flac"
+    )
+    assert invalid_format.miplay_stream_format == "wav"

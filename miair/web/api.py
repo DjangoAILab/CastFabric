@@ -238,6 +238,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "miplay_play_type": config.miplay_play_type,
             "miplay_http_mode": config.miplay_http_mode,
             "miplay_content_type": config.miplay_content_type,
+            "miplay_stream_format": config.miplay_stream_format,
             "miplay": app_instance.miplay_receiver.diagnostics()
             if app_instance.miplay_receiver
             else {"running": False},
@@ -328,6 +329,13 @@ def create_web_app(config: Config, app_instance) -> web.Application:
                 requested_content_type
                 if requested_content_type in ("audio/wav", "audio/x-wav")
                 else "audio/wav"
+            )
+        if "miplay_stream_format" in data:
+            requested_stream_format = str(data["miplay_stream_format"]).lower()
+            config.miplay_stream_format = (
+                requested_stream_format
+                if requested_stream_format in ("wav", "l16")
+                else "wav"
             )
 
         # 更新 speaker 名称和兼容模式
