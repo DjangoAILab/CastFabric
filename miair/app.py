@@ -105,8 +105,11 @@ class MiAir:
                     return
 
                 log.info(f"开始第 {attempt + 1} 次进程内认证恢复")
-                await self.restart_dlna_services()
-                if self.dlna_running:
+                if await self.auth.login():
+                    await self.auth.update_speakers_info()
+                    self.config.save()
+                    if not self.dlna_running:
+                        await self._start_dlna_services()
                     log.info("进程内认证恢复成功")
                     return
                 attempt += 1
@@ -133,8 +136,9 @@ class MiAir:
         await web_site.start()
         log.info(f"Web 管理界面: http://{self.config.hostname}:{self.config.web_port}")
 
-        # 2. 如果已有账号和设备配置，启动 DLNA 和 AirPlay 服务
-        if (self.config.account or self.config.cookie) and self.config.mi_did:
+        # 2. 已选择过设备就可从本地缓存发布局域网投送入口；小米云
+        # 认证只决定播放控制是否可用，不再决定设备能否被发现。
+        if self.config.mi_did:
             await self._start_dlna_services()
         else:
             if not self.config.account and not self.config.cookie:
@@ -148,35 +152,27 @@ class MiAir:
     async def _start_dlna_services(self):
         """启动 DLNA 相关服务 (登录、初始化音箱、SSDP、HTTP)"""
         try:
-            # 登录小米
-            await self.auth.login()
-
-            # 检查登录状态
-            if not self.auth.is_logged_in():
-                log.warning("登录失败，无法启动 DLNA 服务")
-                # 清空渲染器和控制器，避免显示旧设备
-                self.renderers.clear()
-                self._did_to_udn.clear()
-                if hasattr(self, 'speaker_manager'):
-                    self.speaker_manager.controllers.clear()
+            cloud_authenticated = False
+            if self.config.account or self.config.cookie:
+                cloud_authenticated = bool(await self.auth.login())
+            if not cloud_authenticated:
+                log.warning(
+                    "小米云认证不可用；继续发布已缓存的局域网投送设备，"
+                    "播放和音量控制将在认证恢复后可用"
+                )
                 self._schedule_auth_retry()
-                return
-
-            # 获取设备列表，确保能正常获取新账号的设备
-            device_list = await self.auth.get_device_list()
-            if not device_list:
-                log.warning("未获取到设备列表，无法启动 DLNA 服务")
-                # 清空渲染器和控制器，避免显示旧设备
-                self.renderers.clear()
-                self._did_to_udn.clear()
-                if hasattr(self, 'speaker_manager'):
-                    self.speaker_manager.controllers.clear()
-
-                self._schedule_auth_retry()
-                return
 
             # 初始化音箱
-            await self.speaker_manager.init_speakers()
+            await self.speaker_manager.init_speakers(
+                refresh_from_cloud=cloud_authenticated
+            )
+            if cloud_authenticated and not self.auth.is_logged_in():
+                cloud_authenticated = False
+                log.warning(
+                    "持久化的小米服务凭据已被云端拒绝；"
+                    "保留局域网投送设备并进入认证恢复"
+                )
+                self._schedule_auth_retry()
             if not self.speaker_manager.controllers:
                 log.warning("没有可用的音箱，请检查配置或重新选择设备")
                 # 清空渲染器和控制器，避免显示旧设备
@@ -213,7 +209,8 @@ class MiAir:
             # 若服务通过手动配置更新恢复，取消尚未执行的后台重试；恢复
             # 任务自身会在看到 dlna_running=True 后自然结束。
             if (
-                self._auth_retry_task
+                self.auth.is_logged_in()
+                and self._auth_retry_task
                 and self._auth_retry_task is not asyncio.current_task()
                 and not self._auth_retry_task.done()
             ):

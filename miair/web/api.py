@@ -225,6 +225,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "cookie": _mask_cookie(config.cookie),
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
+            "cloud_control_available": app_instance.auth.is_logged_in(),
+            "discovery_mode": (
+                "cloud" if app_instance.auth.is_logged_in()
+                else "cached" if app_instance.dlna_running
+                else "stopped"
+            ),
             **auth_status,
             # 实验性功能
             "auto_resume_on_interrupt": config.auto_resume_on_interrupt,
@@ -443,6 +449,14 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "version": VERSION,
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
+            "has_account": bool(config.account or config.cookie),
+            "mi_did": config.mi_did,
+            "cloud_control_available": app_instance.auth.is_logged_in(),
+            "discovery_mode": (
+                "cloud" if app_instance.auth.is_logged_in()
+                else "cached" if app_instance.dlna_running
+                else "stopped"
+            ),
             "hostname": config.hostname,
             "dlna_port": config.dlna_port,
             "web_port": config.web_port,

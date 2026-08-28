@@ -238,6 +238,12 @@
             animation: pulse 2s infinite;
         }
 
+        .status-degraded .status-dot {
+            background: var(--yellow);
+            box-shadow: 0 0 12px var(--yellow);
+            animation: pulse 2s infinite;
+        }
+
         .status-stopped .status-dot {
             background: var(--yellow);
             box-shadow: 0 0 12px var(--yellow);
@@ -1693,7 +1699,12 @@
             const bar = document.getElementById('status-bar');
             const text = document.getElementById('status-text');
 
-            if (data.dlna_running) {
+            if (data.dlna_running && !data.cloud_control_available) {
+                bar.className = 'status-bar status-degraded';
+                const code = data.auth_error_code ? `（${data.auth_error_code}）` : '';
+                const retry = data.auth_retry_after > 0 ? `，${data.auth_retry_after} 秒后重试` : '';
+                text.textContent = `局域网投送设备已发布 · 小米云控制暂不可用${code}${retry}`;
+            } else if (data.dlna_running) {
                 bar.className = 'status-bar status-running';
                 text.textContent = `服务运行中 · ${data.renderers_count} 个渲染器正活跃`;
             } else if (!data.has_account) {

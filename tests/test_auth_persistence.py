@@ -138,11 +138,16 @@ class AuthManagerPersistenceTests(unittest.IsolatedAsyncioTestCase):
             )
             manager = AuthManager(config)
             try:
-                login = AsyncMock(return_value=False)
-                with patch.object(MiAccount, "login", new=login):
+                service_login = AsyncMock(
+                    return_value={"code": 70016, "description": "rejected"}
+                )
+                with patch.object(
+                    PersistentMiAccount, "_serviceLogin", new=service_login
+                ):
                     await manager.login()
 
-                login.assert_awaited()
+                service_login.assert_awaited_once()
+                self.assertIn("serviceLogin?sid=micoapi", service_login.call_args.args[-1])
                 self.assertFalse(manager.is_logged_in())
             finally:
                 await manager.close()
@@ -172,21 +177,58 @@ class PersistentMiAccountTests(unittest.IsolatedAsyncioTestCase):
                 )
                 seen = []
 
-                async def fake_login(instance, sid):
+                async def fake_service_login(instance, uri, data=None):
                     seen.append(instance.token["passToken"])
                     if instance.token["passToken"] == "old-token":
-                        instance.token = None
-                        instance.token_store.save_token()
-                        return False
-                    instance.token = token(pass_token="new-token")
-                    instance.token_store.save_token(instance.token)
-                    return True
+                        return {"code": 70016}
+                    return {
+                        "code": 0,
+                        "userId": "100200",
+                        "passToken": "new-token",
+                        "location": "https://example.invalid",
+                        "nonce": 1,
+                        "ssecurity": "security",
+                    }
 
-                with patch.object(MiAccount, "login", new=fake_login):
+                with (
+                    patch.object(PersistentMiAccount, "_serviceLogin", new=fake_service_login),
+                    patch.object(
+                        PersistentMiAccount,
+                        "_securityTokenService",
+                        new=AsyncMock(return_value="service-token"),
+                    ),
+                ):
                     self.assertTrue(await account.login("micoapi"))
 
                 self.assertEqual(seen, ["old-token", "new-token"])
                 self.assertEqual(store.load_token()["passToken"], "new-token")
+            finally:
+                await session.close()
+
+    async def test_cookie_rejection_does_not_submit_empty_password_auth2(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = AtomicTokenStore(os.path.join(temp_dir, ".mi.token"))
+            session = aiohttp.ClientSession()
+            try:
+                account = PersistentMiAccount(
+                    session,
+                    "",
+                    "",
+                    token_store=store,
+                    bootstrap_tokens=[
+                        {"userId": "100200", "passToken": "expired-token"}
+                    ],
+                )
+                service_login = AsyncMock(return_value={"code": 70016})
+                with patch.object(
+                    PersistentMiAccount, "_serviceLogin", new=service_login
+                ):
+                    self.assertFalse(await account.login("micoapi"))
+
+                uris = [call.args[-1] for call in service_login.await_args_list]
+                self.assertEqual(uris, ["serviceLogin?sid=micoapi&_json=true"])
+                self.assertNotIn("serviceLoginAuth2", uris)
+                self.assertIn("com.xiaomi.mihome", account.LOGIN_USER_AGENT)
             finally:
                 await session.close()
 

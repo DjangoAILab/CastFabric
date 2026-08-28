@@ -18,27 +18,10 @@ class SpeakerController:
     # 使用 stop 实现暂停，渲染器会记录位置并在恢复时生成 seek URL。
     _STOP_AS_PAUSE_HARDWARE = {"M01", "XMYX01JY"}
 
-    # 连续登录失败计数（所有实例共享，因为登录状态是全局的）
-    _consecutive_login_failures: int = 0
-    _LOGIN_FAILURE_RESTART_THRESHOLD = 6  # 连续失败 6 次后触发重启
-
     def __init__(self, speaker: Speaker, auth: AuthManager):
         self.speaker = speaker
         self.auth = auth
         self._last_volume: int = 50  # 用于 unmute 恢复
-
-    @classmethod
-    def _check_and_trigger_restart(cls):
-        """检查连续登录失败次数，达到阈值时触发进程重启"""
-        if cls._consecutive_login_failures >= cls._LOGIN_FAILURE_RESTART_THRESHOLD:
-            log.error(
-                f"连续 {cls._consecutive_login_failures} 次登录失败，正在重启程序以恢复服务..."
-            )
-            from miair.web.api import _restart_process
-            try:
-                asyncio.get_running_loop().call_soon(_restart_process)
-            except RuntimeError:
-                _restart_process()
 
     @property
     def device_id(self) -> str:
@@ -187,8 +170,6 @@ class SpeakerController:
                     return True
                 except Exception as e2:
                     log.error(f"重新登录后 stop 仍然失败: {e2}")
-                    SpeakerController._consecutive_login_failures += 1
-                    SpeakerController._check_and_trigger_restart()
                     return False
             return False
 
@@ -279,8 +260,6 @@ class SpeakerController:
                 raise Exception(f"Mina API response missing 'info': {playing_info}")
                 
             info = json.loads(info_str)
-            # 获取成功，重置连续登录失败计数
-            SpeakerController._consecutive_login_failures = 0
             return {
                 "status": info.get("status", 0),
                 "volume": int(info.get("volume", 0)),
@@ -305,16 +284,12 @@ class SpeakerController:
                     if not info_str:
                         raise Exception(f"Mina API response missing 'info': {playing_info}")
                     info = json.loads(info_str)
-                    # 重试成功，重置计数
-                    SpeakerController._consecutive_login_failures = 0
                     return {
                         "status": info.get("status", 0),
                         "volume": int(info.get("volume", 0)),
                     }
                 except Exception as e2:
                     log.error(f"重新登录后 get_status 仍然失败: {e2}")
-                    SpeakerController._consecutive_login_failures += 1
-                    SpeakerController._check_and_trigger_restart()
             # 向上抛出异常，让调用者（如 DeviceServer 的轮询任务）捕获并忽略本次轮询
             raise Exception(f"get_status 失败: {e}")
 
@@ -327,12 +302,15 @@ class SpeakerManager:
         self.auth = auth
         self.controllers: dict[str, SpeakerController] = {}
 
-    async def init_speakers(self):
-        """初始化所有音箱控制器"""
-        # 从云端获取设备详细信息
-        await self.auth.update_speakers_info()
+    async def init_speakers(self, *, refresh_from_cloud: bool = True):
+        """从云端或本地缓存初始化所有音箱控制器。"""
+        if refresh_from_cloud:
+            await self.auth.update_speakers_info()
+        else:
+            log.warning("小米云认证不可用，使用本地缓存的音箱信息发布投送服务")
 
         # 为每个启用的音箱创建控制器
+        self.controllers.clear()
         for speaker in self.config.get_enabled_speakers():
             if speaker.device_id:
                 self.controllers[speaker.did] = SpeakerController(speaker, self.auth)

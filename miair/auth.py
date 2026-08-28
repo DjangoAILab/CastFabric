@@ -72,6 +72,14 @@ class AtomicTokenStore:
 class PersistentMiAccount(MiAccount):
     """保留 passToken 并允许 miservice 在 401 后安全刷新服务 token。"""
 
+    # Xiaomi's login gateway ties browser/device context to the issued token.
+    # A stable Mi Home identity is less error-prone than miservice-fork 2.x's
+    # randomly generated User-Agent on every refresh attempt.
+    LOGIN_USER_AGENT = (
+        "APP/com.xiaomi.mihome APPV/11.3.203 MK/Apple "
+        "SDKV/18.5.0 MODEL/iPhone18,1 OS/26.0"
+    )
+
     def __init__(
         self,
         session,
@@ -96,8 +104,29 @@ class PersistentMiAccount(MiAccount):
         self.last_login_response: dict = {}
 
     async def _serviceLogin(self, uri, data=None):
-        """记录不含凭据的登录结果，供 Web 状态页准确展示失败原因。"""
-        response = await super()._serviceLogin(uri, data)
+        """用稳定客户端身份登录，并只记录不含凭据的结果摘要。"""
+        self.now_ua = self.LOGIN_USER_AGENT
+        headers = {"User-Agent": self.now_ua}
+        cookies = {
+            "sdkVersion": "3.9",
+            "deviceId": self.token["deviceId"],
+            "passToken": "",
+        }
+        if self.token.get("passToken"):
+            cookies["userId"] = self.token["userId"]
+            cookies["passToken"] = self.token["passToken"]
+
+        url = "https://account.xiaomi.com/pass/" + uri
+        async with self.session.request(
+            "GET" if data is None else "POST",
+            url,
+            data=data,
+            cookies=cookies,
+            headers=headers,
+            ssl=False,
+        ) as response_handle:
+            raw = await response_handle.read()
+        response = json.loads(raw[11:])
         self.last_login_response = {
             "code": response.get("code"),
             "description": response.get("description") or response.get("desc") or "",
@@ -171,6 +200,34 @@ class PersistentMiAccount(MiAccount):
 
         for candidate in candidates:
             self.token = copy.deepcopy(candidate)
+            try:
+                response = await self._serviceLogin(
+                    f"serviceLogin?sid={sid}&_json=true"
+                )
+                if response.get("code") != 0:
+                    continue
+                self.token["userId"] = response["userId"]
+                self.token["passToken"] = response["passToken"]
+                service_token = await self._securityTokenService(
+                    response["location"],
+                    response["nonce"],
+                    response["ssecurity"],
+                )
+                self.token[sid] = (response["ssecurity"], service_token)
+                self._remember_successful_token()
+                return True
+            except Exception as exc:
+                log.warning(
+                    "小米 Cookie 换取 %s 凭据失败: %s",
+                    sid,
+                    type(exc).__name__,
+                )
+
+        # Cookie 登录没有账号密码可用于 Auth2。不要像 miservice-fork 2.x
+        # 那样提交空账号/空密码，否则只会增加 70016 和风控概率。
+        if self.username and self.password:
+            device_id = candidates[0]["deviceId"]
+            self.token = {"deviceId": device_id}
             success = bool(await super().login(sid))
             if success and isinstance(self.token, dict) and sid in self.token:
                 self._remember_successful_token()
@@ -357,7 +414,10 @@ class AuthManager:
     def _remember_login_failure(self):
         response = getattr(self.account, "last_login_response", {}) or {}
         code = response.get("code")
-        self.last_error_code = str(code) if code is not None else ""
+        if code is not None:
+            self.last_error_code = str(code)
+        elif not self.last_error_code:
+            self.last_error_code = "cloud_request_failed"
         self.last_error_message = self._friendly_error_message(self.last_error_code)
 
     @staticmethod
@@ -368,6 +428,8 @@ class AuthManager:
             return "小米登录请求过于频繁，请稍后重试"
         if error_code == "87001":
             return "小米账号需要验证码验证"
+        if error_code == "cloud_request_failed":
+            return "小米云凭据已失效或服务暂时不可达"
         return "小米账号认证失败"
 
     def get_auth_status(self) -> dict:
@@ -421,9 +483,11 @@ class AuthManager:
             devices = await self.mina_service.device_list()
             return devices or []
         except Exception as e:
-            self._logged_in = self._has_service_token(
-                getattr(self.account, "token", None), "micoapi"
-            )
+            # A token's stored shape does not prove that Xiaomi still accepts
+            # it. Any cloud request failure must degrade control availability;
+            # the LAN advertisements can continue independently from cache.
+            self._logged_in = False
+            self._remember_login_failure()
             log.warning(f"获取设备列表失败: {type(e).__name__}")
             return []
 
