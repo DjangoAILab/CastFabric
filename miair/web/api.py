@@ -278,6 +278,18 @@ def _restart_process():
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
+def _extension_auth_status(config: Config, auth) -> dict:
+    """Report Xiaomi authentication only when the optional extension is enabled."""
+    if not config.enable_xiaomi_extension:
+        return {
+            "auth_state": "disabled",
+            "auth_error_code": "",
+            "auth_error_message": "",
+            "auth_retry_after": 0,
+        }
+    return auth.get_auth_status()
+
+
 def create_web_app(config: Config, app_instance) -> web.Application:
     """创建 Web 管理应用"""
     web_app = web.Application()
@@ -294,7 +306,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
     async def handle_get_setting(request):
         """获取当前设置和设备列表 (类似 xiaomusic /getsetting)"""
         need_device_list = request.query.get("need_device_list", "false") == "true"
-        auth_status = app_instance.auth.get_auth_status()
+        auth_status = _extension_auth_status(config, app_instance.auth)
 
         data = {
             "version": VERSION,
@@ -600,7 +612,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "miplay": app_instance.miplay_receiver.diagnostics()
             if app_instance.miplay_receiver
             else {"running": False},
-            **app_instance.auth.get_auth_status(),
+            **_extension_auth_status(config, app_instance.auth),
         })
 
     async def handle_miplay_status(request):

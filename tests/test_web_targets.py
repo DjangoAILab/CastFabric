@@ -3,7 +3,11 @@ import pytest
 from miair.config import Config
 from miair.dlna.client import DiscoveredDLNATarget
 from miair.targets import OutputTargetConfig
-from miair.web.api import _apply_target_selection, _target_view
+from miair.web.api import (
+    _apply_target_selection,
+    _extension_auth_status,
+    _target_view,
+)
 
 
 def discovered(target_id="uuid:new", name="New Speaker"):
@@ -79,3 +83,19 @@ def test_selection_disables_previous_target_and_honors_requested_default():
     assert config.get_target(second.id).enabled is True
     assert config.default_target_id == second.id
 
+
+def test_disabled_xiaomi_extension_has_an_explicit_auth_state():
+    class Auth:
+        def get_auth_status(self):
+            raise AssertionError("disabled extension must not query authentication")
+
+    status = _extension_auth_status(
+        Config(hostname="127.0.0.1", enable_xiaomi_extension=False), Auth()
+    )
+
+    assert status == {
+        "auth_state": "disabled",
+        "auth_error_code": "",
+        "auth_error_message": "",
+        "auth_retry_after": 0,
+    }
