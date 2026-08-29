@@ -27,6 +27,7 @@ class Speaker:
     udn: str = ""
     use_music_api: bool = False
     compatibility_mode: bool | None = None
+    local_dlna_location: str = ""
     enabled: bool = True
 
     # 不支持无损格式的音箱型号列表

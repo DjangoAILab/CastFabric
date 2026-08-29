@@ -1699,7 +1699,10 @@
             const bar = document.getElementById('status-bar');
             const text = document.getElementById('status-text');
 
-            if (data.dlna_running && !data.cloud_control_available) {
+            if (data.dlna_running && data.local_control_available) {
+                bar.className = 'status-bar status-running';
+                text.textContent = `服务运行中 · ${data.renderers_count} 个渲染器 · 实体音箱局域网直连`;
+            } else if (data.dlna_running && !data.cloud_control_available) {
                 bar.className = 'status-bar status-degraded';
                 const code = data.auth_error_code ? `（${data.auth_error_code}）` : '';
                 const retry = data.auth_retry_after > 0 ? `，${data.auth_retry_after} 秒后重试` : '';

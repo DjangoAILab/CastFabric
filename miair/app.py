@@ -49,6 +49,13 @@ class MiAir:
             return self.renderers.get(udn)
         return None
 
+    def has_local_speaker_control(self) -> bool:
+        """是否至少有一个实体音箱可通过本地 DLNA 直接控制。"""
+        return any(
+            controller.local_dlna is not None
+            for controller in self.speaker_manager.controllers.values()
+        )
+
     async def get_all_devices(self) -> list[dict]:
         """获取小米账号下所有设备列表"""
         if not self.config.account and not self.config.cookie:
@@ -158,7 +165,7 @@ class MiAir:
             if not cloud_authenticated:
                 log.warning(
                     "小米云认证不可用；继续发布已缓存的局域网投送设备，"
-                    "播放和音量控制将在认证恢复后可用"
+                    "并尝试发现实体音箱的本地 DLNA 控制通道"
                 )
                 self._schedule_auth_retry()
 
@@ -179,6 +186,9 @@ class MiAir:
                 self.renderers.clear()
                 self._did_to_udn.clear()
                 return
+
+            if not cloud_authenticated and self.has_local_speaker_control():
+                log.info("小米云认证不可用，但实体音箱本地 DLNA 控制已就绪")
 
             # 为每个音箱创建 DLNA 渲染器
             self.ssdp_server = SSDPServer(self.config.hostname, self.config.dlna_port)

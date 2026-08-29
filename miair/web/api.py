@@ -226,6 +226,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
             "cloud_control_available": app_instance.auth.is_logged_in(),
+            "local_control_available": app_instance.has_local_speaker_control(),
+            "control_mode": (
+                "local" if app_instance.has_local_speaker_control()
+                else "cloud" if app_instance.auth.is_logged_in()
+                else "unavailable"
+            ),
             "discovery_mode": (
                 "cloud" if app_instance.auth.is_logged_in()
                 else "cached" if app_instance.dlna_running
@@ -452,6 +458,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "has_account": bool(config.account or config.cookie),
             "mi_did": config.mi_did,
             "cloud_control_available": app_instance.auth.is_logged_in(),
+            "local_control_available": app_instance.has_local_speaker_control(),
+            "control_mode": (
+                "local" if app_instance.has_local_speaker_control()
+                else "cloud" if app_instance.auth.is_logged_in()
+                else "unavailable"
+            ),
             "discovery_mode": (
                 "cloud" if app_instance.auth.is_logged_in()
                 else "cached" if app_instance.dlna_running

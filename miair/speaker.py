@@ -7,6 +7,7 @@ import logging
 from miair.auth import AuthManager
 from miair.config import Config, Speaker
 from miair.const import DEFAULT_AUDIO_ID, NEED_USE_PLAY_MUSIC_API
+from miair.dlna.client import LocalDLNAClient
 
 log = logging.getLogger("miair")
 
@@ -18,10 +19,29 @@ class SpeakerController:
     # 使用 stop 实现暂停，渲染器会记录位置并在恢复时生成 seek URL。
     _STOP_AS_PAUSE_HARDWARE = {"M01", "XMYX01JY"}
 
-    def __init__(self, speaker: Speaker, auth: AuthManager):
+    def __init__(
+        self,
+        speaker: Speaker,
+        auth: AuthManager,
+        local_dlna: LocalDLNAClient | None = None,
+    ):
         self.speaker = speaker
         self.auth = auth
+        self.local_dlna = local_dlna
         self._last_volume: int = 50  # 用于 unmute 恢复
+
+    async def _local_call(self, method: str, *args):
+        if not self.local_dlna:
+            return None
+        try:
+            return await getattr(self.local_dlna, method)(*args)
+        except Exception as exc:
+            log.warning(
+                "本地 DLNA %s 失败，尝试小米云通道: %s",
+                method,
+                type(exc).__name__,
+            )
+            return None
 
     @property
     def device_id(self) -> str:
@@ -52,6 +72,10 @@ class SpeakerController:
 
     async def play_url(self, url: str, *, play_type: int = 2) -> bool:
         """让音箱播放指定 URL"""
+        local_result = await self._local_call("play_url", url)
+        if local_result is not None:
+            log.info("本地 DLNA play_url device_id=%s", self.device_id)
+            return bool(local_result)
         try:
             await self.auth.ensure_login()
             if self._should_use_music_api():
@@ -108,6 +132,9 @@ class SpeakerController:
 
     async def pause(self) -> bool:
         """暂停播放"""
+        local_result = await self._local_call("pause")
+        if local_result is not None:
+            return bool(local_result)
         try:
             await self.auth.ensure_login()
             if self._should_stop_for_pause():
@@ -146,6 +173,9 @@ class SpeakerController:
 
     async def stop(self) -> bool:
         """停止播放"""
+        local_result = await self._local_call("stop")
+        if local_result is not None:
+            return bool(local_result)
         try:
             await self.auth.ensure_login()
             # 某些型号的小爱音箱在 stop 后仍会残留缓存，
@@ -176,6 +206,11 @@ class SpeakerController:
     async def set_volume(self, volume: int) -> bool:
         """设置音量 (0-100)"""
         volume = max(0, min(100, volume))
+        local_result = await self._local_call("set_volume", volume)
+        if local_result is not None:
+            if local_result and volume > 0:
+                self._last_volume = volume
+            return bool(local_result)
         try:
             await self.auth.ensure_login()
             await self.auth.mina_service.player_set_volume(self.device_id, volume)
@@ -205,6 +240,11 @@ class SpeakerController:
 
     async def get_volume(self) -> int:
         """获取当前音量"""
+        local_volume = await self._local_call("get_volume")
+        if local_volume is not None:
+            if local_volume > 0:
+                self._last_volume = local_volume
+            return int(local_volume)
         try:
             await self.auth.ensure_login()
             status = await self.auth.mina_service.player_get_status(self.device_id)
@@ -242,6 +282,9 @@ class SpeakerController:
             dict: {status: int, volume: int}
             status: 0=stopped, 1=playing, 2=paused
         """
+        local_status = await self._local_call("get_status")
+        if local_status is not None:
+            return local_status
         try:
             await self.auth.ensure_login()
             playing_info = await self.auth.mina_service.player_get_status(
@@ -313,7 +356,21 @@ class SpeakerManager:
         self.controllers.clear()
         for speaker in self.config.get_enabled_speakers():
             if speaker.device_id:
-                self.controllers[speaker.did] = SpeakerController(speaker, self.auth)
+                local_dlna = await LocalDLNAClient.connect(
+                    speaker.device_id,
+                    self.config.hostname,
+                    speaker.local_dlna_location,
+                )
+                if local_dlna:
+                    speaker.local_dlna_location = local_dlna.location
+                    log.info(
+                        "已连接实体音箱本地 DLNA: %s (%s)",
+                        speaker.get_dlna_name(),
+                        local_dlna.location,
+                    )
+                self.controllers[speaker.did] = SpeakerController(
+                    speaker, self.auth, local_dlna=local_dlna
+                )
                 log.info(
                     f"已初始化音箱控制器: {speaker.get_dlna_name()} (did={speaker.did})"
                 )
