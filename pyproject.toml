@@ -33,6 +33,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["miair*"]
 
+[tool.setuptools.package-data]
+miair = [
+    "web/static/*",
+    "web/static/devicespic/*",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
