@@ -41,6 +41,7 @@ class CastFabric:
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
         self.miplay_receiver: MiPlayReceiver | None = None
+        self.discovered_targets = {}
         self._auth_retry_task: asyncio.Task | None = None
 
     def get_renderer_by_did(self, did: str) -> DLNARenderer | None:

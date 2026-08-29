@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenXiaoCast</title>
+    <title>CastFabric</title>
     <meta name="color-scheme" content="light dark">
     <link rel="icon" type="image/png" href="./static/weblogo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1105,7 +1105,7 @@
         <nav>
             <div class="nav-top">
                 <div class="logo">
-                    OpenXiaoCast
+                    CastFabric
                     <span id="update-link"></span>
                 </div>
                 <div class="nav-actions">
@@ -1115,11 +1115,11 @@
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>
                         </svg>
-                        管理账号
+                        小米扩展
                     </button>
                 </div>
             </div>
-            <div class="tagline">小爱音箱的 DLNA / AirPlay / 妙播局域网投送网关</div>
+            <div class="tagline">开源的 DLNA / AirPlay / 妙播局域网音频投放层</div>
         </nav>
 
         <div id="status-bar" class="status-bar status-stopped">
@@ -1132,7 +1132,7 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">
-                        设备列表
+                        DLNA 输出目标
                     </span>
                 </div>
 
@@ -1252,8 +1252,8 @@
                         </label>
                     </div>
                     <div class="form-group" style="margin-top: 16px;">
-                        <label class="form-label">妙播设备名称</label>
-                        <input type="text" class="form-input" id="input-miplay-name" placeholder="OpenXiaoCast">
+                        <label class="form-label">设备名称前缀</label>
+                        <input type="text" class="form-input" id="input-miplay-name" placeholder="CastFabric">
                     </div>
                     <div class="form-group">
                         <label class="form-label">妙播控制端口</label>
@@ -1272,7 +1272,7 @@
         </div>
 
         <div style="text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 12px;">
-            <a href="https://github.com/wangerzi/MiAir" class="footer-link" target="_blank">OpenXiaoCast</a>
+            <a href="https://github.com/wangerzi/MiAir" class="footer-link" target="_blank">CastFabric</a>
             <span id="version-text">V0.9.0a1</span>
         </div>
     </div>
@@ -1281,8 +1281,8 @@
     <div class="modal-overlay" id="modal-account">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title">管理小米账号</div>
-                <div class="modal-desc">通过 Cookie 登录以发现设备</div>
+                <div class="modal-title">小米云扩展</div>
+                <div class="modal-desc">仅用于不支持原生 DLNA 的兼容设备；标准 DLNA 无需登录</div>
             </div>
 
             <div class="form-group">
@@ -1361,6 +1361,7 @@
         let _latestRelease = null;
         let _initialFormValues = null;
         let _initialSelectedDids = null;
+        let _initialTargetIds = null;
         let _initialDeviceNames = null;
         let _initialCompatibilityModes = null;
 
@@ -1401,13 +1402,15 @@
                     loadFormData(data);
                 }
 
-                if (data.device_list && withDeviceList) {
+                if (data.target_list && withDeviceList) {
+                    renderTargetList(data.target_list, data.default_target_id || '');
+                } else if (data.device_list && withDeviceList) {
                     renderDeviceList(data.device_list, data.mi_did || '');
-                } else if (!data.has_account && withDeviceList) {
+                } else if (withDeviceList) {
                     document.getElementById('device-list').innerHTML = `
                         <div style="text-align:center; padding:40px;">
-                            <p style="color:var(--text-muted); font-size:14px; margin-bottom:16px;">请先配置小米账号以发现设备</p>
-                            <button class="btn btn-primary" onclick="openAccountModal()">配置账号</button>
+                            <p style="color:var(--text-muted); font-size:14px; margin-bottom:16px;">未发现局域网 DLNA 渲染器</p>
+                            <button class="btn btn-primary" onclick="location.reload()">重新扫描</button>
                         </div>
                     `;
                 }
@@ -1430,7 +1433,9 @@
             if (data.enable_miplay !== undefined) {
                 document.getElementById('chk-enable-miplay').checked = data.enable_miplay;
             }
-            if (data.miplay_name) document.getElementById('input-miplay-name').value = data.miplay_name;
+            if (data.device_name_prefix || data.miplay_name) {
+                document.getElementById('input-miplay-name').value = data.device_name_prefix || data.miplay_name;
+            }
             if (data.miplay_port !== undefined) document.getElementById('input-miplay-port').value = data.miplay_port;
             if (data.auto_resume_on_interrupt !== undefined) {
                 document.getElementById('chk-auto-resume').checked = data.auto_resume_on_interrupt;
@@ -1460,7 +1465,7 @@
                 dlna_port: parseInt(document.getElementById('input-dlna-port').value),
                 web_port: parseInt(document.getElementById('input-web-port').value),
                 enable_miplay: document.getElementById('chk-enable-miplay').checked,
-                miplay_name: document.getElementById('input-miplay-name').value.trim(),
+                device_name_prefix: document.getElementById('input-miplay-name').value.trim(),
                 miplay_port: parseInt(document.getElementById('input-miplay-port').value),
             };
         }
@@ -1702,28 +1707,18 @@
             if (data.dlna_running && data.local_control_available) {
                 bar.className = 'status-bar status-running';
                 text.textContent = `服务运行中 · ${data.renderers_count} 个渲染器 · 实体音箱局域网直连`;
-            } else if (data.dlna_running && !data.cloud_control_available) {
+            } else if (data.dlna_running && !data.local_control_available) {
                 bar.className = 'status-bar status-degraded';
-                const code = data.auth_error_code ? `（${data.auth_error_code}）` : '';
-                const retry = data.auth_retry_after > 0 ? `，${data.auth_retry_after} 秒后重试` : '';
-                text.textContent = `局域网投送设备已发布 · 小米云控制暂不可用${code}${retry}`;
+                text.textContent = '投放入口已发布 · 当前 DLNA 输出目标离线';
             } else if (data.dlna_running) {
                 bar.className = 'status-bar status-running';
                 text.textContent = `服务运行中 · ${data.renderers_count} 个渲染器正活跃`;
-            } else if (!data.has_account) {
+            } else if (!data.targets_count) {
                 bar.className = 'status-bar status-stopped';
-                text.textContent = '等待配置小米账号';
-            } else if (data.auth_state === 'cooldown' || data.auth_state === 'failed') {
-                bar.className = 'status-bar status-stopped';
-                const code = data.auth_error_code ? `（${data.auth_error_code}）` : '';
-                const retry = data.auth_retry_after > 0 ? `，${data.auth_retry_after} 秒后重试` : '';
-                text.textContent = `${data.auth_error_message || '小米账号认证失败'}${code}${retry}`;
-            } else if (!data.mi_did) {
-                bar.className = 'status-bar status-stopped';
-                text.textContent = '已登录，请选择设备';
+                text.textContent = '等待选择局域网 DLNA 输出目标';
             } else {
                 bar.className = 'status-bar status-stopped';
-                text.textContent = '正在连接小米音箱服务...';
+                text.textContent = '正在连接局域网输出目标...';
             }
         }
 
@@ -1761,6 +1756,55 @@
                 if (h.includes(key)) return deviceModelMap[key];
             }
             return { model: h || '未知音箱', image: 'L05B.webp' };
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function renderTargetList(targets, defaultTargetId) {
+            const container = document.getElementById('device-list');
+            if (!targets.length) {
+                container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">未发现局域网 DLNA 渲染器，请确认设备已开机并处于同一网段</div>';
+                document.getElementById('btn-save').disabled = true;
+                return;
+            }
+
+            container.innerHTML = targets.map(target => {
+                const selected = !!target.selected;
+                const state = target.online ? '在线' : '离线（使用缓存）';
+                const stateColor = target.online ? 'var(--green)' : 'var(--yellow)';
+                return `
+                <div class="device-item target-item ${selected ? 'selected' : ''}"
+                    data-target-id="${escapeHtml(target.id)}" onclick="toggleTarget(this)">
+                    <div class="device-body">
+                        <div style="font-size:15px; font-weight:600; color:var(--text);">${escapeHtml(target.name)}</div>
+                        <div class="device-meta">
+                            <span>DLNA · <span style="color:${stateColor}">${state}</span></span>
+                            <span>${target.default ? '默认输出' : escapeHtml(target.id)}</span>
+                        </div>
+                    </div>
+                    <div class="device-checkbox">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${selected ? 'var(--accent)' : 'var(--text-muted)'}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                </div>`;
+            }).join('');
+            _initialTargetIds = targets.filter(target => target.selected).map(target => target.id).sort().join(',');
+            currentSetting.default_target_id = defaultTargetId;
+            document.getElementById('btn-save').disabled = false;
+        }
+
+        function toggleTarget(el) {
+            el.classList.toggle('selected');
+            const svg = el.querySelector('.device-checkbox svg');
+            svg.setAttribute('stroke', el.classList.contains('selected') ? 'var(--accent)' : 'var(--text-muted)');
         }
 
         function renderDeviceList(devices, selectedDids) {
@@ -1833,6 +1877,36 @@
 
         async function saveSelection() {
             const btn = document.getElementById('btn-save');
+            const targetItems = Array.from(document.querySelectorAll('.target-item'));
+            if (targetItems.length) {
+                const selectedIds = targetItems
+                    .filter(item => item.classList.contains('selected'))
+                    .map(item => item.dataset.targetId);
+                const currentIds = [...selectedIds].sort().join(',');
+                if (currentIds === _initialTargetIds) {
+                    showTip(document.getElementById('tip-save'), '没有变更的设置项', 'error');
+                    return;
+                }
+                showLoading(btn, true, '正在保存');
+                try {
+                    const response = await fetch('./api/setting', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target_ids: selectedIds,
+                            default_target_id: selectedIds.includes(currentSetting.default_target_id)
+                                ? currentSetting.default_target_id : (selectedIds[0] || '')
+                        }),
+                    });
+                    if (!response.ok) throw new Error((await response.json()).error || '保存失败');
+                    showLoading(btn, true, '正在同步');
+                    setTimeout(() => location.reload(), 3000);
+                } catch (e) {
+                    showTip(document.getElementById('tip-save'), e.message || '保存失败', 'error');
+                    showLoading(btn, false);
+                }
+                return;
+            }
             const selected = Array.from(document.querySelectorAll('.device-item.selected'))
                 .map(item => item.querySelector('input').getAttribute('onblur').match(/'([^']+)'/)[1]);
 
@@ -1930,7 +2004,7 @@
                 dlna_port: parseInt(document.getElementById('input-dlna-port').value),
                 web_port: parseInt(document.getElementById('input-web-port').value),
                 enable_miplay: document.getElementById('chk-enable-miplay').checked,
-                miplay_name: document.getElementById('input-miplay-name').value.trim(),
+                device_name_prefix: document.getElementById('input-miplay-name').value.trim(),
                 miplay_port: parseInt(document.getElementById('input-miplay-port').value),
             };
 

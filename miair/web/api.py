@@ -15,6 +15,8 @@ import asyncio
 
 from miair.config import Config
 from miair.const import VERSION
+from miair.dlna.client import DiscoveredDLNATarget, LocalDLNAClient
+from miair.targets import OutputTargetConfig, normalize_target_id
 
 
 log = logging.getLogger("miair")
@@ -22,6 +24,87 @@ log = logging.getLogger("miair")
 
 # passToken 在返回给前端时使用的完整脱敏占位符（不是真实凭据）
 MASKED_TOKEN = "********"
+
+
+def _target_view(config: Config, discovered: dict[str, DiscoveredDLNATarget]) -> list[dict]:
+    """Merge online discovery with persisted targets for the setup UI."""
+    result = {}
+    for target_id in list(config.targets):
+        target = config.get_target(target_id)
+        if target is None:
+            continue
+        result[target.id] = {
+            "id": target.id,
+            "kind": target.kind,
+            "name": target.name,
+            "location": target.location,
+            "udn": target.udn,
+            "selected": target.enabled,
+            "default": target.id == config.default_target_id,
+            "online": target.id in discovered,
+        }
+    for target_id, target in discovered.items():
+        item = result.setdefault(
+            target_id,
+            {
+                "id": target.id,
+                "kind": "dlna",
+                "name": target.name,
+                "location": target.location,
+                "udn": target.id,
+                "selected": False,
+                "default": False,
+                "online": True,
+            },
+        )
+        item.update(
+            name=target.name,
+            location=target.location,
+            online=True,
+        )
+    return sorted(result.values(), key=lambda item: (not item["selected"], item["name"].lower()))
+
+
+def _apply_target_selection(
+    config: Config,
+    selected_ids: list[str],
+    discovered: dict[str, DiscoveredDLNATarget],
+    default_target_id: str = "",
+) -> None:
+    """Persist only targets already configured or observed through SSDP."""
+    normalized_ids = []
+    for value in selected_ids:
+        target_id = normalize_target_id(value)
+        if target_id and target_id not in normalized_ids:
+            normalized_ids.append(target_id)
+
+    for target in config.get_enabled_targets():
+        target.enabled = target.id in normalized_ids
+
+    for target_id in normalized_ids:
+        target = config.get_target(target_id)
+        if target is None:
+            observed = discovered.get(target_id)
+            if observed is None:
+                raise ValueError(f"target was not discovered: {target_id}")
+            target = OutputTargetConfig(
+                id=observed.id,
+                kind="dlna",
+                name=observed.name,
+                location=observed.location,
+                udn=observed.id,
+                enabled=True,
+            )
+            config.targets[target.id] = target
+        else:
+            target.enabled = True
+
+    requested_default = normalize_target_id(default_target_id)
+    config.default_target_id = (
+        requested_default if requested_default in normalized_ids
+        else normalized_ids[0] if normalized_ids
+        else ""
+    )
 
 
 def _mask_value(key: str, value: str) -> str:
@@ -221,6 +304,8 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "proxy_enabled": config.proxy_enabled,
             "auto_play_on_set_uri": config.auto_play_on_set_uri,
             "mi_did": config.mi_did,
+            "default_target_id": config.default_target_id,
+            "targets_count": len(config.get_enabled_targets()),
             "has_account": bool(config.account or config.cookie),
             "cookie": _mask_cookie(config.cookie),
             "dlna_running": app_instance.dlna_running,
@@ -275,8 +360,22 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         data["need_use_play_music_api"] = NEED_USE_PLAY_MUSIC_API
 
         if need_device_list:
-            device_list = await app_instance.get_all_devices()
-            data["device_list"] = _mask_devices(device_list)
+            try:
+                observed = await LocalDLNAClient.discover(config.hostname)
+                app_instance.discovered_targets = {
+                    target.id: target for target in observed
+                    if target.id not in {
+                        f"uuid:{renderer.udn}" for renderer in app_instance.renderers.values()
+                    }
+                }
+            except Exception as exc:
+                log.warning("扫描 DLNA 输出目标失败: %s", type(exc).__name__)
+            data["target_list"] = _target_view(
+                config, app_instance.discovered_targets
+            )
+            if config.account or config.cookie:
+                device_list = await app_instance.get_all_devices()
+                data["device_list"] = _mask_devices(device_list)
 
         return web.json_response(data)
 
@@ -296,6 +395,17 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         # 更新设备选择
         if "mi_did" in data:
             config.mi_did = data["mi_did"]
+
+        if "target_ids" in data:
+            try:
+                _apply_target_selection(
+                    config,
+                    list(data.get("target_ids") or []),
+                    app_instance.discovered_targets,
+                    str(data.get("default_target_id") or ""),
+                )
+            except ValueError as exc:
+                return web.json_response({"error": str(exc)}, status=400)
 
         # 更新其他配置
         if "auto_play_on_set_uri" in data:
@@ -462,6 +572,8 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "renderers_count": len(app_instance.renderers),
             "has_account": bool(config.account or config.cookie),
             "mi_did": config.mi_did,
+            "default_target_id": config.default_target_id,
+            "targets_count": len(config.get_enabled_targets()),
             "cloud_control_available": app_instance.auth.is_logged_in(),
             "local_control_available": app_instance.has_local_speaker_control(),
             "control_mode": (
