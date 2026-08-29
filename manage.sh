@@ -1,71 +1,41 @@
-#!/bin/bash
-# MiAir 管理脚本
-# 用法: ./manage.sh [start|stop|restart|logs|status|update|uninstall]
+#!/usr/bin/env bash
+# CastFabric Docker Compose lifecycle helper. Persistent configuration is never removed.
+
+set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONTAINER_NAME="miair"
+cd "$APP_DIR"
 
-case "$1" in
+case "${1:-}" in
     start)
-        echo "启动 MiAir..."
-        docker start "$CONTAINER_NAME"
+        docker compose up -d
         ;;
     stop)
-        echo "停止 MiAir..."
-        docker stop "$CONTAINER_NAME"
+        docker compose stop
         ;;
     restart)
-        echo "重启 MiAir..."
-        docker restart "$CONTAINER_NAME"
+        docker compose restart
         ;;
     logs)
-        if [ "$2" = "-f" ]; then
-            docker logs -f "$CONTAINER_NAME"
+        if [[ "${2:-}" == "-f" ]]; then
+            docker compose logs -f castfabric
         else
-            docker logs "$CONTAINER_NAME"
+            docker compose logs castfabric
         fi
         ;;
     status)
-        docker ps -a | grep "$CONTAINER_NAME"
+        docker compose ps
         ;;
     update)
-        echo "更新 MiAir..."
-        cd "$APP_DIR"
-        # 备份配置
-        cp -r conf conf.bak
-        
-        # 下载最新代码
-        wget -O miair.tar.gz https://github.com/KiriChen-Wind/MiAir/archive/refs/heads/main.tar.gz
-        tar -xzf miair.tar.gz
-        cp -r MiAir-main/* .
-        rm -rf MiAir-main miair.tar.gz
-        
-        # 重新构建
-        docker build -t miair:latest .
-        docker rm -f "$CONTAINER_NAME"
-        ./deploy.sh
+        docker compose pull
+        docker compose up -d --no-build
         ;;
-    uninstall)
-        echo "卸载 MiAir..."
-        read -p "确定要删除容器和配置吗? (y/N): " confirm
-        if [ "$confirm" = "y" ]; then
-            docker rm -f "$CONTAINER_NAME"
-            docker rmi miair:latest
-            rm -rf "$APP_DIR"
-            echo "卸载完成"
-        fi
+    down)
+        docker compose down
+        echo "Containers removed; configuration under ${CASTFABRIC_CONFIG_DIR:-$APP_DIR/conf} was preserved."
         ;;
     *)
-        echo "用法: $0 {start|stop|restart|logs|status|update|uninstall}"
-        echo ""
-        echo "  start    - 启动服务"
-        echo "  stop     - 停止服务"
-        echo "  restart  - 重启服务"
-        echo "  logs     - 查看日志"
-        echo "  logs -f  - 实时查看日志"
-        echo "  status   - 查看状态"
-        echo "  update   - 更新到最新版本"
-        echo "  uninstall - 卸载"
-        exit 1
+        echo "Usage: $0 {start|stop|restart|logs|logs -f|status|update|down}" >&2
+        exit 2
         ;;
 esac

@@ -1,4 +1,4 @@
-name: Publish OpenXiaoCast
+name: Publish CastFabric
 
 on:
   push:

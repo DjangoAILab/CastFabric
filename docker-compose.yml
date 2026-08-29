@@ -1,12 +1,13 @@
 services:
-  openxiaocast:
-    image: ghcr.io/wangerzi/miair:latest
+  castfabric:
+    image: ghcr.io/wangerzi/castfabric:latest
     build:
       context: .
-    container_name: openxiaocast
+    container_name: castfabric
     network_mode: host
     restart: unless-stopped
     environment:
-      MIAIR_DOCKER: "1"
+      CASTFABRIC_DOCKER: "1"
+      CASTFABRIC_HOSTNAME: "${CASTFABRIC_HOSTNAME:-}"
     volumes:
-      - ./conf:/app/conf
+      - "${CASTFABRIC_CONFIG_DIR:-./conf}:/app/conf"

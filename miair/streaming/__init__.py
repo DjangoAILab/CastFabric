@@ -1,6 +1,5 @@
 """Protocol-neutral live audio output components."""
 
-from .sink import MiAirLiveAudioSink
+from .sink import CastFabricLiveAudioSink, MiAirLiveAudioSink
 
-__all__ = ["MiAirLiveAudioSink"]
-
+__all__ = ["CastFabricLiveAudioSink", "MiAirLiveAudioSink"]

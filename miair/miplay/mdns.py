@@ -72,7 +72,7 @@ class MiPlayIdentity:
     address: str
     friendly_name: str = "CastFabric"
     instance: str = "CastFabric"
-    host: str = "openxiaocast"
+    host: str = "castfabric"
     device_id: uuid.UUID = field(default_factory=uuid.uuid4)
     control_port: int = 8899
 

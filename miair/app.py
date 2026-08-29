@@ -18,7 +18,7 @@ from miair.web.api import create_web_app
 from miair.airplay.speaker_airplay import AirPlayManager
 from miair.miplay.mdns import MiPlayIdentity
 from miair.miplay.receiver import MiPlayReceiver
-from miair.streaming.sink import MiAirLiveAudioSink
+from miair.streaming.sink import CastFabricLiveAudioSink
 from miair.identity import PRODUCT_NAME, PRODUCT_SLUG
 
 log = logging.getLogger("miair")
@@ -150,10 +150,9 @@ class CastFabric:
         if self.config.get_enabled_targets():
             await self._start_dlna_services()
         else:
-            if not self.config.account and not self.config.cookie:
-                log.info("未配置小米账号，请打开 Web 管理界面进行配置")
-            elif not self.config.mi_did:
-                log.info("未选择音箱设备，请打开 Web 管理界面选择设备")
+            log.info("未选择 DLNA 输出目标，请打开 Web 管理界面扫描并选择设备")
+            if self.config.account or self.config.cookie:
+                log.info("已检测到旧小米云配置，将作为可选兼容扩展保留")
             log.info(f"请访问 http://{self.config.hostname}:{self.config.web_port} 进行配置")
 
         self._device_check_task = asyncio.create_task(self._periodic_device_check())
@@ -290,7 +289,7 @@ class CastFabric:
         receiver = MiPlayReceiver(
             host="0.0.0.0",
             port=self.config.miplay_port,
-            sink_factory=lambda: MiAirLiveAudioSink(
+            sink_factory=lambda: CastFabricLiveAudioSink(
                 self.config.hostname,
                 controller,
                 audio_format=self.config.miplay_stream_format,

@@ -1,4 +1,4 @@
-name: Test OpenXiaoCast
+name: Test CastFabric
 
 on:
   workflow_call:
@@ -37,8 +37,8 @@ jobs:
         with:
           context: .
           load: true
-          tags: openxiaocast:test
+          tags: castfabric:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Run MiPlay self-test in image
-        run: docker run --rm --entrypoint python openxiaocast:test -m miair.miplay.probe self-test --duration 0.35
+        run: docker run --rm --entrypoint python castfabric:test -m miair.miplay.probe self-test --duration 0.35

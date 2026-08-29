@@ -1,9 +1,9 @@
 [project]
 name = "castfabric"
-version = "0.9.0a1"
+version = "0.10.0a1"
 description = "Open-source multi-protocol casting fabric for LAN audio devices"
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.9.0",

@@ -1,4 +1,4 @@
-# OpenXiaoCast offline validation report
+# CastFabric MiPlay offline validation report
 
 Commit under validation: `ea0fc9e` plus the Docker cache-boundary follow-up.
 

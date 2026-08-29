@@ -330,7 +330,7 @@ class AirPlayServer:
     实现 AirPlay 1 (RAOP) 协议接收音频，解码后输出到 HTTP 音频流。
     """
 
-    def __init__(self, hostname: str, device_name: str = "MiAir", shared_zeroconf=None, speaker_hardware: str = ""):
+    def __init__(self, hostname: str, device_name: str = "CastFabric", shared_zeroconf=None, speaker_hardware: str = ""):
         self.hostname = hostname
         self.device_name = device_name
         self.speaker_hardware = speaker_hardware

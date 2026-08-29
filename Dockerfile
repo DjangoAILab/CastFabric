@@ -26,15 +26,15 @@ RUN mkdir -p /app/conf
 
 ARG BUILD_DATE=""
 ARG VCS_REF=""
-LABEL org.opencontainers.image.title="OpenXiaoCast" \
-      org.opencontainers.image.description="Multi-protocol LAN casting gateway for Xiaomi AI speakers" \
+LABEL org.opencontainers.image.title="CastFabric" \
+      org.opencontainers.image.description="Open-source multi-protocol casting fabric for LAN audio devices" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.source="https://github.com/wangerzi/MiAir"
+      org.opencontainers.image.source="https://github.com/wangerzi/CastFabric"
 
 EXPOSE 8200/tcp 8300/tcp 8899/tcp 5353/udp 56666/udp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/api/status', timeout=3)" || exit 1
 
-ENTRYPOINT ["/bin/sh", "-c", "if [ ! -f /app/conf/config.json ]; then cp /app/config-example.json /app/conf/config.json; fi && if [ ! -f /app/conf/.env ]; then cp /app/.env.example /app/conf/.env; fi && exec openxiaocast --conf-path /app/conf"]
+ENTRYPOINT ["/bin/sh", "-c", "if [ ! -f /app/conf/config.json ]; then cp /app/config-example.json /app/conf/config.json; fi && if [ ! -f /app/conf/.env ]; then cp /app/.env.example /app/conf/.env; fi && exec castfabric --conf-path /app/conf"]

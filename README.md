@@ -1,38 +1,57 @@
-# OpenXiaoCast
+# CastFabric
 
-OpenXiaoCast 是面向小爱音箱的多协议局域网投送网关。它保留 MiAir 的
-DLNA 与 AirPlay 能力，并新增实验性的妙播（MiPlay）接收链路，让手机发现
-OpenXiaoCast 后，音频经过统一的实时流通道送到已配置的小米音箱。
+CastFabric 是面向局域网音频设备的开源多协议投放层。它把 DLNA、AirPlay、
+妙播（MiPlay）和未来的自定义音频输入，统一路由到支持标准 DLNA
+MediaRenderer 的音箱；小米云只是可选兼容扩展，不再是发现和播放的前置条件。
 
-> 妙播的离线完整链路已经通过自动化验证；K60/M01 真机兼容性仍需按
-> [真机认证清单](docs/testing/miplay-real-device-checklist.md)完成最终确认。
+默认情况下，手机会看到 `CastFabric · <音箱名称>`。这个前缀可以在 Web 页面修改。
+实体音箱自己的原生 DLNA 设备可能同时出现，这是为了保留低延迟直投和 CastFabric
+统一入口两种选择。
 
 ## 当前能力
 
-- DLNA 音频渲染器
-- AirPlay 音频接收
-- 妙播设备发现、控制协商、反向 WFD/RTSP 和 AAC 媒体接收（实验性）
-- 妙播 AAC → 48 kHz 双声道 PCM → HTTP WAV → 小米音箱
-- Web 配置、状态诊断与无需真机的妙播链路自测
-- amd64/arm64 Docker 镜像构建和 GHCR 发布流水线
+- 扫描并选择任意标准 UPnP/DLNA MediaRenderer，无需厂商账号。
+- 发布统一的虚拟 DLNA 音频渲染器。
+- 接收 AirPlay 音频并通过目标音箱的本地 DLNA 通道播放。
+- 接收妙播发现、控制、反向 WFD/RTSP 和 AAC 媒体流（实验性）。
+- 妙播 AAC → 48 kHz 双声道 PCM → HTTP WAV/L16 → DLNA 输出目标。
+- 旧 MiAir 配置自动迁移，本地 DLNA 优先，小米 MiNA 云作为可选回退。
+- 无手机、无音箱、无小米账号的离线协议自测。
+- amd64/arm64 Docker 镜像测试与 GHCR 发布流水线。
 
 ## Docker 部署
 
-局域网发现依赖 mDNS，推荐在 Linux 主机上使用 host 网络：
+SSDP 和 mDNS 依赖局域网组播，推荐在 Linux 主机上使用 host 网络：
 
 ```bash
-git clone https://github.com/wangerzi/MiAir.git OpenXiaoCast
-cd OpenXiaoCast
+git clone https://github.com/wangerzi/CastFabric.git
+cd CastFabric
 docker compose up -d
 ```
 
-管理页面为 `http://宿主机IP:8300`。首次启动会在 `./conf` 生成配置文件；
-在 Web 页面填写小米账号并选择目标音箱。妙播默认名称为 `OpenXiaoCast`，
-控制端口为 `8899`。
+打开 `http://宿主机IP:8300`，从“DLNA 输出目标”中选择音箱即可。标准 DLNA
+链路不要求登录小米账号。配置保存在 `./conf`，默认端口如下：
 
-已有部署在仓库改名之前仍可继续使用兼容镜像名
-`ghcr.io/wangerzi/miair:latest`。Docker Desktop 使用 host 网络时，需先确认
-当前版本已启用 host networking；否则建议直接在 Linux/OpenWrt 主机部署。
+- Web：`8300/tcp`
+- 虚拟 DLNA/媒体服务：`8200/tcp`
+- 妙播控制：`8899/tcp`
+- SSDP：`1900/udp`（host 网络）
+- mDNS：`5353/udp`（host 网络）
+
+多网卡或自动 IP 选择不正确时，在 `.env` 中设置：
+
+```dotenv
+CASTFABRIC_HOSTNAME=192.168.133.5
+```
+
+也可以使用仓库中的非破坏式部署脚本：
+
+```bash
+./deploy.sh local       # 从当前源码构建
+./deploy.sh pull        # 拉取已发布镜像
+./manage.sh status
+./manage.sh logs -f
+```
 
 ## 本地开发与诊断
 
@@ -42,37 +61,39 @@ docker compose up -d
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[test]'
-openxiaocast --conf-path conf
+castfabric --conf-path conf
 ```
 
-无需手机或音箱即可运行完整的 TCP 控制、RTSP、RTP/MPEG-TS、解码链路：
+运行完整测试和妙播离线链路：
 
 ```bash
-openxiaocast-miplay self-test --duration 0.35
+python -m pytest -q
+castfabric-miplay self-test --duration 0.35
 ```
 
-扫描局域网中的妙播接收端：
+扫描妙播接收端或向测试接收端发送诊断音：
 
 ```bash
-openxiaocast-miplay scan --timeout 5
+castfabric-miplay scan --timeout 5
+castfabric-miplay simulate --target 192.168.1.20 --duration 1
 ```
 
-向另一台 OpenXiaoCast 接收端推送测试音（只用于诊断）：
+## 架构与实施状态
 
-```bash
-openxiaocast-miplay simulate --target 192.168.1.20 --duration 1
-```
+- [架构决策：CastFabric 与端口—适配器核心](docs/adr/0003-adopt-castfabric-and-port-adapter-core.md)
+- [系统设计](docs/architecture/castfabric-system-design.md)
+- [阶段实施计划](docs/plans/2026-08-29-castfabric-refactor.md)
+- [MiAir/OpenXiaoCast 迁移说明](docs/migration/miair-to-castfabric.md)
+- [妙播真机验证清单](docs/testing/miplay-real-device-checklist.md)
+- [妙播协议研究与独立实现边界](docs/research/miplay-protocol-sources.md)
 
-## 交付状态
+## 兼容与开源
 
-实现阶段、验收门槛和失败回退策略维护在
-[OpenXiaoCast 路线图](docs/roadmap/2026-08-26-openxiaocast-roadmap.md)。协议研究来源与
-独立实现边界见[研究说明](docs/research/miplay-protocol-sources.md)。
+项目使用 MIT 许可证。迁移期继续提供 `miair`、`openxiaocast`、
+`openxiaocast-miplay` 命令，以及 `miair` Python 包；已有 `config.json`、配置卷和
+虚拟设备 UDN 不会被主动删除或重新生成。
 
-## 兼容与致谢
-
-为兼容现有安装，Python 包名与 `miair` 命令暂时保留。项目延续并感谢
-[MiAir](https://github.com/KiriChen-Wind/MiAir)、
+CastFabric 延续并感谢 [MiAir](https://github.com/KiriChen-Wind/MiAir)、
 [XiaoMusic](https://github.com/hanxi/xiaomusic)、
 [AirPlay2 Receiver](https://github.com/openairplay/airplay2-receiver) 和
 [Macast](https://github.com/xfangfang/Macast) 的既有工作。妙播部分没有直接引入

@@ -216,7 +216,7 @@ class LegacyReceiverSession:
         payload = encode_device_info(
             {
                 "name": self.friendly_name,
-                "model": "openxiaocast.gateway",
+                "model": "castfabric.gateway",
                 "support": "audio",
                 "mirrorMode": "2",
             }

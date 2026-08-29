@@ -11,7 +11,7 @@ from miair.airplay.audio_stream import AudioStreamServer
 log = logging.getLogger("miair")
 
 
-class MiAirLiveAudioSink:
+class CastFabricLiveAudioSink:
     def __init__(
         self,
         hostname: str,
@@ -121,3 +121,7 @@ class MiAirLiveAudioSink:
             if self.stream_server
             else None,
         }
+
+
+# Compatibility alias for the original internal integration name.
+MiAirLiveAudioSink = CastFabricLiveAudioSink

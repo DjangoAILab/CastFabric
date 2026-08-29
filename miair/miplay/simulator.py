@@ -126,7 +126,7 @@ class MiPlaySourceSimulator:
                 encode_command(
                     Command.SET_LOCAL_DEVICE_INFO,
                     2,
-                    b'{"sourceName":"OpenXiaoCast Offline Source"}',
+                    b'{"sourceName":"CastFabric Offline Source"}',
                 )
             )
             await self._expect(control, Command.SET_LOCAL_DEVICE_INFO_ACK)
@@ -165,7 +165,7 @@ class MiPlaySourceSimulator:
                 encode_command(
                     Command.SET_LOCAL_DEVICE_INFO,
                     8,
-                    b'{"sourceName":"OpenXiaoCast Offline Source"}',
+                    b'{"sourceName":"CastFabric Offline Source"}',
                 ),
                 encode_command(Command.GET_DEVICE_INFO, 9),
             )
@@ -211,7 +211,7 @@ class MiPlaySourceSimulator:
                     json.dumps(
                         {
                             "mTitle": "Offline tone",
-                            "mSourceName": "OpenXiaoCast Offline Source",
+                            "mSourceName": "CastFabric Offline Source",
                             "mDeviceState": 2,
                         },
                         separators=(",", ":"),

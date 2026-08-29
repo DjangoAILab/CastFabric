@@ -23,10 +23,10 @@ def device_description_xml(udn: str, friendly_name: str, base_url: str) -> str:
   <device>
     <deviceType>{DEVICE_TYPE}</deviceType>
     <friendlyName>{escape(friendly_name)}</friendlyName>
-    <manufacturer>MiAir</manufacturer>
-    <manufacturerURL>https://github.com/KiriChen-Wind/MiAir</manufacturerURL>
-    <modelDescription>MiAir - Xiaomi Speaker DLNA Audio Renderer</modelDescription>
-    <modelName>MiAir Speaker</modelName>
+    <manufacturer>CastFabric Community</manufacturer>
+    <manufacturerURL>https://github.com/wangerzi/CastFabric</manufacturerURL>
+    <modelDescription>CastFabric multi-protocol audio renderer</modelDescription>
+    <modelName>CastFabric Renderer</modelName>
     <modelNumber>1.0</modelNumber>
     <serialNumber>1</serialNumber>
     <UDN>uuid:{udn}</UDN>

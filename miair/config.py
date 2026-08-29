@@ -164,7 +164,10 @@ class Config:
             self.password = os.getenv("MI_PASS", "")
         if not self.mi_did:
             self.mi_did = os.getenv("MI_DID", "")
-        env_hostname = os.getenv("MIAIR_HOSTNAME", "").strip()
+        env_hostname = (
+            os.getenv("CASTFABRIC_HOSTNAME", "").strip()
+            or os.getenv("MIAIR_HOSTNAME", "").strip()
+        )
         if env_hostname:
             self.hostname = env_hostname
         if not self.hostname:

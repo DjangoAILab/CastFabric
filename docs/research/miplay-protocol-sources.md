@@ -1,6 +1,6 @@
 # MiPlay protocol research and implementation boundary
 
-OpenXiaoCast's MiPlay receiver was implemented from observed wire behavior,
+CastFabric's MiPlay receiver was implemented from observed wire behavior,
 small deterministic protocol fixtures and public interoperability projects.
 The implementation lives under `miair/miplay/` and is covered by offline
 source/receiver tests.
@@ -9,7 +9,7 @@ source/receiver tests.
 
 - [openMiPlay/MiPlayForWindows](https://github.com/openMiPlay/MiPlayForWindows)
   demonstrates community interest in interoperating with MiPlay endpoints.
-- Existing MiAir, AirPlay and DLNA components provide only OpenXiaoCast's
+- Existing MiAir, AirPlay and DLNA components provide only CastFabric's
   downstream speaker path; they are not treated as MiPlay protocol sources.
 - mDNS/DNS-SD, RTSP, RTP and MPEG-TS are implemented using their standard wire
   structures plus endpoint observations captured in the repository's tests.

@@ -35,6 +35,19 @@ def test_env_hostname_overrides_saved_hostname():
             os.environ["MIAIR_HOSTNAME"] = old
 
 
+def test_castfabric_hostname_takes_priority_over_legacy_env():
+    with patch.dict(
+        os.environ,
+        {
+            "CASTFABRIC_HOSTNAME": "192.168.133.5",
+            "MIAIR_HOSTNAME": "192.168.6.5",
+        },
+    ):
+        config = Config(hostname="100.64.1.20")
+
+    assert config.hostname == "192.168.133.5"
+
+
 def test_airplay_server_uses_constructor_hostname():
     with patch.dict(os.environ, {"MIAIR_HOSTNAME": "100.64.1.20"}):
         try:

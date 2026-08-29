@@ -1272,8 +1272,8 @@
         </div>
 
         <div style="text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 12px;">
-            <a href="https://github.com/wangerzi/MiAir" class="footer-link" target="_blank">CastFabric</a>
-            <span id="version-text">V0.9.0a1</span>
+            <a href="https://github.com/wangerzi/CastFabric" class="footer-link" target="_blank">CastFabric</a>
+            <span id="version-text">V0.10.0a1</span>
         </div>
     </div>
 
@@ -1485,7 +1485,7 @@
         async function checkUpdate(currentVersion) {
             try {
                 // 使用 GitHub API 获取最新 release
-                const resp = await fetch('https://api.github.com/repos/wangerzi/MiAir/releases/latest');
+                const resp = await fetch('https://api.github.com/repos/wangerzi/CastFabric/releases/latest');
                 if (!resp.ok) return;
                 const data = await resp.json();
                 const latestVersion = data.tag_name; // 例如 v0.3.2

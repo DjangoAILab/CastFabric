@@ -1,5 +1,8 @@
 # OpenXiaoCast Delivery Roadmap
 
+> 此路线图记录 MiPlay 原型阶段，现已由
+> [CastFabric 重构实施计划](../plans/2026-08-29-castfabric-refactor.md)接续。
+
 This roadmap turns the MiPlay receiver work into independently verifiable
 stages. Each stage has a concrete artifact, a promotion gate and a fallback;
 passing an offline gate never substitutes for the final K60/M01 real-device

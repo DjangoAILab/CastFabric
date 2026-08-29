@@ -231,7 +231,7 @@ def _mask_devices(device_list, required_fields=['miotDID','hardware','name']):
 def _is_docker():
     """检测是否在 Docker 容器中运行"""
     # 1. 环境变量显式指定（最可靠）
-    if os.environ.get("MIAIR_DOCKER"):
+    if os.environ.get("CASTFABRIC_DOCKER") or os.environ.get("MIAIR_DOCKER"):
         return True
     # 2. Docker 会在容器根目录创建 .dockerenv 文件
     if os.path.exists("/.dockerenv"):
@@ -289,7 +289,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         index_path = os.path.join(static_dir, "index.html")
         if os.path.exists(index_path):
             return web.FileResponse(index_path)
-        return web.Response(text="OpenXiaoCast Web UI", content_type="text/html")
+        return web.Response(text="CastFabric Web UI", content_type="text/html")
 
     async def handle_get_setting(request):
         """获取当前设置和设备列表 (类似 xiaomusic /getsetting)"""
@@ -605,7 +605,15 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         """执行一键更新：从 GitHub 下载最新代码覆盖后重启"""
         app_dir = _get_app_dir()
         in_docker = _is_docker()
-        url = "https://github.com/wangerzi/MiAir/archive/refs/heads/main.tar.gz"
+        if in_docker:
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": "Docker 部署请运行 docker compose pull && docker compose up -d",
+                },
+                status=409,
+            )
+        url = "https://github.com/wangerzi/CastFabric/archive/refs/heads/main.tar.gz"
 
         log.info(f"开始一键更新 (目录: {app_dir}, Docker: {in_docker})")
 
