@@ -61,7 +61,7 @@ async def self_test(duration: float = 0.5) -> dict:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openxiaocast-miplay",
-        description="Discover and validate OpenXiaoCast MiPlay endpoints.",
+        description="Discover and validate CastFabric MiPlay endpoints.",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
     scan = subcommands.add_parser("scan", help="scan the LAN for MiPlay services")

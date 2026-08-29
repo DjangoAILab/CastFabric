@@ -1,6 +1,9 @@
-"""MiAir 常量定义"""
+"""CastFabric 协议与运行时常量。"""
+
+from miair.identity import PRODUCT_NAME
 
 VERSION = "0.9.0a1"
+UPNP_SERVER = f"{PRODUCT_NAME}/{VERSION} UPnP/1.0"
 
 
 # SSDP 相关
@@ -85,4 +88,3 @@ GET_ASK_BY_MINA = {
     "LX04", "L05B", "L05C", "S12", "S12A",
     "LX5A", "L15A", "L16A", "X6A",
 }
-

@@ -246,6 +246,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "auto_restart": config.auto_restart,
             "enable_miplay": config.enable_miplay,
             "miplay_port": config.miplay_port,
+            "device_name_prefix": config.device_name_prefix,
             "miplay_name": config.miplay_name,
             "miplay_play_type": config.miplay_play_type,
             "miplay_http_mode": config.miplay_http_mode,
@@ -321,8 +322,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             config.enable_miplay = bool(data["enable_miplay"])
         if "miplay_port" in data:
             config.miplay_port = max(0, min(65535, int(data["miplay_port"])))
-        if "miplay_name" in data:
-            config.miplay_name = str(data["miplay_name"]).strip()[:80] or "OpenXiaoCast"
+        requested_prefix = data.get("device_name_prefix", data.get("miplay_name"))
+        if requested_prefix is not None:
+            from miair.identity import normalize_device_prefix
+
+            config.device_name_prefix = normalize_device_prefix(requested_prefix)
+            config.miplay_name = config.device_name_prefix
         if "miplay_play_type" in data:
             requested_type = int(data["miplay_play_type"])
             config.miplay_play_type = (

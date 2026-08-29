@@ -24,8 +24,10 @@ class SpeakerAirPlay:
         self.hostname = hostname
         self.controller = controller
         self.speaker = controller.speaker
-        # 使用音箱名称作为 AirPlay 设备名
-        self.device_name = self.speaker.get_dlna_name()
+        target_name = self.speaker.get_dlna_name()
+        self.device_name = (
+            config.get_device_name(target_name) if config else target_name
+        )
         self.shared_zeroconf = shared_zeroconf
         self.config = config
         self.airplay_server: AirPlayServer | None = None

@@ -17,6 +17,7 @@ from miair.const import (
     SSDP_ADDR,
     SSDP_ALIVE_INTERVAL,
     SSDP_PORT,
+    UPNP_SERVER,
 )
 
 log = logging.getLogger("miair")
@@ -61,7 +62,7 @@ class SSDPServer:
             "HTTP/1.1 200 OK\r\n"
             f"CACHE-CONTROL: max-age=1800\r\n"
             f"LOCATION: {location}\r\n"
-            f"SERVER: MiAir/1.0 UPnP/1.0\r\n"
+            f"SERVER: {UPNP_SERVER}\r\n"
             f"ST: {st}\r\n"
             f"USN: {usn}\r\n"
             f"EXT:\r\n"
@@ -79,7 +80,7 @@ class SSDPServer:
             f"LOCATION: {location}\r\n"
             f"NT: {nt}\r\n"
             f"NTS: ssdp:alive\r\n"
-            f"SERVER: MiAir/1.0 UPnP/1.0\r\n"
+            f"SERVER: {UPNP_SERVER}\r\n"
             f"USN: {usn}\r\n"
             "\r\n"
         )

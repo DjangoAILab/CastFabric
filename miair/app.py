@@ -1,4 +1,4 @@
-"""MiAir 主应用编排器"""
+"""CastFabric 主应用编排器。"""
 
 import asyncio
 import logging
@@ -19,12 +19,13 @@ from miair.airplay.speaker_airplay import AirPlayManager
 from miair.miplay.mdns import MiPlayIdentity
 from miair.miplay.receiver import MiPlayReceiver
 from miair.streaming.sink import MiAirLiveAudioSink
+from miair.identity import PRODUCT_NAME, PRODUCT_SLUG
 
 log = logging.getLogger("miair")
 
 
-class MiAir:
-    """MiAir 主应用"""
+class CastFabric:
+    """CastFabric 主应用；旧导入名在文件末尾保留兼容别名。"""
 
     AUTH_RETRY_DELAYS = (30, 120, 300, 900)
 
@@ -130,7 +131,7 @@ class MiAir:
         """启动所有服务"""
         self._setup_logging()
 
-        log.info("MiAir 启动中...")
+        log.info("%s 启动中...", PRODUCT_NAME)
         log.info(f"主机名: {self.config.hostname}")
         log.info(f"DLNA 端口: {self.config.dlna_port}")
         log.info(f"Web 端口: {self.config.web_port}")
@@ -197,7 +198,7 @@ class MiAir:
             for did, controller in self.speaker_manager.controllers.items():
                 speaker = controller.speaker
                 udn = speaker.udn
-                friendly_name = speaker.get_dlna_name()
+                friendly_name = self.config.get_device_name(speaker.get_dlna_name())
 
                 renderer = DLNARenderer(udn, friendly_name, controller, self.config.default_volume, config=self.config)
                 self.renderers[udn] = renderer
@@ -231,7 +232,11 @@ class MiAir:
             await self._start_airplay_for_speakers()
             await self._start_miplay_for_speaker()
 
-            log.info(f"MiAir 服务启动完成! 共 {len(self.renderers)} 个音箱")
+            log.info(
+                "%s 服务启动完成! 共 %s 个输出目标",
+                PRODUCT_NAME,
+                len(self.renderers),
+            )
             log.info("手机 DLNA / AirPlay 现在应该能发现这些设备了")
 
         except Exception as e:
@@ -268,9 +273,9 @@ class MiAir:
         speaker_name = controller.speaker.get_dlna_name()
         identity = MiPlayIdentity(
             address=self.config.hostname,
-            friendly_name=f"{self.config.miplay_name} · {speaker_name}",
-            instance=f"OpenXiaoCast-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
-            host=f"openxiaocast-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
+            friendly_name=self.config.get_device_name(speaker_name),
+            instance=f"{PRODUCT_NAME}-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
+            host=f"{PRODUCT_SLUG}-{uuid.uuid5(uuid.NAMESPACE_DNS, did).hex[:8]}",
             device_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"openxiaocast-miplay-{did}"),
             control_port=self.config.miplay_port,
         )
@@ -330,7 +335,7 @@ class MiAir:
 
     async def stop(self):
         """停止所有服务"""
-        log.info("MiAir 正在关闭...")
+        log.info("%s 正在关闭...", PRODUCT_NAME)
 
         if hasattr(self, '_device_check_task') and self._device_check_task:
             self._device_check_task.cancel()
@@ -350,7 +355,7 @@ class MiAir:
                 log.warning("Web 服务关闭超时")
         await self.auth.close()
 
-        log.info("MiAir 已关闭")
+        log.info("%s 已关闭", PRODUCT_NAME)
 
     async def run_forever(self):
         """运行直到收到终止信号"""
@@ -412,3 +417,7 @@ class MiAir:
             )
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
+
+
+# Compatibility boundary for existing imports and third-party integrations.
+MiAir = CastFabric

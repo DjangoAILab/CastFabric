@@ -1,7 +1,7 @@
 [project]
-name = "miair"
+name = "castfabric"
 version = "0.9.0a1"
-description = "OpenXiaoCast multi-protocol casting gateway for Xiaomi AI speakers"
+description = "Open-source multi-protocol casting fabric for LAN audio devices"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -14,6 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
+castfabric = "miair.cli:main"
+castfabric-miplay = "miair.miplay.probe:main"
 miair = "miair.cli:main"
 openxiaocast = "miair.cli:main"
 openxiaocast-miplay = "miair.miplay.probe:main"

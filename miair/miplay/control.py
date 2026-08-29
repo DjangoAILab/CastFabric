@@ -45,7 +45,7 @@ class LegacyReceiverSession:
         *,
         challenge: bytes,
         challenge_sequence: int = 0,
-        friendly_name: str = "OpenXiaoCast",
+        friendly_name: str = "CastFabric",
         volume: int = 38,
         local_endpoint: tuple[str, int] | None = None,
         peer_endpoint: tuple[str, int] | None = None,

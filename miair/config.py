@@ -11,6 +11,12 @@ import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 
+from miair.identity import (
+    LEGACY_PRODUCT_NAMES,
+    format_device_name,
+    normalize_device_prefix,
+)
+
 
 log = logging.getLogger("miair")
 
@@ -69,7 +75,7 @@ class Speaker:
 
 @dataclass
 class Config:
-    """MiAir 全局配置"""
+    """CastFabric 全局配置（兼容旧 MiAir/OpenXiaoCast 字段）。"""
 
     account: str = ""
     password: str = ""
@@ -98,7 +104,10 @@ class Config:
     # MiPlay 原生接收入口
     enable_miplay: bool = True
     miplay_port: int = 8899
-    miplay_name: str = "OpenXiaoCast"
+    # 所有局域网投放入口共享的设备名称前缀。
+    device_name_prefix: str = ""
+    # 旧字段，迁移期继续读写并始终镜像 device_name_prefix。
+    miplay_name: str = ""
     # player_play_url 的播放类型。仅用于 MiPlay 实时流实验；DLNA/AirPlay 保持默认值 2。
     miplay_play_type: int = 2
     # MiPlay 实时 WAV 的 HTTP 方式：close、content-length 或 range。
@@ -120,7 +129,12 @@ class Config:
     def __post_init__(self):
         self.resume_delay_seconds = max(1, min(15, self.resume_delay_seconds))
         self.miplay_port = max(0, min(65535, int(self.miplay_port)))
-        self.miplay_name = (self.miplay_name or "OpenXiaoCast").strip()[:80]
+        requested_prefix = str(self.device_name_prefix or "").strip()
+        legacy_miplay_name = str(self.miplay_name or "").strip()
+        if not requested_prefix and legacy_miplay_name not in LEGACY_PRODUCT_NAMES:
+            requested_prefix = legacy_miplay_name
+        self.device_name_prefix = normalize_device_prefix(requested_prefix)
+        self.miplay_name = self.device_name_prefix
         try:
             self.miplay_play_type = int(self.miplay_play_type)
         except (TypeError, ValueError):
@@ -151,6 +165,10 @@ class Config:
             self.hostname = env_hostname
         if not self.hostname:
             self.hostname = self._detect_local_ip()
+
+    def get_device_name(self, target_name: str = "") -> str:
+        """返回各输入协议统一使用的可发现设备名称。"""
+        return format_device_name(self.device_name_prefix, target_name)
 
     @staticmethod
     def _detect_local_ip() -> str:

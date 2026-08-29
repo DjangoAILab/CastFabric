@@ -1,4 +1,4 @@
-"""MiAir CLI 入口"""
+"""CastFabric CLI 入口。"""
 
 import argparse
 import asyncio
@@ -6,6 +6,7 @@ import signal
 import sys
 
 from miair.config import Config
+from miair.identity import PRODUCT_DESCRIPTION, PRODUCT_NAME
 
 # 强制 Windows 控制台使用 UTF-8 编码，防止中文和特殊字符乱码
 if sys.platform == "win32":
@@ -25,7 +26,7 @@ if sys.platform == "win32":
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="OpenXiaoCast - 小米音箱多协议局域网投送网关"
+        description=f"{PRODUCT_NAME} - {PRODUCT_DESCRIPTION}"
     )
     parser.add_argument("--conf-path", default="conf", help="配置文件目录 (默认: conf)")
     parser.add_argument("--hostname", default="", help="本机 IP 地址 (留空自动检测)")
@@ -61,9 +62,9 @@ def main():
         config.mi_did = args.mi_did
 
     # 启动 (即使没有配置账号/设备也可以启动，用户通过 Web 界面配置)
-    from miair.app import MiAir
+    from miair.app import CastFabric
 
-    app = MiAir(config)
+    app = CastFabric(config)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
