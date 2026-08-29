@@ -1,5 +1,23 @@
 # CastFabric UI design: Acoustic Weave
 
+## Dawn revision
+
+The first dark-room implementation established the correct product hierarchy,
+but visual review showed that it felt too dim and that protocol labels appeared
+mechanically attached to paths at some aspect ratios. The accepted revision is
+**Acoustic Weave / Dawn**:
+
+- use an ivory daylight field, soft botanical green structure and a warm coral
+  signal accent;
+- separate protocol labels from the animated geometry;
+- animate particles along continuous Bezier waves so motion remains registered
+  to the path at every viewport size;
+- keep the landing surface focused on route health, targets and playback;
+- move playback, network and extension preferences into a dedicated modal.
+
+This revision retains the underlying information architecture and API contracts
+while making the interface calmer, brighter and less dashboard-like.
+
 ## Intent
 
 CastFabric is not a device-control dashboard and should not look like one. It is

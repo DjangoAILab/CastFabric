@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CastFabric</title>
-    <meta name="theme-color" content="#07110f">
-    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#f3f1ea">
+    <meta name="color-scheme" content="light">
     <link rel="icon" type="image/png" href="./static/weblogo.png">
     <style>
         :root {
@@ -1490,6 +1490,220 @@
 
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+            .weave-particle { display: none; }
+        }
+    </style>
+    <style>
+        /* Acoustic Weave / Dawn revision */
+        :root {
+            color-scheme: light;
+            --bg: #f3f1ea;
+            --surface: rgba(255, 253, 248, .82);
+            --surface-solid: #fffdf8;
+            --surface-hover: #f4f7f1;
+            --border: rgba(30, 67, 53, .13);
+            --border-hover: rgba(30, 67, 53, .26);
+            --accent: #2f8468;
+            --accent-strong: #236c55;
+            --accent-glow: rgba(47, 132, 104, .14);
+            --text: #17372c;
+            --text-secondary: #5d7067;
+            --text-muted: #8b9992;
+            --green: #2f8468;
+            --green-dim: rgba(47, 132, 104, .08);
+            --yellow: #df8455;
+            --yellow-dim: rgba(223, 132, 85, .09);
+            --red: #c75c4d;
+            --red-dim: rgba(199, 92, 77, .08);
+            --ink: #fffdf8;
+            --card-shadow: 0 22px 60px rgba(46, 70, 58, .09);
+        }
+
+        @media (prefers-color-scheme: dark), (prefers-color-scheme: light) {
+            :root {
+                --bg: #f3f1ea;
+                --surface: rgba(255, 253, 248, .82);
+                --surface-solid: #fffdf8;
+                --surface-hover: #f4f7f1;
+                --border: rgba(30, 67, 53, .13);
+                --border-hover: rgba(30, 67, 53, .26);
+                --text: #17372c;
+                --text-secondary: #5d7067;
+                --text-muted: #8b9992;
+                --accent: #2f8468;
+                --accent-glow: rgba(47, 132, 104, .14);
+                --card-shadow: 0 22px 60px rgba(46, 70, 58, .09);
+            }
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 86% 2%, rgba(174, 208, 187, .48), transparent 29rem),
+                radial-gradient(circle at 8% 76%, rgba(235, 188, 151, .22), transparent 28rem),
+                linear-gradient(180deg, #f8f6f0 0%, var(--bg) 70%);
+        }
+        body::before { opacity: .025; mix-blend-mode: multiply; }
+        nav { border-color: var(--border); }
+        .brand-glyph { border-color: rgba(47,132,104,.38); background: rgba(255,255,255,.45); }
+        .brand-glyph::after { border-color: var(--yellow); border-right-color: transparent; }
+        .nav-state .status-dot { background: var(--yellow); }
+        .btn-secondary { background: rgba(255,255,255,.45); }
+        .btn-secondary:hover:not(:disabled) { background: #fff; }
+
+        .signal-stage {
+            min-height: 440px;
+            margin-top: 22px;
+            padding: 67px 64px 52px;
+            border: 1px solid rgba(30,67,53,.1);
+            border-radius: 28px;
+            background:
+                radial-gradient(circle at 78% 50%, rgba(117, 174, 147, .22), transparent 17rem),
+                linear-gradient(135deg, rgba(255,255,255,.72), rgba(232,241,233,.86));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 30px 90px rgba(53,88,70,.07);
+        }
+        .signal-stage::before {
+            width: 520px;
+            height: 380px;
+            right: 0;
+            top: 24px;
+            background: radial-gradient(circle, rgba(86,157,123,.17), rgba(255,255,255,.06) 40%, transparent 72%);
+            filter: blur(18px);
+        }
+        .signal-copy h1 { color: #183b30; }
+        .signal-copy h1 em { color: var(--accent); }
+
+        .signal-map { right: 40px; bottom: 43px; width: 520px; height: 260px; }
+        .protocol-rack {
+            position: absolute;
+            z-index: 4;
+            left: 8px;
+            right: 12px;
+            top: 4px;
+            display: flex;
+            gap: 8px;
+        }
+        .protocol-chip {
+            min-width: 0;
+            grid-template-columns: 7px auto;
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid rgba(30,67,53,.09);
+            border-radius: 999px;
+            background: rgba(255,255,255,.45);
+            backdrop-filter: blur(10px);
+            color: var(--text-secondary);
+            font-size: 11px;
+        }
+        .protocol-chip small { display: none; }
+        .protocol-chip i { background: #bdc8c1; box-shadow: none; }
+        .protocol-chip.is-ready { color: var(--text); border-color: rgba(47,132,104,.18); background: rgba(255,255,255,.72); }
+        .protocol-chip.is-ready i { background: var(--accent); box-shadow: 0 0 0 4px rgba(47,132,104,.09); }
+
+        .weave-canvas { position: absolute; inset: 52px 0 0; width: 100%; height: 190px; overflow: visible; }
+        .weave-guide { fill: none; stroke: rgba(47,132,104,.09); stroke-width: 1; }
+        .weave-flow { fill: none; stroke-width: 1.6; stroke-linecap: round; opacity: .65; }
+        .weave-flow.dlna { stroke: url(#dawn-green); }
+        .weave-flow.airplay { stroke: url(#dawn-sage); }
+        .weave-flow.miplay { stroke: url(#dawn-warm); }
+        .weave-particle { filter: drop-shadow(0 0 5px currentColor); }
+        .weave-particle.dlna { color: #2f8468; fill: #2f8468; }
+        .weave-particle.airplay { color: #76988a; fill: #76988a; }
+        .weave-particle.miplay { color: #df8455; fill: #df8455; }
+
+        .fabric-core {
+            /* The SVG paths converge at x=360; keep the core centred on that point. */
+            left: calc(69.23% - 38px);
+            top: 102px;
+            width: 76px;
+            height: 76px;
+            border-color: rgba(47,132,104,.22);
+            background: rgba(255,253,248,.88);
+            box-shadow: 0 16px 50px rgba(47,132,104,.14), inset 0 0 28px rgba(47,132,104,.05);
+            color: var(--accent);
+        }
+        .fabric-core::before { border-color: rgba(47,132,104,.22); }
+        .output-node {
+            right: 6px;
+            top: 135px;
+            width: 68px;
+            padding-left: 22px;
+        }
+        .output-node::before {
+            position: absolute;
+            left: 0;
+            top: 0;
+            margin: 0;
+            border-color: var(--yellow);
+            background: rgba(255,255,255,.5);
+            box-shadow: 0 0 0 6px rgba(223,132,85,.08);
+        }
+        .output-node span { font-size: 11px; }
+
+        .status-bar { background: rgba(255,255,255,.62); border-color: rgba(30,67,53,.11); }
+        .status-running { border-color: rgba(47,132,104,.2); }
+        .status-running .status-dot { box-shadow: 0 0 0 5px rgba(47,132,104,.09); }
+
+        .workspace { padding-top: 44px; }
+        .card {
+            background: rgba(255,253,248,.82);
+            border-color: rgba(30,67,53,.11);
+            box-shadow: 0 15px 48px rgba(53,88,70,.055);
+        }
+        .card:hover { box-shadow: var(--card-shadow); }
+        .device-item, .speaker-item { background: rgba(243,246,240,.76); }
+        .device-item:hover { background: #eef4ed; }
+        .device-item.selected { border-color: rgba(47,132,104,.22); border-left-color: var(--accent); background: rgba(226,240,231,.72); }
+        .device-checkbox { background: rgba(255,255,255,.7); }
+        .speaker-status { background: rgba(255,255,255,.56); }
+
+        .modal-overlay { background: rgba(35,54,46,.24); backdrop-filter: blur(16px); }
+        .modal { background: #fffdf8; border-color: rgba(30,67,53,.12); box-shadow: 0 30px 100px rgba(40,67,54,.2); }
+        .settings-dialog { max-width: 900px; max-height: min(88vh, 760px); overflow-y: auto; padding: 30px; }
+        .settings-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+        .modal-close {
+            width: 40px;
+            height: 40px;
+            display: grid;
+            place-items: center;
+            flex: none;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .modal-close:hover { background: var(--surface-hover); }
+        .settings-panel { grid-template-columns: 1fr 1fr; gap: 14px; padding: 0; }
+        .settings-card { background: #f7f6ef; border-color: rgba(30,67,53,.1); }
+        .form-input { background: rgba(255,255,255,.72); }
+        .form-input:focus { background: #fff; }
+        .slider { background: #cbd3ce; }
+        input:checked + .slider { background: var(--accent); }
+        .settings-dialog-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 18px; }
+        .extension-link { color: var(--text-secondary); font-size: 11px; }
+        .help-block { background: var(--yellow-dim); border-color: rgba(223,132,85,.15); }
+        .release-notes-content, .update-version-row { background: #f5f4ed; }
+        .page-footer { margin-top: 32px; }
+
+        @media (max-width: 1000px) {
+            .signal-stage { padding: 58px 38px 350px; }
+            .signal-map { bottom: 42px; }
+        }
+
+        @media (max-width: 620px) {
+            .signal-stage { min-height: 650px; margin-top: 14px; padding: 46px 18px 314px; border-radius: 20px; }
+            .signal-copy h1 { font-size: 42px; }
+            .signal-map { width: calc(100% - 22px); height: 255px; bottom: 30px; }
+            .protocol-rack { left: 0; right: 0; gap: 5px; }
+            .protocol-chip { padding: 8px; font-size: 10px; }
+            .fabric-core { left: calc(69.23% - 35px); top: 103px; width: 70px; height: 70px; }
+            .output-node { right: 30px; top: 135px; width: 13px; padding-left: 0; }
+            .output-node span, .output-node small { display: none; }
+            .settings-dialog { width: calc(100% - 20px); max-height: 92vh; padding: 22px 16px; }
+            .settings-panel { grid-template-columns: 1fr; }
+            .settings-dialog-footer { align-items: stretch; flex-direction: column-reverse; }
+            .settings-dialog-footer .btn { width: 100%; }
         }
     </style>
 </head>
@@ -1510,13 +1724,13 @@
                         <span class="status-dot"></span>
                         <span id="nav-status-text">正在同步</span>
                     </div>
-                    <button class="btn btn-secondary" onclick="openAccountModal()">
+                    <button class="btn btn-secondary" onclick="openSettingsModal()" aria-label="打开设置">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.64 5.64l2.12 2.12m8.48 8.48 2.12 2.12m0-12.72-2.12 2.12m-8.48 8.48-2.12 2.12"></path>
                             <circle cx="12" cy="12" r="4"></circle>
                         </svg>
-                        可选扩展
+                        设置
                     </button>
                 </div>
             </div>
@@ -1535,16 +1749,28 @@
             </div>
 
             <div class="signal-map" aria-label="协议入口到 DLNA 输出的实时链路">
-                <svg class="signal-lines" viewBox="0 0 490 250" aria-hidden="true">
-                    <path class="signal-line dlna" d="M122 44 C190 44 176 115 242 124 S340 124 383 124" />
-                    <path class="signal-line airplay" d="M122 113 C188 113 185 122 242 124 S340 124 383 124" />
-                    <path class="signal-line miplay" d="M122 182 C190 182 176 133 242 124 S340 124 383 124" />
-                </svg>
-                <div class="protocol-stack">
+                <div class="protocol-rack">
                     <div class="protocol-chip" id="protocol-dlna"><i></i><span>DLNA</span><small>direct</small></div>
                     <div class="protocol-chip" id="protocol-airplay"><i></i><span>AirPlay</span><small>lossless</small></div>
                     <div class="protocol-chip" id="protocol-miplay"><i></i><span>MiPlay</span><small>native</small></div>
                 </div>
+                <svg class="weave-canvas" viewBox="0 0 520 180" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="dawn-green" x1="0" x2="1"><stop stop-color="#75b79e" stop-opacity=".15"/><stop offset="1" stop-color="#2f8468"/></linearGradient>
+                        <linearGradient id="dawn-sage" x1="0" x2="1"><stop stop-color="#a9bbb1" stop-opacity=".12"/><stop offset="1" stop-color="#76988a"/></linearGradient>
+                        <linearGradient id="dawn-warm" x1="0" x2="1"><stop stop-color="#efb48f" stop-opacity=".12"/><stop offset="1" stop-color="#df8455"/></linearGradient>
+                    </defs>
+                    <path class="weave-guide" d="M18 30 C112 24 156 62 230 84 S311 90 360 90"/>
+                    <path class="weave-guide" d="M18 90 C106 58 162 121 230 91 S311 90 360 90"/>
+                    <path class="weave-guide" d="M18 150 C112 157 156 122 230 96 S311 90 360 90"/>
+                    <path id="flow-dlna" class="weave-flow dlna" d="M18 30 C112 24 156 62 230 84 S311 90 360 90"/>
+                    <path id="flow-airplay" class="weave-flow airplay" d="M18 90 C106 58 162 121 230 91 S311 90 360 90"/>
+                    <path id="flow-miplay" class="weave-flow miplay" d="M18 150 C112 157 156 122 230 96 S311 90 360 90"/>
+                    <path class="weave-flow dlna" d="M360 90 C399 90 423 90 452 90"/>
+                    <circle class="weave-particle dlna" r="3"><animateMotion dur="5.4s" repeatCount="indefinite"><mpath href="#flow-dlna"/></animateMotion></circle>
+                    <circle class="weave-particle airplay" r="3"><animateMotion dur="6.2s" begin="-2.1s" repeatCount="indefinite"><mpath href="#flow-airplay"/></animateMotion></circle>
+                    <circle class="weave-particle miplay" r="3"><animateMotion dur="5.8s" begin="-3.8s" repeatCount="indefinite"><mpath href="#flow-miplay"/></animateMotion></circle>
+                </svg>
                 <div class="fabric-core" aria-hidden="true">CF</div>
                 <div class="output-node">
                     <span id="signal-output-name">等待输出</span>
@@ -1597,15 +1823,16 @@
             </div>
             </div>
 
-            <details class="settings-shell">
-                <summary>
-                    <div class="settings-summary-title">
-                        系统与声音偏好
-                        <small>协议端口、播放恢复与设备标识</small>
+            <div class="modal-overlay settings-modal" id="modal-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+                <div class="modal settings-dialog">
+                    <div class="modal-header settings-dialog-header">
+                        <div>
+                            <div class="modal-title" id="settings-title">系统与声音偏好</div>
+                            <div class="modal-desc">管理播放恢复、协议端口与 CastFabric 设备标识</div>
+                        </div>
+                        <button class="modal-close" onclick="closeSettingsModal()" aria-label="关闭设置">×</button>
                     </div>
-                    <span class="settings-arrow" aria-hidden="true">＋</span>
-                </summary>
-                <div class="settings-panel">
+                    <div class="settings-panel">
                     <div class="settings-card">
                         <div class="section">
                             <span class="section-title">Playback behavior</span>
@@ -1691,13 +1918,15 @@
                                 </div>
                             </div>
                         </div>
-                        <div style="display:flex; justify-content:flex-end;">
-                            <button class="btn btn-primary" id="btn-save-experimental" onclick="saveExperimental()">保存设置</button>
-                        </div>
-                        <div class="tip" id="tip-experimental"></div>
                     </div>
                 </div>
-            </details>
+                    <div class="tip" id="tip-experimental"></div>
+                    <div class="settings-dialog-footer">
+                        <button class="btn btn-secondary extension-link" onclick="openXiaomiExtension()">小米云兼容扩展</button>
+                        <button class="btn btn-primary" id="btn-save-experimental" onclick="saveExperimental()">保存设置</button>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <footer class="page-footer">
@@ -2573,8 +2802,37 @@
         }
 
         // UI Utils
-        function openAccountModal() { document.getElementById('modal-account').classList.add('active'); }
-        function closeAccountModal() { document.getElementById('modal-account').classList.remove('active'); }
+        function openSettingsModal() {
+            document.getElementById('modal-settings').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('modal-settings').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function openXiaomiExtension() {
+            closeSettingsModal();
+            openAccountModal();
+        }
+
+        function openAccountModal() {
+            document.getElementById('modal-account').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeAccountModal() {
+            document.getElementById('modal-account').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            closeSettingsModal();
+            closeAccountModal();
+            closeUpdateModal();
+        });
 
         function showTip(el, msg, type, duration = 5000) {
             el.textContent = msg;
