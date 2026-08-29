@@ -16,6 +16,7 @@ from miair.identity import (
     format_device_name,
     normalize_device_prefix,
 )
+from miair.targets import OutputTargetConfig, normalize_target_id
 
 
 log = logging.getLogger("miair")
@@ -116,6 +117,9 @@ class Config:
     miplay_content_type: str = "audio/wav"
     # MiPlay 到音箱的实时音频封装：wav 或标准 raw L16。
     miplay_stream_format: str = "wav"
+    # Vendor-neutral playback targets. Legacy speakers remain during migration.
+    default_target_id: str = ""
+    targets: dict = field(default_factory=dict)
     speakers: dict = field(default_factory=dict)
 
     # 保存配置的线程锁（类级别共享）
@@ -165,10 +169,71 @@ class Config:
             self.hostname = env_hostname
         if not self.hostname:
             self.hostname = self._detect_local_ip()
+        self._normalize_targets()
+        self._migrate_legacy_targets()
 
     def get_device_name(self, target_name: str = "") -> str:
         """返回各输入协议统一使用的可发现设备名称。"""
         return format_device_name(self.device_name_prefix, target_name)
+
+    def _normalize_targets(self) -> None:
+        normalized = {}
+        for key, value in self.targets.items():
+            if isinstance(value, OutputTargetConfig):
+                target = value
+            else:
+                payload = dict(value)
+                payload.setdefault("id", key)
+                target = OutputTargetConfig(**payload)
+            normalized[target.id] = target
+        self.targets = normalized
+        self.default_target_id = normalize_target_id(self.default_target_id)
+
+    def _migrate_legacy_targets(self) -> None:
+        """Create compatibility targets without deleting legacy speaker data."""
+        if not self.targets:
+            for did in self.get_did_list():
+                speaker = self.get_speaker(did)
+                if not speaker.device_id:
+                    continue
+                target_id = normalize_target_id(speaker.device_id)
+                self.targets[target_id] = OutputTargetConfig(
+                    id=target_id,
+                    kind="dlna",
+                    name=speaker.get_dlna_name(),
+                    location=speaker.local_dlna_location,
+                    udn=target_id,
+                    enabled=speaker.enabled,
+                    virtual_udn=speaker.udn,
+                    legacy_did=did,
+                )
+        if not self.default_target_id:
+            enabled = self.get_enabled_targets()
+            if enabled:
+                self.default_target_id = enabled[0].id
+
+    def get_target(self, target_id: str) -> OutputTargetConfig | None:
+        normalized_id = normalize_target_id(target_id)
+        target = self.targets.get(normalized_id)
+        if isinstance(target, dict):
+            target = OutputTargetConfig(id=normalized_id, **target)
+            self.targets[normalized_id] = target
+        return target
+
+    def get_enabled_targets(self) -> list[OutputTargetConfig]:
+        result = []
+        for target_id in list(self.targets):
+            target = self.get_target(target_id)
+            if target and target.enabled:
+                result.append(target)
+        return result
+
+    def get_default_target(self) -> OutputTargetConfig | None:
+        target = self.get_target(self.default_target_id)
+        if target and target.enabled:
+            return target
+        enabled = self.get_enabled_targets()
+        return enabled[0] if enabled else None
 
     @staticmethod
     def _detect_local_ip() -> str:
