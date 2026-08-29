@@ -1212,6 +1212,13 @@
         .tagline { display: none; }
 
         .nav-actions { align-items: center; }
+        .language-toggle {
+            min-width: 48px;
+            padding-inline: 13px;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 10px;
+            letter-spacing: .08em;
+        }
         .nav-state {
             display: flex;
             align-items: center;
@@ -1471,6 +1478,7 @@
             .nav-state { display: none; }
             .nav-actions .btn { width: 42px; padding: 0; font-size: 0; }
             .nav-actions .btn svg { margin: 0; }
+            .nav-actions .language-toggle { width: 42px; font-size: 10px; }
             .signal-stage { min-height: 650px; padding: 50px 4px 310px; }
             .signal-copy h1 { font-size: 44px; line-height: 1.08; }
             .signal-copy p { font-size: 13px; }
@@ -1722,15 +1730,18 @@
                 <div class="nav-actions">
                     <div class="nav-state" aria-live="polite">
                         <span class="status-dot"></span>
-                        <span id="nav-status-text">正在同步</span>
+                        <span id="nav-status-text" data-i18n="nav.syncing">正在同步</span>
                     </div>
-                    <button class="btn btn-secondary" onclick="openSettingsModal()" aria-label="打开设置">
+                    <button class="btn btn-secondary language-toggle" id="language-toggle" onclick="toggleLocale()" aria-label="Switch to English">
+                        <span id="language-toggle-label">EN</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="openSettingsModal()" aria-label="打开设置" data-i18n-aria-label="nav.openSettings">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.64 5.64l2.12 2.12m8.48 8.48 2.12 2.12m0-12.72-2.12 2.12m-8.48 8.48-2.12 2.12"></path>
                             <circle cx="12" cy="12" r="4"></circle>
                         </svg>
-                        设置
+                        <span data-i18n="nav.settings">设置</span>
                     </button>
                 </div>
             </div>
@@ -1738,17 +1749,17 @@
 
         <section class="signal-stage" aria-labelledby="signal-title">
             <div class="signal-copy">
-                <div class="eyebrow">Local audio, woven together</div>
-                <h1 id="signal-title">让每一种投送，<br>抵达同一个<em>声场</em>。</h1>
-                <p>CastFabric 将 DLNA、AirPlay 与妙播编织成一条本地音频路径。无需云端，也无需改变你的音箱。</p>
+                <div class="eyebrow" data-i18n="hero.eyebrow">本地投送，自在播放</div>
+                <h1 id="signal-title" data-i18n-html="hero.title">不挑协议，<br><em>投了就播。</em></h1>
+                <p data-i18n="hero.description">AirPlay、妙播、DLNA，无论从哪里投，都在你的本地音箱直接播放。</p>
 
                 <div id="status-bar" class="status-bar status-stopped">
                     <span class="status-dot"></span>
-                    <span id="status-text">正在同步信号...</span>
+                    <span id="status-text" data-i18n="status.syncing">正在同步信号…</span>
                 </div>
             </div>
 
-            <div class="signal-map" aria-label="协议入口到 DLNA 输出的实时链路">
+            <div class="signal-map" aria-label="协议入口到 DLNA 输出的实时链路" data-i18n-aria-label="hero.signalMapLabel">
                 <div class="protocol-rack">
                     <div class="protocol-chip" id="protocol-dlna"><i></i><span>DLNA</span><small>direct</small></div>
                     <div class="protocol-chip" id="protocol-airplay"><i></i><span>AirPlay</span><small>lossless</small></div>
@@ -1773,7 +1784,7 @@
                 </svg>
                 <div class="fabric-core" aria-hidden="true">CF</div>
                 <div class="output-node">
-                    <span id="signal-output-name">等待输出</span>
+                    <span id="signal-output-name" data-i18n="output.waiting">等待输出</span>
                     <small>DLNA renderer</small>
                 </div>
             </div>
@@ -1782,29 +1793,29 @@
         <main class="workspace">
             <div class="workspace-head">
                 <div>
-                    <div class="workspace-kicker">Routing workspace</div>
-                    <h2>此刻的声音路径</h2>
+                    <div class="workspace-kicker" data-i18n="workspace.kicker">投送路径</div>
+                    <h2 data-i18n="workspace.title">此刻的播放路径</h2>
                 </div>
-                <div class="workspace-note">入口由 CastFabric 接管，声音始终落到标准 DLNA 输出</div>
+                <div class="workspace-note" data-i18n="workspace.note">CastFabric 接住不同协议，再把声音送到标准 DLNA 音箱</div>
             </div>
 
             <div class="main-grid">
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">输出目标</span>
+                    <span class="card-title" data-i18n="workspace.outputTarget">输出音箱</span>
                     <span class="card-index">01 / OUTPUT</span>
                 </div>
 
                 <div id="device-list">
                     <div style="text-align:center; padding:40px; color:var(--text-muted); font-size:12px;">
-                        正在聆听局域网设备…
+                        <span data-i18n="output.scanning">正在查找局域网音箱…</span>
                     </div>
                 </div>
 
                 <div class="card-actions">
-                    <span class="scan-copy">自动发现同网段 MediaRenderer</span>
+                    <span class="scan-copy" data-i18n="output.discoveryNote">自动发现同一网络中的 DLNA 音箱</span>
                     <button class="btn btn-primary" id="btn-save" disabled onclick="saveSelection()">
-                        应用路径
+                        <span data-i18n="actions.applyRoute">应用路径</span>
                     </button>
                 </div>
                 <div class="tip" id="tip-save"></div>
@@ -1812,12 +1823,12 @@
 
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">正在播放</span>
+                    <span class="card-title" data-i18n="workspace.nowPlaying">正在播放</span>
                     <span class="card-index">02 / SIGNAL</span>
                 </div>
                 <div id="renderers-list">
                     <div style="text-align:center; padding:34px; color:var(--text-muted); font-size:12px;">
-                        声场安静，等待新的投送
+                        <span data-i18n="playback.waiting">还没有声音，等你来投</span>
                     </div>
                 </div>
             </div>
@@ -1827,19 +1838,19 @@
                 <div class="modal settings-dialog">
                     <div class="modal-header settings-dialog-header">
                         <div>
-                            <div class="modal-title" id="settings-title">系统与声音偏好</div>
-                            <div class="modal-desc">管理播放恢复、协议端口与 CastFabric 设备标识</div>
+                            <div class="modal-title" id="settings-title" data-i18n="settings.title">播放与设备设置</div>
+                            <div class="modal-desc" data-i18n="settings.description">管理播放恢复、协议端口和设备名称</div>
                         </div>
-                        <button class="modal-close" onclick="closeSettingsModal()" aria-label="关闭设置">×</button>
+                        <button class="modal-close" onclick="closeSettingsModal()" aria-label="关闭设置" data-i18n-aria-label="settings.close">×</button>
                     </div>
                     <div class="settings-panel">
                     <div class="settings-card">
                         <div class="section">
-                            <span class="section-title">Playback behavior</span>
+                            <span class="section-title" data-i18n="settings.playbackSection">播放行为</span>
                             <div class="toggle-row">
                                 <div class="toggle-info">
-                                    <div class="toggle-title">打断后续播</div>
-                                    <div class="toggle-desc">被语音唤醒等操作打断后自动恢复</div>
+                                    <div class="toggle-title" data-i18n="settings.autoResume">打断后继续播放</div>
+                                    <div class="toggle-desc" data-i18n="settings.autoResumeDesc">被语音唤醒等操作打断后自动恢复</div>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox" id="chk-auto-resume">
@@ -1849,8 +1860,8 @@
 
                             <div class="toggle-row" style="margin-top:16px;">
                                 <div class="toggle-info">
-                                    <div class="toggle-title">自动故障恢复</div>
-                                    <div class="toggle-desc">检测到服务异常时尝试重新启动</div>
+                                    <div class="toggle-title" data-i18n="settings.autoRestart">自动故障恢复</div>
+                                    <div class="toggle-desc" data-i18n="settings.autoRestartDesc">检测到服务异常时尝试重新启动</div>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox" id="chk-auto-restart">
@@ -1859,23 +1870,23 @@
                             </div>
 
                             <div style="margin-top:20px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                                <span style="font-size:12px; color:var(--text-secondary);">续播延迟</span>
+                                <span style="font-size:12px; color:var(--text-secondary);" data-i18n="settings.resumeDelay">续播延迟</span>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <input type="number" class="form-input" id="input-resume-delay" style="width:66px; padding:7px 9px;" value="5" min="1" max="15">
-                                    <span style="font-size:10px; color:var(--text-muted);">秒</span>
+                                    <span style="font-size:10px; color:var(--text-muted);" data-i18n="units.seconds">秒</span>
                                 </div>
                             </div>
 
                             <div style="margin-top:20px; opacity:.5; pointer-events:none;" id="div-default-volume">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                    <span style="font-size:12px; color:var(--text-secondary);">默认音量</span>
+                                    <span style="font-size:12px; color:var(--text-secondary);" data-i18n="settings.defaultVolume">默认音量</span>
                                     <span id="volume-display" style="font-size:11px; color:var(--accent);">38%</span>
                                 </div>
                                 <input type="range" id="input-default-volume" min="1" max="100" value="38" style="width:100%;" oninput="document.getElementById('volume-display').textContent = this.value + '%'">
                             </div>
 
                             <div class="toggle-row" style="margin-top:16px;">
-                                <div class="toggle-info"><div class="toggle-title">跟随设备当前音量</div></div>
+                                <div class="toggle-info"><div class="toggle-title" data-i18n="settings.followVolume">跟随音箱当前音量</div></div>
                                 <label class="switch">
                                     <input type="checkbox" id="chk-follow-volume" checked onchange="toggleDefaultVolume()">
                                     <span class="slider"></span>
@@ -1886,21 +1897,21 @@
 
                     <div class="settings-card">
                         <div class="section">
-                            <span class="section-title">Network & identity</span>
+                            <span class="section-title" data-i18n="settings.networkSection">网络与设备</span>
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                                 <div class="form-group">
-                                    <label class="form-label">DLNA 端口</label>
+                                    <label class="form-label" data-i18n="settings.dlnaPort">DLNA 端口</label>
                                     <input type="number" class="form-input" id="input-dlna-port" placeholder="8200">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Web 端口</label>
+                                    <label class="form-label" data-i18n="settings.webPort">Web 端口</label>
                                     <input type="number" class="form-input" id="input-web-port" placeholder="8300">
                                 </div>
                             </div>
                             <div class="toggle-row" style="margin-top:4px;">
                                 <div class="toggle-info">
-                                    <div class="toggle-title">妙播接收</div>
-                                    <div class="toggle-desc">在小米音乐应用中发布本机入口</div>
+                                    <div class="toggle-title" data-i18n="settings.miplayReceiver">妙播接收</div>
+                                    <div class="toggle-desc" data-i18n="settings.miplayReceiverDesc">在小米音乐应用中显示 CastFabric</div>
                                 </div>
                                 <label class="switch">
                                     <input type="checkbox" id="chk-enable-miplay">
@@ -1909,11 +1920,11 @@
                             </div>
                             <div style="display:grid; grid-template-columns:1.35fr .65fr; gap:12px; margin-top:20px;">
                                 <div class="form-group">
-                                    <label class="form-label">设备名称前缀</label>
+                                    <label class="form-label" data-i18n="settings.devicePrefix">设备名称前缀</label>
                                     <input type="text" class="form-input" id="input-miplay-name" placeholder="CastFabric">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">妙播端口</label>
+                                    <label class="form-label" data-i18n="settings.miplayPort">妙播端口</label>
                                     <input type="number" class="form-input" id="input-miplay-port" placeholder="8899">
                                 </div>
                             </div>
@@ -1922,16 +1933,16 @@
                 </div>
                     <div class="tip" id="tip-experimental"></div>
                     <div class="settings-dialog-footer">
-                        <button class="btn btn-secondary extension-link" onclick="openXiaomiExtension()">小米云兼容扩展</button>
-                        <button class="btn btn-primary" id="btn-save-experimental" onclick="saveExperimental()">保存设置</button>
+                        <button class="btn btn-secondary extension-link" onclick="openXiaomiExtension()" data-i18n="settings.xiaomiExtension">小米云兼容扩展</button>
+                        <button class="btn btn-primary" id="btn-save-experimental" onclick="saveExperimental()" data-i18n="actions.saveSettings">保存设置</button>
                     </div>
                 </div>
             </div>
         </main>
 
         <footer class="page-footer">
-            <span>Protocols in. Sound out.</span>
-            <span><a href="https://github.com/wangerzi/CastFabric" class="footer-link" target="_blank" rel="noreferrer">Open source on GitHub</a> · <span id="version-text">V0.10.0a1</span></span>
+            <span data-i18n="footer.tagline">不挑协议，投了就播。</span>
+            <span><a href="https://github.com/wangerzi/CastFabric" class="footer-link" target="_blank" rel="noreferrer" data-i18n="footer.github">GitHub 开源项目</a> · <span id="version-text">V0.10.0a1</span></span>
         </footer>
     </div>
 
@@ -1939,14 +1950,14 @@
     <div class="modal-overlay" id="modal-account">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title">小米云扩展</div>
-                <div class="modal-desc">仅用于不支持原生 DLNA 的兼容设备；标准 DLNA 无需登录</div>
+                <div class="modal-title" data-i18n="xiaomi.title">小米云兼容扩展</div>
+                <div class="modal-desc" data-i18n="xiaomi.description">只用于不支持原生 DLNA 的兼容设备；标准 DLNA 无需登录</div>
             </div>
 
             <div class="toggle-row" style="margin-bottom:20px;">
                 <div class="toggle-info">
-                    <div class="toggle-title">启用小米云回退</div>
-                    <div class="toggle-desc">默认关闭；开启后才会使用下面的凭据</div>
+                    <div class="toggle-title" data-i18n="xiaomi.enable">启用小米云回退</div>
+                    <div class="toggle-desc" data-i18n="xiaomi.enableDesc">默认关闭；开启后才会使用下面的凭据</div>
                 </div>
                 <label class="switch">
                     <input type="checkbox" id="chk-enable-xiaomi">
@@ -1956,26 +1967,24 @@
 
             <div class="form-group">
                 <label class="form-label">userId</label>
-                <input type="text" class="form-input" id="input-userId" placeholder="通常是一串数字">
+                <input type="text" class="form-input" id="input-userId" placeholder="通常是一串数字" data-i18n-placeholder="xiaomi.userIdPlaceholder">
             </div>
 
             <div class="form-group">
                 <label class="form-label">passToken</label>
-                <input type="password" class="form-input" id="input-passToken" placeholder="登录生成的访问令牌">
+                <input type="password" class="form-input" id="input-passToken" placeholder="登录生成的访问令牌" data-i18n-placeholder="xiaomi.passTokenPlaceholder">
             </div>
 
-            <div class="help-block">
-                打开 <a href="https://account.xiaomi.com" class="text-link" target="_blank">account.xiaomi.com</a> 并登录，按下
-                F12 进入开发人员工具 → 选择 应用程序 (Application) → Cookies，即可找到
-                <code>userId</code> 与 <code>passToken</code>。
+            <div class="help-block" data-i18n-html="xiaomi.help">
+                登录 <a href="https://account.xiaomi.com" class="text-link" target="_blank">account.xiaomi.com</a>，打开开发者工具 → 应用程序 (Application) → Cookies，找到 <code>userId</code> 和 <code>passToken</code>。
             </div>
 
             <div class="tip" id="tip-account"></div>
 
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeAccountModal()">取消</button>
+                <button class="btn btn-secondary" onclick="closeAccountModal()" data-i18n="actions.cancel">取消</button>
                 <button class="btn btn-primary" id="btn-login" onclick="loginXiaomi()">
-                    登录
+                    <span data-i18n="actions.save">保存</span>
                 </button>
             </div>
         </div>
@@ -1985,46 +1994,298 @@
     <div class="modal-overlay update-modal" id="modal-update">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title" id="update-modal-title">发现新版本</div>
+                <div class="modal-title" id="update-modal-title" data-i18n="update.title">发现新版本</div>
                 <div class="modal-desc" id="update-modal-desc"></div>
             </div>
 
             <div class="update-version-row">
                 <div class="update-version-info">
-                    <span class="update-version-label">当前版本</span>
+                    <span class="update-version-label" data-i18n="update.currentVersion">当前版本</span>
                     <span class="update-version-value" id="update-current-ver"></span>
                 </div>
                 <span class="update-version-arrow">&rarr;</span>
                 <div class="update-version-info update-version-new">
-                    <span class="update-version-label">最新版本</span>
+                    <span class="update-version-label" data-i18n="update.latestVersion">最新版本</span>
                     <span class="update-version-value" id="update-latest-ver"></span>
                 </div>
             </div>
 
             <div class="release-notes-section" id="release-notes-section" style="display:none;">
-                <div class="release-notes-header">更新日志</div>
+                <div class="release-notes-header" data-i18n="update.releaseNotes">更新日志</div>
                 <div class="release-notes-content" id="release-notes-content"></div>
             </div>
 
             <div id="update-progress" style="display:none;">
                 <div class="update-progress">
                     <div class="update-spinner"></div>
-                    <span>正在更新，请勿关闭页面...</span>
+                    <span data-i18n="update.inProgress">正在更新，请勿关闭页面…</span>
                 </div>
             </div>
 
             <div id="update-error" style="display:none;"></div>
 
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="btn-update-cancel" onclick="closeUpdateModal()">稍后更新</button>
+                <button class="btn btn-secondary" id="btn-update-cancel" onclick="closeUpdateModal()" data-i18n="update.later">稍后更新</button>
                 <button class="btn btn-primary" id="btn-update-confirm" onclick="executeUpdate()">
-                    一键更新
+                    <span data-i18n="update.now">立即更新</span>
                 </button>
             </div>
         </div>
     </div>
 
     <script>
+        const LOCALE_STORAGE_KEY = 'castfabric.locale';
+        const I18N = {
+            'zh-CN': {
+                'page.title': 'CastFabric — 不挑协议，投了就播。',
+                'nav.settings': '设置',
+                'nav.openSettings': '打开设置',
+                'nav.syncing': '正在同步',
+                'nav.online': '本地链路在线',
+                'nav.pending': '链路待确认',
+                'hero.eyebrow': '本地投送，自在播放',
+                'hero.title': '不挑协议，<br><em>投了就播。</em>',
+                'hero.description': 'AirPlay、妙播、DLNA，无论从哪里投，都在你的本地音箱直接播放。',
+                'hero.signalMapLabel': '协议入口到 DLNA 输出的实时链路',
+                'workspace.kicker': '投送路径',
+                'workspace.title': '此刻的播放路径',
+                'workspace.note': 'CastFabric 接住不同协议，再把声音送到标准 DLNA 音箱',
+                'workspace.outputTarget': '输出音箱',
+                'workspace.nowPlaying': '正在播放',
+                'output.scanning': '正在查找局域网音箱…',
+                'output.discoveryNote': '自动发现同一网络中的 DLNA 音箱',
+                'output.waiting': '等待输出',
+                'output.dlnaFallback': 'DLNA 输出',
+                'output.notFound': '没有找到局域网 DLNA 音箱，请确认设备已开机并连接到同一网络',
+                'output.notFoundShort': '没有找到局域网 DLNA 音箱',
+                'output.rescan': '重新扫描',
+                'output.online': '在线',
+                'output.offlineCached': '离线（使用缓存）',
+                'output.default': '默认输出',
+                'output.accountNotFound': '没有找到兼容设备，请检查小米云扩展设置',
+                'actions.applyRoute': '应用路径',
+                'actions.saveSettings': '保存设置',
+                'actions.save': '保存',
+                'actions.cancel': '取消',
+                'actions.saving': '正在保存',
+                'actions.syncing': '正在同步',
+                'actions.saveFailed': '保存失败',
+                'actions.noChanges': '设置没有变化',
+                'playback.waiting': '还没有声音，等你来投',
+                'playback.noMedia': '暂无媒体',
+                'playback.idle': '空闲',
+                'playback.stopped': '已停止',
+                'playback.playing': '播放中',
+                'playback.paused': '已暂停',
+                'playback.loading': '加载中',
+                'playback.standby': '待机',
+                'playback.nowPlaying': '正在播放',
+                'playback.from': '来自 {source}',
+                'source.appleDevice': '苹果设备',
+                'source.externalAudio': '外部音频',
+                'status.syncing': '正在同步信号…',
+                'status.readySingle': '链路已就绪 · 1 个入口 · 本地 DLNA 直连',
+                'status.ready': '链路已就绪 · {count} 个入口 · 本地 DLNA 直连',
+                'status.degraded': '入口已发布 · 输出音箱暂时离线',
+                'status.broadcastingSingle': '1 个投送入口正在广播',
+                'status.broadcasting': '{count} 个投送入口正在广播',
+                'status.chooseOutput': '选择一个局域网音箱，开始播放',
+                'status.connecting': '正在连接局域网音箱…',
+                'settings.title': '播放与设备设置',
+                'settings.description': '管理播放恢复、协议端口和设备名称',
+                'settings.close': '关闭设置',
+                'settings.playbackSection': '播放行为',
+                'settings.autoResume': '打断后继续播放',
+                'settings.autoResumeDesc': '被语音唤醒等操作打断后自动恢复',
+                'settings.autoRestart': '自动故障恢复',
+                'settings.autoRestartDesc': '检测到服务异常时尝试重新启动',
+                'settings.resumeDelay': '续播延迟',
+                'settings.defaultVolume': '默认音量',
+                'settings.followVolume': '跟随音箱当前音量',
+                'settings.networkSection': '网络与设备',
+                'settings.dlnaPort': 'DLNA 端口',
+                'settings.webPort': 'Web 端口',
+                'settings.miplayReceiver': '妙播接收',
+                'settings.miplayReceiverDesc': '在小米音乐应用中显示 CastFabric',
+                'settings.devicePrefix': '设备名称前缀',
+                'settings.miplayPort': '妙播端口',
+                'settings.xiaomiExtension': '小米云兼容扩展',
+                'settings.compatibilityMode': '兼容模式',
+                'units.seconds': '秒',
+                'xiaomi.title': '小米云兼容扩展',
+                'xiaomi.description': '只用于不支持原生 DLNA 的兼容设备；标准 DLNA 无需登录',
+                'xiaomi.enable': '启用小米云回退',
+                'xiaomi.enableDesc': '默认关闭；开启后才会使用下面的凭据',
+                'xiaomi.userIdPlaceholder': '通常是一串数字',
+                'xiaomi.passTokenPlaceholder': '登录生成的访问令牌',
+                'xiaomi.help': '登录 <a href="https://account.xiaomi.com" class="text-link" target="_blank">account.xiaomi.com</a>，打开开发者工具 → 应用程序 (Application) → Cookies，找到 <code>userId</code> 和 <code>passToken</code>。',
+                'xiaomi.incomplete': '请填写完整的账号信息',
+                'update.title': '发现新版本',
+                'update.currentVersion': '当前版本',
+                'update.latestVersion': '最新版本',
+                'update.releaseNotes': '更新日志',
+                'update.inProgress': '正在更新，请勿关闭页面…',
+                'update.later': '稍后更新',
+                'update.now': '立即更新',
+                'update.updating': '更新中…',
+                'update.success': '更新成功',
+                'update.restarting': '更新成功，正在重启服务…',
+                'update.failed': '更新失败：{error}',
+                'update.retry': '重试',
+                'update.unknownError': '未知错误',
+                'update.available': '发现新版本',
+                'footer.tagline': '不挑协议，投了就播。',
+                'footer.github': 'GitHub 开源项目',
+                'device.unknown': '未知音箱'
+            },
+            'en': {
+                'page.title': 'CastFabric — Any protocol. Just press play.',
+                'nav.settings': 'Settings',
+                'nav.openSettings': 'Open settings',
+                'nav.syncing': 'Syncing',
+                'nav.online': 'Local route online',
+                'nav.pending': 'Route needs attention',
+                'hero.eyebrow': 'Local casting, effortless listening',
+                'hero.title': 'Any protocol.<br><em>Just press play.</em>',
+                'hero.description': 'AirPlay, MiPlay, or DLNA—cast from anywhere and play directly on your local speaker.',
+                'hero.signalMapLabel': 'Live route from casting protocols to the DLNA output',
+                'workspace.kicker': 'Casting routes',
+                'workspace.title': 'Your playback route',
+                'workspace.note': 'CastFabric receives each protocol and delivers the sound to a standard DLNA speaker',
+                'workspace.outputTarget': 'Output speaker',
+                'workspace.nowPlaying': 'Now playing',
+                'output.scanning': 'Looking for speakers on your network…',
+                'output.discoveryNote': 'Automatically discovers DLNA speakers on this network',
+                'output.waiting': 'Awaiting output',
+                'output.dlnaFallback': 'DLNA output',
+                'output.notFound': 'No local DLNA speaker found. Make sure it is powered on and connected to the same network.',
+                'output.notFoundShort': 'No local DLNA speaker found',
+                'output.rescan': 'Scan again',
+                'output.online': 'Online',
+                'output.offlineCached': 'Offline (cached)',
+                'output.default': 'Default output',
+                'output.accountNotFound': 'No compatible device found. Check the Xiaomi Cloud extension settings.',
+                'actions.applyRoute': 'Apply route',
+                'actions.saveSettings': 'Save settings',
+                'actions.save': 'Save',
+                'actions.cancel': 'Cancel',
+                'actions.saving': 'Saving',
+                'actions.syncing': 'Syncing',
+                'actions.saveFailed': 'Save failed',
+                'actions.noChanges': 'No settings changed',
+                'playback.waiting': 'Nothing playing yet—cast something when you are ready',
+                'playback.noMedia': 'No media',
+                'playback.idle': 'Idle',
+                'playback.stopped': 'Stopped',
+                'playback.playing': 'Playing',
+                'playback.paused': 'Paused',
+                'playback.loading': 'Loading',
+                'playback.standby': 'Standby',
+                'playback.nowPlaying': 'Playing',
+                'playback.from': 'From {source}',
+                'source.appleDevice': 'Apple device',
+                'source.externalAudio': 'External audio',
+                'status.syncing': 'Syncing signals…',
+                'status.readySingle': 'Route ready · 1 input · Local DLNA direct',
+                'status.ready': 'Route ready · {count} inputs · Local DLNA direct',
+                'status.degraded': 'Inputs published · Output speaker offline',
+                'status.broadcastingSingle': '1 casting input broadcasting',
+                'status.broadcasting': '{count} casting inputs broadcasting',
+                'status.chooseOutput': 'Choose a local speaker to start playing',
+                'status.connecting': 'Connecting to the local speaker…',
+                'settings.title': 'Playback & device settings',
+                'settings.description': 'Manage playback recovery, protocol ports, and device identity',
+                'settings.close': 'Close settings',
+                'settings.playbackSection': 'Playback behavior',
+                'settings.autoResume': 'Resume after interruption',
+                'settings.autoResumeDesc': 'Resume automatically after a voice assistant or another interruption',
+                'settings.autoRestart': 'Automatic recovery',
+                'settings.autoRestartDesc': 'Restart automatically when the service becomes unavailable',
+                'settings.resumeDelay': 'Resume delay',
+                'settings.defaultVolume': 'Default volume',
+                'settings.followVolume': 'Use the speaker’s current volume',
+                'settings.networkSection': 'Network & device',
+                'settings.dlnaPort': 'DLNA port',
+                'settings.webPort': 'Web port',
+                'settings.miplayReceiver': 'MiPlay receiver',
+                'settings.miplayReceiverDesc': 'Show CastFabric inside Xiaomi Music',
+                'settings.devicePrefix': 'Device name prefix',
+                'settings.miplayPort': 'MiPlay port',
+                'settings.xiaomiExtension': 'Xiaomi Cloud compatibility',
+                'settings.compatibilityMode': 'Compatibility mode',
+                'units.seconds': 'sec',
+                'xiaomi.title': 'Xiaomi Cloud compatibility',
+                'xiaomi.description': 'Only for compatible devices without native DLNA. Standard DLNA requires no sign-in.',
+                'xiaomi.enable': 'Enable Xiaomi Cloud fallback',
+                'xiaomi.enableDesc': 'Off by default. Credentials below are used only when enabled.',
+                'xiaomi.userIdPlaceholder': 'Usually a numeric ID',
+                'xiaomi.passTokenPlaceholder': 'Access token created at sign-in',
+                'xiaomi.help': 'Sign in at <a href="https://account.xiaomi.com" class="text-link" target="_blank">account.xiaomi.com</a>, open Developer Tools → Application → Cookies, then find <code>userId</code> and <code>passToken</code>.',
+                'xiaomi.incomplete': 'Enter the complete account information',
+                'update.title': 'Update available',
+                'update.currentVersion': 'Current version',
+                'update.latestVersion': 'Latest version',
+                'update.releaseNotes': 'Release notes',
+                'update.inProgress': 'Updating. Keep this page open…',
+                'update.later': 'Later',
+                'update.now': 'Update now',
+                'update.updating': 'Updating…',
+                'update.success': 'Updated',
+                'update.restarting': 'Update complete. Restarting the service…',
+                'update.failed': 'Update failed: {error}',
+                'update.retry': 'Retry',
+                'update.unknownError': 'Unknown error',
+                'update.available': 'Update available',
+                'footer.tagline': 'Any protocol. Just press play.',
+                'footer.github': 'Open source on GitHub',
+                'device.unknown': 'Unknown speaker'
+            }
+        };
+
+        let currentLocale = localStorage.getItem(LOCALE_STORAGE_KEY) === 'en' ? 'en' : 'zh-CN';
+        let _lastSpeakers = null;
+
+        function t(key, params = {}) {
+            const template = I18N[currentLocale][key] ?? I18N['zh-CN'][key] ?? key;
+            return String(template).replace(/\{(\w+)\}/g, (_, name) => params[name] ?? `{${name}}`);
+        }
+
+        function applyTranslations(root = document) {
+            root.querySelectorAll('[data-i18n]').forEach(el => {
+                el.textContent = t(el.dataset.i18n);
+            });
+            root.querySelectorAll('[data-i18n-html]').forEach(el => {
+                el.innerHTML = t(el.dataset.i18nHtml);
+            });
+            root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                el.setAttribute('placeholder', t(el.dataset.i18nPlaceholder));
+            });
+            root.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+                el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel));
+            });
+        }
+
+        function setLocale(locale, persist = true) {
+            currentLocale = locale === 'en' ? 'en' : 'zh-CN';
+            if (persist) localStorage.setItem(LOCALE_STORAGE_KEY, currentLocale);
+            document.documentElement.lang = currentLocale;
+            document.title = t('page.title');
+            applyTranslations();
+
+            const languageButton = document.getElementById('language-toggle');
+            document.getElementById('language-toggle-label').textContent = currentLocale === 'zh-CN' ? 'EN' : '中文';
+            languageButton.setAttribute('aria-label', currentLocale === 'zh-CN' ? 'Switch to English' : '切换到中文');
+
+            if (Object.keys(currentSetting).length) updateStatusBar(currentSetting);
+            if (_lastSpeakers !== null) renderRenderers(_lastSpeakers);
+            const updateBadge = document.querySelector('.update-badge');
+            if (updateBadge) updateBadge.textContent = t('update.available');
+        }
+
+        function toggleLocale() {
+            setLocale(currentLocale === 'zh-CN' ? 'en' : 'zh-CN');
+        }
+
         let currentSetting = {};
         let initialLoaded = false;
         let _latestRelease = null;
@@ -2034,7 +2295,10 @@
         let _initialDeviceNames = null;
         let _initialCompatibilityModes = null;
 
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', () => {
+            setLocale(currentLocale, false);
+            init();
+        });
 
         async function init() {
             await fetchSetting(true);
@@ -2078,8 +2342,8 @@
                 } else if (withDeviceList) {
                     document.getElementById('device-list').innerHTML = `
                         <div style="text-align:center; padding:40px;">
-                            <p style="color:var(--text-muted); font-size:14px; margin-bottom:16px;">未发现局域网 DLNA 渲染器</p>
-                            <button class="btn btn-primary" onclick="location.reload()">重新扫描</button>
+                            <p style="color:var(--text-muted); font-size:14px; margin-bottom:16px;" data-i18n="output.notFoundShort">${t('output.notFoundShort')}</p>
+                            <button class="btn btn-primary" onclick="location.reload()" data-i18n="output.rescan">${t('output.rescan')}</button>
                         </div>
                     `;
                 }
@@ -2167,7 +2431,7 @@
                     const badge = document.createElement('a');
                     badge.className = 'update-badge';
                     badge.href = 'javascript:void(0)';
-                    badge.textContent = '发现新版本';
+                    badge.textContent = t('update.available');
                     badge.onclick = function () { showUpdateModal(); };
                     updateLink.innerHTML = '';
                     updateLink.appendChild(badge);
@@ -2207,7 +2471,7 @@
 
             document.getElementById('update-current-ver').textContent = 'V' + currentVer;
             document.getElementById('update-latest-ver').textContent = 'V' + latestVer;
-            document.getElementById('update-modal-title').textContent = data.name || '发现新版本';
+            document.getElementById('update-modal-title').textContent = data.name || t('update.title');
 
             // 显示更新日志
             const body = data.body || '';
@@ -2224,7 +2488,7 @@
             document.getElementById('update-error').style.display = 'none';
             document.getElementById('btn-update-confirm').disabled = false;
             document.getElementById('btn-update-cancel').disabled = false;
-            document.getElementById('btn-update-confirm').textContent = '一键更新';
+            document.getElementById('btn-update-confirm').textContent = t('update.now');
 
             document.getElementById('modal-update').classList.add('active');
         }
@@ -2242,7 +2506,7 @@
             // 进入加载状态
             btnConfirm.disabled = true;
             btnCancel.disabled = true;
-            btnConfirm.textContent = '更新中...';
+            btnConfirm.textContent = t('update.updating');
             progress.style.display = 'block';
             errorDiv.style.display = 'none';
 
@@ -2251,8 +2515,8 @@
                 const data = await resp.json();
 
                 if (data.ok) {
-                    btnConfirm.textContent = '更新成功';
-                    progress.querySelector('span').textContent = '更新成功，正在重启服务...';
+                    btnConfirm.textContent = t('update.success');
+                    progress.querySelector('span').textContent = t('update.restarting');
 
                     // 轮询等待服务重启完成
                     let waited = 0;
@@ -2275,15 +2539,15 @@
                     // 超时后直接刷新
                     window.location.reload();
                 } else {
-                    throw new Error(data.error || '未知错误');
+                    throw new Error(data.error || t('update.unknownError'));
                 }
             } catch (e) {
                 progress.style.display = 'none';
                 errorDiv.style.display = 'flex';
-                errorDiv.innerHTML = `<span style="flex-shrink:0;">&#9888;</span><span>更新失败：${e.message}</span>`;
+                errorDiv.innerHTML = `<span style="flex-shrink:0;">&#9888;</span><span>${escapeHtml(t('update.failed', { error: e.message }))}</span>`;
                 btnConfirm.disabled = false;
                 btnCancel.disabled = false;
-                btnConfirm.textContent = '重试';
+                btnConfirm.textContent = t('update.retry');
             }
         }
 
@@ -2384,25 +2648,25 @@
             dlnaChip.classList.toggle('is-ready', !!data.dlna_running);
             airplayChip.classList.toggle('is-ready', !!data.dlna_running);
             miplayChip.classList.toggle('is-ready', miplayReady);
-            navText.textContent = localReady ? '本地链路在线' : '链路待确认';
+            navText.textContent = localReady ? t('nav.online') : t('nav.pending');
             navDot.style.background = localReady ? 'var(--accent)' : 'var(--yellow)';
             navDot.style.boxShadow = localReady ? '0 0 10px rgba(140,228,194,.7)' : 'none';
 
             if (localReady) {
                 bar.className = 'status-bar status-running';
-                text.textContent = `链路已织成 · ${data.renderers_count} 个入口 · 本地 DLNA 直连`;
+                text.textContent = t(data.renderers_count === 1 ? 'status.readySingle' : 'status.ready', { count: data.renderers_count });
             } else if (data.dlna_running && !data.local_control_available) {
                 bar.className = 'status-bar status-degraded';
-                text.textContent = '入口已发布 · 输出目标暂时离线';
+                text.textContent = t('status.degraded');
             } else if (data.dlna_running) {
                 bar.className = 'status-bar status-running';
-                text.textContent = `${data.renderers_count} 个投送入口正在广播`;
+                text.textContent = t(data.renderers_count === 1 ? 'status.broadcastingSingle' : 'status.broadcasting', { count: data.renderers_count });
             } else if (!data.targets_count) {
                 bar.className = 'status-bar status-stopped';
-                text.textContent = '选择一个局域网输出，开始编织声音路径';
+                text.textContent = t('status.chooseOutput');
             } else {
                 bar.className = 'status-bar status-stopped';
-                text.textContent = '正在连接局域网输出…';
+                text.textContent = t('status.connecting');
             }
         }
 
@@ -2439,7 +2703,7 @@
             for (const key in deviceModelMap) {
                 if (h.includes(key)) return deviceModelMap[key];
             }
-            return { model: h || '未知音箱', image: 'L05B.webp' };
+            return { model: h || t('device.unknown'), image: 'L05B.webp' };
         }
 
         function escapeHtml(value) {
@@ -2455,20 +2719,20 @@
             const container = document.getElementById('device-list');
             const outputName = document.getElementById('signal-output-name');
             if (!targets.length) {
-                container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">未发现局域网 DLNA 渲染器，请确认设备已开机并处于同一网段</div>';
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="output.notFound">${t('output.notFound')}</div>`;
                 document.getElementById('btn-save').disabled = true;
-                outputName.textContent = '等待输出';
+                outputName.textContent = t('output.waiting');
                 return;
             }
 
             const activeTarget = targets.find(target => target.id === defaultTargetId)
                 || targets.find(target => target.selected)
                 || targets[0];
-            outputName.textContent = activeTarget.name || 'DLNA 输出';
+            outputName.textContent = activeTarget.name || t('output.dlnaFallback');
 
             container.innerHTML = targets.map(target => {
                 const selected = !!target.selected;
-                const state = target.online ? '在线' : '离线（使用缓存）';
+                const state = target.online ? t('output.online') : t('output.offlineCached');
                 const stateColor = target.online ? 'var(--green)' : 'var(--yellow)';
                 return `
                 <div class="device-item target-item ${selected ? 'selected' : ''}"
@@ -2476,8 +2740,8 @@
                     <div class="device-body">
                         <div style="font-size:15px; font-weight:600; color:var(--text);">${escapeHtml(target.name)}</div>
                         <div class="device-meta">
-                            <span>DLNA · <span style="color:${stateColor}">${state}</span></span>
-                            <span>${target.default ? '默认输出' : escapeHtml(target.id)}</span>
+                            <span>DLNA · <span style="color:${stateColor}" data-i18n="${target.online ? 'output.online' : 'output.offlineCached'}">${state}</span></span>
+                            <span${target.default ? ' data-i18n="output.default"' : ''}>${target.default ? t('output.default') : escapeHtml(target.id)}</span>
                         </div>
                     </div>
                     <div class="device-checkbox">
@@ -2503,7 +2767,7 @@
             const selectedList = selectedDids ? selectedDids.split(',') : [];
 
             if (!devices.length) {
-                container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">未发现任何设备，请检查账号是否配置正确</div>';
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="output.accountNotFound">${t('output.accountNotFound')}</div>`;
                 return;
             }
 
@@ -2522,13 +2786,13 @@
                 <div class="device-item ${isSelected ? 'selected' : ''}" onclick="toggleDevice(this, '${did}')">
                     <img src="./static/devicespic/${info.image}" class="device-img" onerror="this.src='./static/devicespic/L05B.webp'">
                     <div class="device-body">
-                        <input type="text" class="device-name-input" value="${displayName}" 
+                        <input type="text" class="device-name-input" value="${escapeHtml(displayName)}"
                             onclick="event.stopPropagation()" onblur="renameDevice('${did}', this.value)">
                         <div class="device-meta">
-                            <span>${info.model} · ${dev.hardware}</span>
+                            <span>${escapeHtml(info.model)} · ${escapeHtml(dev.hardware)}</span>
                             <label class="compatibility-label" onclick="event.stopPropagation()">
                                 <input type="checkbox" class="compatibility-checkbox" data-did="${did}" ${isCompatibilityMode ? 'checked' : ''}>
-                                <span style="font-size: 11px; color: var(--text-secondary);">兼容模式</span>
+                                <span style="font-size: 11px; color: var(--text-secondary);" data-i18n="settings.compatibilityMode">${t('settings.compatibilityMode')}</span>
                             </label>
                         </div>
                     </div>
@@ -2575,10 +2839,10 @@
                     .map(item => item.dataset.targetId);
                 const currentIds = [...selectedIds].sort().join(',');
                 if (currentIds === _initialTargetIds) {
-                    showTip(document.getElementById('tip-save'), '没有变更的设置项', 'error');
+                    showTip(document.getElementById('tip-save'), t('actions.noChanges'), 'error');
                     return;
                 }
-                showLoading(btn, true, '正在保存');
+                showLoading(btn, true, t('actions.saving'));
                 try {
                     const response = await fetch('./api/setting', {
                         method: 'POST',
@@ -2589,11 +2853,11 @@
                                 ? currentSetting.default_target_id : (selectedIds[0] || '')
                         }),
                     });
-                    if (!response.ok) throw new Error((await response.json()).error || '保存失败');
-                    showLoading(btn, true, '正在同步');
+                    if (!response.ok) throw new Error((await response.json()).error || t('actions.saveFailed'));
+                    showLoading(btn, true, t('actions.syncing'));
                     setTimeout(() => location.reload(), 3000);
                 } catch (e) {
-                    showTip(document.getElementById('tip-save'), e.message || '保存失败', 'error');
+                    showTip(document.getElementById('tip-save'), e.message || t('actions.saveFailed'), 'error');
                     showLoading(btn, false);
                 }
                 return;
@@ -2624,7 +2888,7 @@
             }
 
             if (!namesChanged && !compatibilityChanged && _initialSelectedDids !== null && currentDids === _initialSelectedDids) {
-                showTip(document.getElementById('tip-save'), '没有变更的设置项', 'error');
+                showTip(document.getElementById('tip-save'), t('actions.noChanges'), 'error');
                 return;
             }
 
@@ -2640,7 +2904,7 @@
                 };
             });
 
-            showLoading(btn, true, '正在保存');
+            showLoading(btn, true, t('actions.saving'));
             try {
                 await fetch('./api/setting', {
                     method: 'POST',
@@ -2650,10 +2914,10 @@
                         speakers: speakersData
                     }),
                 });
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 3000);
             } catch (e) {
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 4000);
             }
         }
@@ -2666,11 +2930,11 @@
             const enabled = document.getElementById('chk-enable-xiaomi').checked;
 
             if (enabled && (!uid || !token)) {
-                showTip(tip, '请输入完整的信息', 'error');
+                showTip(tip, t('xiaomi.incomplete'), 'error');
                 return;
             }
 
-            showLoading(btn, true, '正在保存');
+            showLoading(btn, true, t('actions.saving'));
             try {
                 await fetch('./api/setting', {
                     method: 'POST',
@@ -2682,10 +2946,10 @@
                         enable_xiaomi_extension: false
                     }),
                 });
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 3000);
             } catch (e) {
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 4000);
             }
         }
@@ -2710,22 +2974,22 @@
                 const changed = Object.keys(data).some(key => data[key] !== _initialFormValues[key]);
                 if (!changed) {
                     const tip = document.getElementById('tip-experimental');
-                    showTip(tip, '没有变更的设置项', 'error');
+                    showTip(tip, t('actions.noChanges'), 'error');
                     return;
                 }
             }
 
-            showLoading(btn, true, '正在保存');
+            showLoading(btn, true, t('actions.saving'));
             try {
                 await fetch('./api/setting', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
                 });
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 3000);
             } catch (e) {
-                showLoading(btn, true, '正在同步');
+                showLoading(btn, true, t('actions.syncing'));
                 setTimeout(() => location.reload(), 4000);
             }
         }
@@ -2750,18 +3014,19 @@
         }
 
         function renderRenderers(speakers) {
+            _lastSpeakers = speakers;
             const container = document.getElementById('renderers-list');
             if (!speakers.length) {
-                container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); font-size:14px;">暂无媒体</div>';
+                container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted); font-size:14px;">${t('playback.noMedia')}</div>`;
                 return;
             }
 
             const stateMap = {
-                'NO_MEDIA_PRESENT': '空闲',
-                'STOPPED': '已停止',
-                'PLAYING': '播放中',
-                'PAUSED_PLAYBACK': '已暂停',
-                'TRANSITIONING': '加载中'
+                'NO_MEDIA_PRESENT': t('playback.idle'),
+                'STOPPED': t('playback.stopped'),
+                'PLAYING': t('playback.playing'),
+                'PAUSED_PLAYBACK': t('playback.paused'),
+                'TRANSITIONING': t('playback.loading')
             };
 
             let html = '';
@@ -2771,19 +3036,19 @@
                 const showBadge = s.airplay_active || (s.current_uri && s.transport_state !== 'NO_MEDIA_PRESENT');
 
                 const info = getDeviceInfo(s.hardware);
-                let source = s.airplay_active ? (s.airplay_client || '苹果设备') : formatSource(s.current_uri);
+                let source = s.airplay_active ? (s.airplay_client || t('source.appleDevice')) : formatSource(s.current_uri);
 
                 html += `
                 <div class="speaker-item">
                     <div class="speaker-info">
                         <div class="speaker-header">
-                            <span class="speaker-name">${s.dlna_name}</span>
+                            <span class="speaker-name">${escapeHtml(s.dlna_name)}</span>
                             ${showBadge ? `<span class="badge ${s.airplay_active ? 'badge-airplay' : 'badge-dlna'}">${s.airplay_active ? 'AirPlay' : 'DLNA'}</span>` : ''}
                         </div>
-                        <div class="speaker-meta">${info.model} · ${source ? '来自 ' + source : '暂无媒体'}</div>
+                        <div class="speaker-meta">${escapeHtml(info.model)} · ${source ? escapeHtml(t('playback.from', { source })) : t('playback.noMedia')}</div>
                     </div>
                     <div class="speaker-status ${isPlaying ? 'playing' : ''}">
-                        ${isPlaying ? '正在播放' : (stateMap[s.transport_state] || '待机')}
+                        ${isPlaying ? t('playback.nowPlaying') : (stateMap[s.transport_state] || t('playback.standby'))}
                     </div>
                 </div>`;
             });
@@ -2798,7 +3063,7 @@
                 if (host.includes('music.126.net') || host.includes('163.com')) return '网易云音乐';
                 if (host.includes('kugou.com')) return '酷狗音乐';
                 return host;
-            } catch { return '外部音频'; }
+            } catch { return t('source.externalAudio'); }
         }
 
         // UI Utils
