@@ -1,23 +1,28 @@
-"""小爱音箱控制模块"""
+"""Legacy speaker facade over CastFabric playback output adapters."""
 
-import asyncio
-import json
+from __future__ import annotations
+
 import logging
 
 from miair.auth import AuthManager
 from miair.config import Config, Speaker
-from miair.const import DEFAULT_AUDIO_ID, NEED_USE_PLAY_MUSIC_API
 from miair.dlna.client import LocalDLNAClient
+from miair.outputs.base import FallbackPlaybackTarget
+from miair.outputs.dlna import DLNAOutputAdapter
+from miair.outputs.xiaomi import XiaomiOutputAdapter
+
 
 log = logging.getLogger("miair")
 
 
 class SpeakerController:
-    """单个小爱音箱的控制接口"""
+    """Compatibility facade used by existing ingress implementations.
 
-    # 这些老款音箱使用 play_by_url 播放正常，但 pause 指令不会真正停止音频。
-    # 使用 stop 实现暂停，渲染器会记录位置并在恢复时生成 seek URL。
-    _STOP_AS_PAUSE_HARDWARE = {"M01", "XMYX01JY"}
+    Native DLNA is the primary output. Xiaomi MiNA remains an optional fallback
+    adapter until generic target configuration replaces the legacy speaker model.
+    """
+
+    _STOP_AS_PAUSE_HARDWARE = XiaomiOutputAdapter._STOP_AS_PAUSE_HARDWARE
 
     def __init__(
         self,
@@ -28,20 +33,18 @@ class SpeakerController:
         self.speaker = speaker
         self.auth = auth
         self.local_dlna = local_dlna
-        self._last_volume: int = 50  # 用于 unmute 恢复
-
-    async def _local_call(self, method: str, *args):
-        if not self.local_dlna:
-            return None
-        try:
-            return await getattr(self.local_dlna, method)(*args)
-        except Exception as exc:
-            log.warning(
-                "本地 DLNA %s 失败，尝试小米云通道: %s",
-                method,
-                type(exc).__name__,
+        self.cloud_output = XiaomiOutputAdapter(speaker, auth)
+        adapters = []
+        if local_dlna is not None:
+            adapters.append(
+                DLNAOutputAdapter(
+                    target_id=f"dlna:{speaker.device_id}",
+                    name=speaker.get_dlna_name(),
+                    client=local_dlna,
+                )
             )
-            return None
+        adapters.append(self.cloud_output)
+        self.output = FallbackPlaybackTarget(adapters)
 
     @property
     def device_id(self) -> str:
@@ -52,293 +55,36 @@ class SpeakerController:
         return self.speaker.did
 
     def _should_use_music_api(self) -> bool:
-        if self.speaker.is_compatibility_mode():
-            return False
-        return True
+        return self.cloud_output.should_use_music_api()
 
     def _should_stop_for_pause(self) -> bool:
-        if self._should_use_music_api():
-            return True
-        hardware = self.speaker.hardware or ""
-        return any(model in hardware for model in self._STOP_AS_PAUSE_HARDWARE)
+        return self.cloud_output.should_stop_for_pause()
 
     @staticmethod
     def _mina_request_succeeded(ret) -> bool:
-        """检查 MiNA 代理响应以及设备内层响应。"""
-        if not isinstance(ret, dict) or ret.get("code") != 0:
-            return False
-        data = ret.get("data")
-        return not isinstance(data, dict) or data.get("code", 0) == 0
+        return XiaomiOutputAdapter.request_succeeded(ret)
 
     async def play_url(self, url: str, *, play_type: int = 2) -> bool:
-        """让音箱播放指定 URL"""
-        local_result = await self._local_call("play_url", url)
-        if local_result is not None:
-            log.info("本地 DLNA play_url device_id=%s", self.device_id)
-            return bool(local_result)
-        try:
-            await self.auth.ensure_login()
-            if self._should_use_music_api():
-                ret = await self.auth.mina_service.play_by_music_url(
-                    self.device_id,
-                    url,
-                    _type=play_type,
-                    audio_id=DEFAULT_AUDIO_ID,
-                )
-                log.info(
-                    "play_by_music_url device_id=%s type=%s ret=%s",
-                    self.device_id,
-                    play_type,
-                    ret,
-                )
-            else:
-                ret = await self.auth.mina_service.play_by_url(
-                    self.device_id, url, _type=play_type
-                )
-                log.info(
-                    "play_by_url device_id=%s type=%s ret=%s",
-                    self.device_id,
-                    play_type,
-                    ret,
-                )
-            return self._mina_request_succeeded(ret)
-        except Exception as e:
-            log.error(f"play_url 失败: {e}")
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试播放
-                try:
-                    await self.auth.ensure_login()
-                    if self._should_use_music_api():
-                        ret = await self.auth.mina_service.play_by_music_url(
-                            self.device_id,
-                            url,
-                            _type=play_type,
-                            audio_id=DEFAULT_AUDIO_ID,
-                        )
-                    else:
-                        ret = await self.auth.mina_service.play_by_url(
-                            self.device_id, url, _type=play_type
-                        )
-                    return self._mina_request_succeeded(ret)
-                except Exception as e2:
-                    log.error(f"重新登录后 play_url 仍然失败: {e2}")
-                    return False
-            return False
+        return await self.output.play_url(url, play_type=play_type)
 
     async def pause(self) -> bool:
-        """暂停播放"""
-        local_result = await self._local_call("pause")
-        if local_result is not None:
-            return bool(local_result)
-        try:
-            await self.auth.ensure_login()
-            if self._should_stop_for_pause():
-                # 某些使用 play_by_music_url 的设备，调用 pause 后 API 状态不会
-                # 正确更新为 paused (status=2)，M01 等老款固件也会忽略
-                # pause 指令，需改用 stop 来实现暂停语义。
-                ret = await self.auth.mina_service.player_stop(self.device_id)
-                log.info(f"player_stop(as pause) device_id={self.device_id} ret={ret}")
-            else:
-                ret = await self.auth.mina_service.player_pause(self.device_id)
-                log.info(f"player_pause device_id={self.device_id} ret={ret}")
-            if not self._mina_request_succeeded(ret):
-                log.warning(f"pause 设备执行失败: {ret}")
-                return False
-            return True
-        except Exception as e:
-            log.error(f"pause 失败: {e}")
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试暂停
-                try:
-                    await self.auth.ensure_login()
-                    if self._should_stop_for_pause():
-                        ret = await self.auth.mina_service.player_stop(self.device_id)
-                    else:
-                        ret = await self.auth.mina_service.player_pause(self.device_id)
-                    return self._mina_request_succeeded(ret)
-                except Exception as e2:
-                    log.error(f"重新登录后 pause 仍然失败: {e2}")
-                    return False
-            return False
+        return await self.output.pause()
 
     async def stop(self) -> bool:
-        """停止播放"""
-        local_result = await self._local_call("stop")
-        if local_result is not None:
-            return bool(local_result)
-        try:
-            await self.auth.ensure_login()
-            # 某些型号的小爱音箱在 stop 后仍会残留缓存，
-            # 连续调用 stop + pause 可以更彻底地清空播放状态。
-            ret = await self.auth.mina_service.player_stop(self.device_id)
-            await self.pause()
-            log.info(f"player_stop device_id={self.device_id} ret={ret}")
-            return True
-        except Exception as e:
-            log.error(f"stop 失败: {e}")
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试停止
-                try:
-                    await self.auth.ensure_login()
-                    await self.auth.mina_service.player_stop(self.device_id)
-                    await self.pause()
-                    return True
-                except Exception as e2:
-                    log.error(f"重新登录后 stop 仍然失败: {e2}")
-                    return False
-            return False
+        return await self.output.stop()
 
     async def set_volume(self, volume: int) -> bool:
-        """设置音量 (0-100)"""
-        volume = max(0, min(100, volume))
-        local_result = await self._local_call("set_volume", volume)
-        if local_result is not None:
-            if local_result and volume > 0:
-                self._last_volume = volume
-            return bool(local_result)
-        try:
-            await self.auth.ensure_login()
-            await self.auth.mina_service.player_set_volume(self.device_id, volume)
-            if volume > 0:
-                self._last_volume = volume
-            log.info(f"set_volume device_id={self.device_id} volume={volume}")
-            return True
-        except Exception as e:
-            log.error(f"set_volume 失败: {e}")
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试设置音量
-                try:
-                    await self.auth.ensure_login()
-                    await self.auth.mina_service.player_set_volume(self.device_id, volume)
-                    if volume > 0:
-                        self._last_volume = volume
-                    return True
-                except Exception as e2:
-                    log.error(f"重新登录后 set_volume 仍然失败: {e2}")
-                    return False
-            return False
+        return await self.output.set_volume(volume)
 
     async def get_volume(self) -> int:
-        """获取当前音量"""
-        local_volume = await self._local_call("get_volume")
-        if local_volume is not None:
-            if local_volume > 0:
-                self._last_volume = local_volume
-            return int(local_volume)
-        try:
-            await self.auth.ensure_login()
-            status = await self.auth.mina_service.player_get_status(self.device_id)
-            info = json.loads(status.get("data", {}).get("info", "{}"))
-            volume = int(info.get("volume", 0))
-            if volume > 0:
-                self._last_volume = volume
-            return volume
-        except Exception as e:
-            log.error(f"get_volume 失败: {e}")
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试获取音量
-                try:
-                    await self.auth.ensure_login()
-                    status = await self.auth.mina_service.player_get_status(self.device_id)
-                    info = json.loads(status.get("data", {}).get("info", "{}"))
-                    volume = int(info.get("volume", 0))
-                    if volume > 0:
-                        self._last_volume = volume
-                    return volume
-                except Exception as e2:
-                    log.error(f"重新登录后 get_volume 仍然失败: {e2}")
-                    return self._last_volume
-            return self._last_volume
+        return await self.output.get_volume()
 
     async def get_status(self) -> dict:
-        """获取播放状态
-
-        Returns:
-            dict: {status: int, volume: int}
-            status: 0=stopped, 1=playing, 2=paused
-        """
-        local_status = await self._local_call("get_status")
-        if local_status is not None:
-            return local_status
-        try:
-            await self.auth.ensure_login()
-            playing_info = await self.auth.mina_service.player_get_status(
-                self.device_id
-            )
-            
-            # 检查 API 响应码。如果 code != 0，说明请求失败（如超时 3012），
-            # 此时绝不能返回 status=0，否则会触发“已停止”的错误逻辑导致自动续播误触发。
-            if playing_info.get("code") != 0:
-                raise Exception(f"Mina API Error: {playing_info}")
-                
-            data = playing_info.get("data", {})
-            info_str = data.get("info")
-            if not info_str:
-                # 如果没有 info 字段，可能也是某种异常状态，但不代表停止
-                raise Exception(f"Mina API response missing 'info': {playing_info}")
-                
-            info = json.loads(info_str)
-            return {
-                "status": info.get("status", 0),
-                "volume": int(info.get("volume", 0)),
-            }
-        except Exception as e:
-            # 检查是否是登录失败的错误
-            if "Login failed" in str(e) or "登录验证失败" in str(e):
-                log.info("检测到登录失败，尝试重新登录...")
-                # 重置登录状态并重新登录
-                self.auth._logged_in = False
-                await self.auth.login()
-                # 重新尝试获取状态
-                try:
-                    await self.auth.ensure_login()
-                    playing_info = await self.auth.mina_service.player_get_status(
-                        self.device_id
-                    )
-                    if playing_info.get("code") != 0:
-                        raise Exception(f"Mina API Error: {playing_info}")
-                    data = playing_info.get("data", {})
-                    info_str = data.get("info")
-                    if not info_str:
-                        raise Exception(f"Mina API response missing 'info': {playing_info}")
-                    info = json.loads(info_str)
-                    return {
-                        "status": info.get("status", 0),
-                        "volume": int(info.get("volume", 0)),
-                    }
-                except Exception as e2:
-                    log.error(f"重新登录后 get_status 仍然失败: {e2}")
-            # 向上抛出异常，让调用者（如 DeviceServer 的轮询任务）捕获并忽略本次轮询
-            raise Exception(f"get_status 失败: {e}")
+        return await self.output.get_status()
 
 
 class SpeakerManager:
-    """管理所有音箱实例"""
+    """Build compatibility controllers from cached MiAir speaker records."""
 
     def __init__(self, config: Config, auth: AuthManager):
         self.config = config
@@ -346,45 +92,43 @@ class SpeakerManager:
         self.controllers: dict[str, SpeakerController] = {}
 
     async def init_speakers(self, *, refresh_from_cloud: bool = True):
-        """从云端或本地缓存初始化所有音箱控制器。"""
         if refresh_from_cloud:
             await self.auth.update_speakers_info()
         else:
-            log.warning("小米云认证不可用，使用本地缓存的音箱信息发布投送服务")
+            log.warning("小米云认证不可用，使用本地缓存的输出目标信息")
 
-        # 为每个启用的音箱创建控制器
         self.controllers.clear()
         for speaker in self.config.get_enabled_speakers():
-            if speaker.device_id:
-                local_dlna = await LocalDLNAClient.connect(
-                    speaker.device_id,
-                    self.config.hostname,
-                    speaker.local_dlna_location,
-                )
-                if local_dlna:
-                    speaker.local_dlna_location = local_dlna.location
-                    log.info(
-                        "已连接实体音箱本地 DLNA: %s (%s)",
-                        speaker.get_dlna_name(),
-                        local_dlna.location,
-                    )
-                self.controllers[speaker.did] = SpeakerController(
-                    speaker, self.auth, local_dlna=local_dlna
-                )
+            if not speaker.device_id:
+                log.warning("输出目标 did=%s 缺少 device_id，跳过", speaker.did)
+                continue
+
+            local_dlna = await LocalDLNAClient.connect(
+                speaker.device_id,
+                self.config.hostname,
+                speaker.local_dlna_location,
+            )
+            if local_dlna:
+                speaker.local_dlna_location = local_dlna.location
                 log.info(
-                    f"已初始化音箱控制器: {speaker.get_dlna_name()} (did={speaker.did})"
-                )
-            else:
-                log.warning(
-                    f"音箱 did={speaker.did} 未找到 device_id，跳过"
+                    "已连接实体音箱本地 DLNA: %s (%s)",
+                    speaker.get_dlna_name(),
+                    local_dlna.location,
                 )
 
+            self.controllers[speaker.did] = SpeakerController(
+                speaker, self.auth, local_dlna=local_dlna
+            )
+            log.info(
+                "已初始化输出控制器: %s (legacy did=%s)",
+                speaker.get_dlna_name(),
+                speaker.did,
+            )
+
     def get_controller(self, did: str) -> SpeakerController | None:
-        """根据 DID 获取控制器"""
         return self.controllers.get(did)
 
     def get_controller_by_udn(self, udn: str) -> SpeakerController | None:
-        """根据 UDN 获取控制器"""
         for controller in self.controllers.values():
             if controller.speaker.udn == udn:
                 return controller
