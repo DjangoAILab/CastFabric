@@ -1285,6 +1285,17 @@
                 <div class="modal-desc">仅用于不支持原生 DLNA 的兼容设备；标准 DLNA 无需登录</div>
             </div>
 
+            <div class="toggle-row" style="margin-bottom:20px;">
+                <div class="toggle-info">
+                    <div class="toggle-title">启用小米云回退</div>
+                    <div class="toggle-desc">默认关闭；开启后才会使用下面的凭据</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="chk-enable-xiaomi">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
             <div class="form-group">
                 <label class="form-label">userId</label>
                 <input type="text" class="form-input" id="input-userId" placeholder="通常是一串数字">
@@ -1428,6 +1439,7 @@
                 if (uid) document.getElementById('input-userId').value = uid[1];
                 if (ptk) document.getElementById('input-passToken').value = ptk[1];
             }
+            document.getElementById('chk-enable-xiaomi').checked = !!data.xiaomi_extension_enabled;
             if (data.dlna_port) document.getElementById('input-dlna-port').value = data.dlna_port;
             if (data.web_port) document.getElementById('input-web-port').value = data.web_port;
             if (data.enable_miplay !== undefined) {
@@ -1972,8 +1984,9 @@
             const tip = document.getElementById('tip-account');
             const uid = document.getElementById('input-userId').value.trim();
             const token = document.getElementById('input-passToken').value.trim();
+            const enabled = document.getElementById('chk-enable-xiaomi').checked;
 
-            if (!uid || !token) {
+            if (enabled && (!uid || !token)) {
                 showTip(tip, '请输入完整的信息', 'error');
                 return;
             }
@@ -1983,7 +1996,12 @@
                 await fetch('./api/setting', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cookie: `userId=${uid}; passToken=${token}` }),
+                    body: JSON.stringify(enabled ? {
+                        cookie: `userId=${uid}; passToken=${token}`,
+                        enable_xiaomi_extension: true
+                    } : {
+                        enable_xiaomi_extension: false
+                    }),
                 });
                 showLoading(btn, true, '正在同步');
                 setTimeout(() => location.reload(), 3000);

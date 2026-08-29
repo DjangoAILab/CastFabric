@@ -55,6 +55,5 @@ CastFabric 容器，避免局域网广播和 host-network 端口冲突。
 ## 小米云扩展
 
 标准 DLNA 音箱不再需要小米账号。只有目标没有原生 DLNA，且确实需要 MiNA 云控制
-回退时，才在 Web 的“小米扩展”中保留 Cookie。token 过期不应影响标准目标扫描、
-虚拟 DLNA、AirPlay 或 MiPlay 的发现。
-
+回退时，才在 Web 的“小米扩展”中主动启用并保存 Cookie。旧配置中的 Cookie 不会
+自动启用扩展。token 过期不应影响标准目标扫描、虚拟 DLNA、AirPlay 或 MiPlay 的发现。

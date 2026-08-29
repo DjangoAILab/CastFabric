@@ -99,6 +99,8 @@ class Config:
     follow_device_volume: bool = True
     # 语音控制
     enable_voice_control: bool = False
+    # 可选厂商扩展；不会因为旧配置里残留凭据而自动开启。
+    enable_xiaomi_extension: bool = False
     # 自动重启（当登录失败或服务异常时）
     auto_restart: bool = False
     voice_poll_interval: int = 1

@@ -19,6 +19,7 @@ async def test_generic_dlna_target_starts_ingress_without_xiaomi_login(tmp_path)
     config = Config(
         hostname="127.0.0.1",
         conf_path=str(tmp_path),
+        cookie="userId=legacy; passToken=stale",
         enable_miplay=False,
         targets={target.id: target},
         default_target_id=target.id,
@@ -47,6 +48,7 @@ async def test_generic_dlna_target_starts_ingress_without_xiaomi_login(tmp_path)
     controller = app.speaker_manager.controllers["uuid:renderer"]
     assert controller.local_dlna is local_client
     assert controller.auth is None
+    assert config.enable_xiaomi_extension is False
     assert len(app.renderers) == 1
     assert next(iter(app.renderers.values())).friendly_name == (
         "CastFabric · Living Room"

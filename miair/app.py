@@ -60,6 +60,8 @@ class CastFabric:
 
     async def get_all_devices(self) -> list[dict]:
         """获取小米账号下所有设备列表"""
+        if not self.config.enable_xiaomi_extension:
+            return []
         if not self.config.account and not self.config.cookie:
             return []
         try:
@@ -79,6 +81,9 @@ class CastFabric:
             if not self.config.auto_restart:
                 continue
 
+            if not self.config.enable_xiaomi_extension:
+                continue
+
             # 如果没有配置账号密码，不检查
             if not self.config.account and not self.config.cookie:
                 continue
@@ -95,6 +100,8 @@ class CastFabric:
     def _schedule_auth_retry(self):
         """启动唯一的、带上限退避的认证/DLNA 恢复任务。"""
         if not self.config.auto_restart:
+            return
+        if not self.config.enable_xiaomi_extension:
             return
         if self._auth_retry_task and not self._auth_retry_task.done():
             return
@@ -160,7 +167,10 @@ class CastFabric:
     async def _start_dlna_services(self):
         """启动 DLNA 相关服务 (登录、初始化音箱、SSDP、HTTP)"""
         try:
-            has_xiaomi_config = bool(self.config.account or self.config.cookie)
+            has_xiaomi_config = bool(
+                self.config.enable_xiaomi_extension
+                and (self.config.account or self.config.cookie)
+            )
             cloud_authenticated = False
             if has_xiaomi_config:
                 cloud_authenticated = bool(await self.auth.login())

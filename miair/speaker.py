@@ -143,7 +143,11 @@ class SpeakerManager:
                 )
 
             controller_id = target.legacy_did or target.id
-            cloud_auth = self.auth if target.legacy_did else None
+            cloud_auth = (
+                self.auth
+                if target.legacy_did and self.config.enable_xiaomi_extension
+                else None
+            )
             self.controllers[controller_id] = SpeakerController(
                 speaker, cloud_auth, local_dlna=local_dlna
             )

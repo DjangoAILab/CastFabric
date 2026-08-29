@@ -15,7 +15,7 @@ MediaRenderer 的音箱；小米云只是可选兼容扩展，不再是发现和
 - 接收 AirPlay 音频并通过目标音箱的本地 DLNA 通道播放。
 - 接收妙播发现、控制、反向 WFD/RTSP 和 AAC 媒体流（实验性）。
 - 妙播 AAC → 48 kHz 双声道 PCM → HTTP WAV/L16 → DLNA 输出目标。
-- 旧 MiAir 配置自动迁移，本地 DLNA 优先，小米 MiNA 云作为可选回退。
+- 旧 MiAir 配置自动迁移；小米 MiNA 云回退必须显式启用，默认完全关闭。
 - 无手机、无音箱、无小米账号的离线协议自测。
 - amd64/arm64 Docker 镜像测试与 GHCR 发布流水线。
 

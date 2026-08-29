@@ -307,6 +307,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "default_target_id": config.default_target_id,
             "targets_count": len(config.get_enabled_targets()),
             "has_account": bool(config.account or config.cookie),
+            "xiaomi_extension_enabled": config.enable_xiaomi_extension,
             "cookie": _mask_cookie(config.cookie),
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
@@ -373,7 +374,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             data["target_list"] = _target_view(
                 config, app_instance.discovered_targets
             )
-            if config.account or config.cookie:
+            if config.enable_xiaomi_extension and (config.account or config.cookie):
                 device_list = await app_instance.get_all_devices()
                 data["device_list"] = _mask_devices(device_list)
 
@@ -391,6 +392,8 @@ def create_web_app(config: Config, app_instance) -> web.Application:
         if "cookie" in data:
             # 若前端回写的是脱敏占位符（未修改 passToken等），还原为已存储的真实值
             config.cookie = _unmask_cookie(data["cookie"], config.cookie)
+        if "enable_xiaomi_extension" in data:
+            config.enable_xiaomi_extension = bool(data["enable_xiaomi_extension"])
 
         # 更新设备选择
         if "mi_did" in data:
@@ -488,6 +491,10 @@ def create_web_app(config: Config, app_instance) -> web.Application:
 
     async def handle_get_devices(request):
         """获取小米账号下所有设备列表"""
+        if not config.enable_xiaomi_extension:
+            return web.json_response(
+                {"error": "小米云扩展未启用"}, status=400
+            )
         if not config.cookie:
             return web.json_response(
                 {"error": "请先配置 Cookie"}, status=400
@@ -571,6 +578,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
             "dlna_running": app_instance.dlna_running,
             "renderers_count": len(app_instance.renderers),
             "has_account": bool(config.account or config.cookie),
+            "xiaomi_extension_enabled": config.enable_xiaomi_extension,
             "mi_did": config.mi_did,
             "default_target_id": config.default_target_id,
             "targets_count": len(config.get_enabled_targets()),

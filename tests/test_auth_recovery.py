@@ -16,6 +16,7 @@ class AuthenticationRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 cookie="userId=100200; passToken=bootstrap-token",
                 mi_did="123",
                 auto_restart=True,
+                enable_xiaomi_extension=True,
                 enable_miplay=False,
                 speakers={
                     "123": Speaker(

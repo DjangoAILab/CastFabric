@@ -13,6 +13,7 @@
     "auto_resume_on_interrupt": false,
     "resume_delay_seconds": 5,
     "enable_voice_control": false,
+    "enable_xiaomi_extension": false,
     "voice_poll_interval": 1,
     "enable_miplay": true,
     "miplay_port": 8899,
