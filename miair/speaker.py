@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from miair.auth import AuthManager
 from miair.config import Config, Speaker
 from miair.dlna.client import LocalDLNAClient
-from miair.outputs.base import FallbackPlaybackTarget
+from miair.outputs.base import FallbackPlaybackTarget, UnavailablePlaybackTarget
 from miair.outputs.dlna import DLNAOutputAdapter
 from miair.outputs.xiaomi import XiaomiOutputAdapter
 
@@ -27,13 +28,13 @@ class SpeakerController:
     def __init__(
         self,
         speaker: Speaker,
-        auth: AuthManager,
+        auth: AuthManager | None,
         local_dlna: LocalDLNAClient | None = None,
     ):
         self.speaker = speaker
         self.auth = auth
         self.local_dlna = local_dlna
-        self.cloud_output = XiaomiOutputAdapter(speaker, auth)
+        self.cloud_output = XiaomiOutputAdapter(speaker, auth) if auth else None
         adapters = []
         if local_dlna is not None:
             adapters.append(
@@ -43,7 +44,14 @@ class SpeakerController:
                     client=local_dlna,
                 )
             )
-        adapters.append(self.cloud_output)
+        if self.cloud_output is not None:
+            adapters.append(self.cloud_output)
+        if not adapters:
+            adapters.append(
+                UnavailablePlaybackTarget(
+                    f"unavailable:{speaker.did}", speaker.get_dlna_name()
+                )
+            )
         self.output = FallbackPlaybackTarget(adapters)
 
     @property
@@ -55,10 +63,10 @@ class SpeakerController:
         return self.speaker.did
 
     def _should_use_music_api(self) -> bool:
-        return self.cloud_output.should_use_music_api()
+        return bool(self.cloud_output and self.cloud_output.should_use_music_api())
 
     def _should_stop_for_pause(self) -> bool:
-        return self.cloud_output.should_stop_for_pause()
+        return bool(self.cloud_output and self.cloud_output.should_stop_for_pause())
 
     @staticmethod
     def _mina_request_succeeded(ret) -> bool:
@@ -94,21 +102,39 @@ class SpeakerManager:
     async def init_speakers(self, *, refresh_from_cloud: bool = True):
         if refresh_from_cloud:
             await self.auth.update_speakers_info()
-        else:
+        elif any(target.legacy_did for target in self.config.get_enabled_targets()):
             log.warning("小米云认证不可用，使用本地缓存的输出目标信息")
+        else:
+            log.info("使用标准 DLNA 输出目标，不需要厂商云认证")
 
         self.controllers.clear()
-        for speaker in self.config.get_enabled_speakers():
-            if not speaker.device_id:
-                log.warning("输出目标 did=%s 缺少 device_id，跳过", speaker.did)
-                continue
-
+        for target in self.config.get_enabled_targets():
+            if target.legacy_did:
+                speaker = self.config.get_speaker(target.legacy_did)
+            else:
+                if not target.virtual_udn:
+                    target.virtual_udn = str(
+                        uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"castfabric-output:{target.id}",
+                        )
+                    )
+                speaker = Speaker(
+                    did=target.id,
+                    device_id=target.udn,
+                    name=target.name,
+                    dlna_name=target.name,
+                    udn=target.virtual_udn,
+                    local_dlna_location=target.location,
+                    enabled=target.enabled,
+                )
             local_dlna = await LocalDLNAClient.connect(
-                speaker.device_id,
+                target.udn,
                 self.config.hostname,
-                speaker.local_dlna_location,
+                target.location,
             )
             if local_dlna:
+                target.location = local_dlna.location
                 speaker.local_dlna_location = local_dlna.location
                 log.info(
                     "已连接实体音箱本地 DLNA: %s (%s)",
@@ -116,13 +142,15 @@ class SpeakerManager:
                     local_dlna.location,
                 )
 
-            self.controllers[speaker.did] = SpeakerController(
-                speaker, self.auth, local_dlna=local_dlna
+            controller_id = target.legacy_did or target.id
+            cloud_auth = self.auth if target.legacy_did else None
+            self.controllers[controller_id] = SpeakerController(
+                speaker, cloud_auth, local_dlna=local_dlna
             )
             log.info(
-                "已初始化输出控制器: %s (legacy did=%s)",
+                "已初始化输出控制器: %s (target=%s)",
                 speaker.get_dlna_name(),
-                speaker.did,
+                target.id,
             )
 
     def get_controller(self, did: str) -> SpeakerController | None:

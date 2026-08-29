@@ -34,6 +34,31 @@ class PlaybackTarget(Protocol):
     async def get_status(self) -> dict: ...
 
 
+class UnavailablePlaybackTarget:
+    """Stable placeholder that keeps ingress discovery alive while output is offline."""
+
+    def __init__(self, target_id: str, name: str):
+        self.info = PlaybackTargetInfo(target_id, name, "unavailable")
+
+    async def play_url(self, url: str, *, play_type: int = 2) -> bool:
+        return False
+
+    async def pause(self) -> bool:
+        return False
+
+    async def stop(self) -> bool:
+        return False
+
+    async def set_volume(self, volume: int) -> bool:
+        return False
+
+    async def get_volume(self) -> int:
+        raise RuntimeError("playback target is unavailable")
+
+    async def get_status(self) -> dict:
+        raise RuntimeError("playback target is unavailable")
+
+
 class FallbackPlaybackTarget:
     """Try output adapters in priority order and remember the active one."""
 
@@ -99,4 +124,3 @@ class FallbackPlaybackTarget:
 
     async def get_status(self) -> dict:
         return await self._query("get_status")
-

@@ -146,7 +146,7 @@ class CastFabric:
 
         # 2. 已选择过设备就可从本地缓存发布局域网投送入口；小米云
         # 认证只决定播放控制是否可用，不再决定设备能否被发现。
-        if self.config.mi_did:
+        if self.config.get_enabled_targets():
             await self._start_dlna_services()
         else:
             if not self.config.account and not self.config.cookie:
@@ -160,15 +160,18 @@ class CastFabric:
     async def _start_dlna_services(self):
         """启动 DLNA 相关服务 (登录、初始化音箱、SSDP、HTTP)"""
         try:
+            has_xiaomi_config = bool(self.config.account or self.config.cookie)
             cloud_authenticated = False
-            if self.config.account or self.config.cookie:
+            if has_xiaomi_config:
                 cloud_authenticated = bool(await self.auth.login())
-            if not cloud_authenticated:
+            if has_xiaomi_config and not cloud_authenticated:
                 log.warning(
                     "小米云认证不可用；继续发布已缓存的局域网投送设备，"
                     "并尝试发现实体音箱的本地 DLNA 控制通道"
                 )
                 self._schedule_auth_retry()
+            elif not has_xiaomi_config:
+                log.info("未启用小米云扩展；使用标准局域网输出目标")
 
             # 初始化音箱
             await self.speaker_manager.init_speakers(
@@ -188,7 +191,11 @@ class CastFabric:
                 self._did_to_udn.clear()
                 return
 
-            if not cloud_authenticated and self.has_local_speaker_control():
+            if (
+                has_xiaomi_config
+                and not cloud_authenticated
+                and self.has_local_speaker_control()
+            ):
                 log.info("小米云认证不可用，但实体音箱本地 DLNA 控制已就绪")
 
             # 为每个音箱创建 DLNA 渲染器

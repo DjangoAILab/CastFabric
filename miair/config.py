@@ -216,7 +216,9 @@ class Config:
         normalized_id = normalize_target_id(target_id)
         target = self.targets.get(normalized_id)
         if isinstance(target, dict):
-            target = OutputTargetConfig(id=normalized_id, **target)
+            payload = dict(target)
+            payload.setdefault("id", normalized_id)
+            target = OutputTargetConfig(**payload)
             self.targets[normalized_id] = target
         return target
 

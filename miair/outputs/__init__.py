@@ -1,6 +1,11 @@
 """Playback output ports and built-in adapters."""
 
-from .base import FallbackPlaybackTarget, PlaybackTarget, PlaybackTargetInfo
+from .base import (
+    FallbackPlaybackTarget,
+    PlaybackTarget,
+    PlaybackTargetInfo,
+    UnavailablePlaybackTarget,
+)
 from .dlna import DLNAOutputAdapter
 from .xiaomi import XiaomiOutputAdapter
 
@@ -9,6 +14,6 @@ __all__ = [
     "FallbackPlaybackTarget",
     "PlaybackTarget",
     "PlaybackTargetInfo",
+    "UnavailablePlaybackTarget",
     "XiaomiOutputAdapter",
 ]
-
