@@ -1,6 +1,9 @@
+import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import aiohttp
 
 from miair.config import Speaker
 from miair.const import AVTRANSPORT_URN, RENDERING_CONTROL_URN
@@ -47,6 +50,103 @@ class LocalDLNAClientTests(unittest.IsolatedAsyncioTestCase):
         client.get_volume = AsyncMock(return_value=16)
 
         self.assertEqual(await client.get_status(), {"status": 2, "volume": 16})
+
+    async def test_soap_rediscovers_renderer_after_control_port_changes(self):
+        client = LocalDLNAClient(
+            "http://192.0.2.10:1269/",
+            {
+                AVTRANSPORT_URN: "http://192.0.2.10:1269/av/control.xml",
+                RENDERING_CONTROL_URN: "http://192.0.2.10:1269/rc/control.xml",
+            },
+            device_id="uuid:device",
+            interface_ip="192.0.2.20",
+        )
+        new_location = "http://192.0.2.10:2026/"
+        new_services = {
+            AVTRANSPORT_URN: "http://192.0.2.10:2026/av/control.xml",
+            RENDERING_CONTROL_URN: "http://192.0.2.10:2026/rc/control.xml",
+        }
+
+        with (
+            patch.object(
+                client,
+                "_soap_once",
+                AsyncMock(
+                    side_effect=[
+                        aiohttp.ClientConnectionError("stale control port"),
+                        {"CurrentVolume": "27"},
+                    ]
+                ),
+            ) as soap_once,
+            patch.object(
+                client,
+                "_discover_location",
+                AsyncMock(return_value=new_location),
+            ) as discover,
+            patch.object(
+                client,
+                "_load_services",
+                AsyncMock(return_value=new_services),
+            ) as load_services,
+        ):
+            self.assertEqual(await client.get_volume(), 27)
+
+        discover.assert_awaited_once_with("uuid:device", "192.0.2.20")
+        load_services.assert_awaited_once_with(new_location)
+        self.assertEqual(client.location, new_location)
+        self.assertEqual(client.services, new_services)
+        self.assertEqual(soap_once.await_count, 2)
+        self.assertEqual(
+            soap_once.await_args_list[0].args[0],
+            "http://192.0.2.10:1269/rc/control.xml",
+        )
+        self.assertEqual(
+            soap_once.await_args_list[1].args[0],
+            "http://192.0.2.10:2026/rc/control.xml",
+        )
+
+    async def test_concurrent_commands_share_one_endpoint_rediscovery(self):
+        client = LocalDLNAClient(
+            "http://192.0.2.10:1269/",
+            {
+                AVTRANSPORT_URN: "http://192.0.2.10:1269/av/control.xml",
+                RENDERING_CONTROL_URN: "http://192.0.2.10:1269/rc/control.xml",
+            },
+            device_id="uuid:device",
+            interface_ip="192.0.2.20",
+        )
+        new_location = "http://192.0.2.10:2026/"
+        new_services = {
+            AVTRANSPORT_URN: "http://192.0.2.10:2026/av/control.xml",
+            RENDERING_CONTROL_URN: "http://192.0.2.10:2026/rc/control.xml",
+        }
+
+        async def soap_once(service_url, urn, action, arguments):
+            del urn, action, arguments
+            if ":1269/" in service_url:
+                raise aiohttp.ClientConnectionError("stale control port")
+            return {"CurrentVolume": "31"}
+
+        with (
+            patch.object(client, "_soap_once", side_effect=soap_once),
+            patch.object(
+                client,
+                "_discover_location",
+                AsyncMock(return_value=new_location),
+            ) as discover,
+            patch.object(
+                client,
+                "_load_services",
+                AsyncMock(return_value=new_services),
+            ),
+        ):
+            first, second = await asyncio.gather(
+                client.get_volume(),
+                client.get_volume(),
+            )
+
+        self.assertEqual((first, second), (31, 31))
+        discover.assert_awaited_once()
 
     async def test_speaker_controller_prefers_local_renderer_without_cloud(self):
         local = SimpleNamespace(play_url=AsyncMock(return_value=True))

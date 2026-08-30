@@ -37,6 +37,13 @@ Rollback container: `castfabric-rollback-54f104c`
 - [x] Virtual DLNA receives real `SetAVTransportURI`/`Play` SOAP and the physical DMR GETs a 61,780-byte
   local WAV payload.
 - [x] System returns to `healthy`, zero active sessions, and one ready suite after both streaming POCs.
+- [x] Renderer-port drift incident reproduced: cached endpoint `:1269` rejects connections while the
+  same UDN advertises `:2026` after reboot.
+- [x] Recovery candidate rediscovers `:2026` from a deliberately stale client and completes a real
+  `GetVolume` SOAP request without restarting CastFabric.
+- [x] Recovery candidate virtual DLNA path makes the physical DMR pull a 192,044-byte WAV payload.
+- [x] Recovery candidate MiPlay path records `output_started` and `pcm_forwarded` without
+  `output_failed`.
 
 ## Real-device gates
 
