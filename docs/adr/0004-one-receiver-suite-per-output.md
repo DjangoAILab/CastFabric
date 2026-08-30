@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted for product design；尚未进入实现。
+Accepted for implementation
 
 ## 背景
 
@@ -42,4 +42,3 @@ CastFabric 的输出不是一个全局唯一的“当前音响”。局域网里
 
 - [ADR-0003：采用 CastFabric 品牌与端口—适配器核心](0003-adopt-castfabric-and-port-adapter-core.md)
 - [CastFabric 产品与控制台设计](../plans/2026-08-30-castfabric-product-console-design.md)
-
