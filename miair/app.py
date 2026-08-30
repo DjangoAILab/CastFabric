@@ -12,6 +12,7 @@ from aiohttp import web
 from miair.auth import AuthManager
 from miair.config import Config
 from miair.dlna.device_server import DeviceServer
+from miair.dlna.client import LocalDLNAClient
 from miair.dlna.renderer import DLNARenderer
 from miair.dlna.ssdp import SSDPServer
 from miair.speaker import SpeakerManager
@@ -22,6 +23,7 @@ from miair.miplay.receiver import MiPlayReceiver
 from miair.streaming.sink import CastFabricLiveAudioSink
 from miair.identity import PRODUCT_NAME, PRODUCT_SLUG
 from miair.runtime.events import ActivityEventJournal
+from miair.runtime.discovery import TargetDiscoveryRegistry
 from miair.runtime.models import (
     EventOutcome,
     IngressProtocol,
@@ -63,6 +65,9 @@ class CastFabric:
         self.suite_registry = ReceiverSuiteRegistry(
             device_name_prefix=self.config.device_name_prefix
         )
+        self.discovery_registry = TargetDiscoveryRegistry(
+            self._discover_output_targets
+        )
 
     @property
     def miplay_receiver(self) -> MiPlayReceiver | None:
@@ -84,6 +89,11 @@ class CastFabric:
             controller.local_dlna is not None
             for controller in self.speaker_manager.controllers.values()
         )
+
+    async def _discover_output_targets(self):
+        observed = await LocalDLNAClient.discover(self.config.hostname)
+        virtual_ids = {f"uuid:{renderer.udn}" for renderer in self.renderers.values()}
+        return [target for target in observed if target.id not in virtual_ids]
 
     async def get_all_devices(self) -> list[dict]:
         """获取小米账号下所有设备列表"""
@@ -453,8 +463,34 @@ class CastFabric:
             port=self.config.dlna_port,
         )
 
-    async def set_target_enabled(self, target_id: str, enabled: bool) -> ReceiverSuite:
+    async def set_target_enabled(
+        self,
+        target_id: str,
+        enabled: bool,
+    ) -> ReceiverSuite | None:
         """Transactionally enable or disable one already registered suite."""
+        target = self.config.get_target(target_id)
+        if target is None:
+            raise KeyError(target_id)
+        suite = self.suite_registry.get(target.id)
+        if suite is None and not enabled:
+            target.enabled = False
+            self.config.save()
+            return None
+        if suite is None and not self.dlna_running:
+            original = target.enabled
+            target.enabled = True
+            await self._start_dlna_services()
+            suite = self.suite_registry.get(target.id)
+            if suite is None:
+                target.enabled = original
+                self.config.save()
+                raise RuntimeError("SUITE_ENABLE_FAILED")
+            self.config.save()
+            return suite
+        if suite is None:
+            controller_id, controller = await self.speaker_manager.add_target(target)
+            suite = self.suite_registry.register(target, controller_id, controller)
         suite = await self.suite_registry.set_enabled(
             target_id,
             enabled,

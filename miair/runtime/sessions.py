@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections import deque
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Callable
@@ -29,9 +30,19 @@ class MediaSessionCoordinator:
         self._current: dict[str, MediaSessionSnapshot] = {}
         self._session_targets: dict[str, str] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._recent: deque[MediaSessionSnapshot] = deque(maxlen=200)
 
     def current(self, target_id: str) -> MediaSessionSnapshot | None:
         return self._current.get(target_id)
+
+    def current_all(self) -> tuple[MediaSessionSnapshot, ...]:
+        return tuple(self._current[key] for key in sorted(self._current))
+
+    def query(self, *, include_recent: bool = False, limit: int = 100):
+        current = list(self.current_all())
+        if include_recent:
+            current.extend(reversed(self._recent))
+        return current[: max(1, min(int(limit), 200))]
 
     async def begin(self, target_id: str, protocol: IngressProtocol, *,
                     source: SessionSourceSnapshot | None = None,
@@ -44,6 +55,9 @@ class MediaSessionCoordinator:
                     outcome=EventOutcome.INFO, summary_key="activity.session_preempted")
             if old:
                 self._session_targets.pop(old.id, None)
+                self._recent.append(
+                    replace(old, state=SessionState.STOPPED, ended_at=self.clock())
+                )
             session = MediaSessionSnapshot(
                 id=self.id_factory(), target_id=target_id, protocol=protocol,
                 state=SessionState.STARTING,
@@ -80,6 +94,13 @@ class MediaSessionCoordinator:
                 return False
             del self._current[target_id]
             self._session_targets.pop(session_id, None)
+            self._recent.append(
+                replace(
+                    current,
+                    state=SessionState.FAILED if failed else SessionState.STOPPED,
+                    ended_at=self.clock(),
+                )
+            )
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session_id,
                     protocol=current.protocol,

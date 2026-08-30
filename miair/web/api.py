@@ -17,6 +17,7 @@ from miair.config import Config
 from miair.const import VERSION
 from miair.dlna.client import DiscoveredDLNATarget, LocalDLNAClient
 from miair.targets import OutputTargetConfig, normalize_target_id
+from miair.web.api_v1 import setup_api_v1_routes
 
 
 log = logging.getLogger("miair")
@@ -718,6 +719,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
     web_app.router.add_get("/api/status", handle_status)
     web_app.router.add_get("/api/miplay/status", handle_miplay_status)
     web_app.router.add_post("/api/update", handle_execute_update)
+    setup_api_v1_routes(web_app, config, app_instance)
 
     # 静态文件
     import os

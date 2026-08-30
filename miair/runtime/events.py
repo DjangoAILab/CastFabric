@@ -59,9 +59,25 @@ class ActivityEventJournal:
         self._persist(event)
         return event
 
-    def query(self, *, target_id=None, protocol=None, outcome=None, limit=100):
+    def get(self, event_id: str) -> ActivityEventSnapshot | None:
+        return next((event for event in self._events if event.id == event_id), None)
+
+    def query(
+        self,
+        *,
+        target_id=None,
+        protocol=None,
+        outcome=None,
+        limit=100,
+        cursor: str | None = None,
+    ):
         result = []
+        cursor_seen = cursor is None
         for event in reversed(self._events):
+            if not cursor_seen:
+                if event.id == cursor:
+                    cursor_seen = True
+                continue
             if target_id and event.target_id != target_id:
                 continue
             if protocol and event.protocol != protocol:

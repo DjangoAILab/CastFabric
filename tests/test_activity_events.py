@@ -43,3 +43,26 @@ def test_event_file_failure_degrades_journal_without_losing_memory_event(tmp_pat
 
     assert journal.degraded is True
     assert journal.query()[0].id == event.id
+
+
+def test_event_cursor_returns_older_items_in_stable_order():
+    ticks = iter(NOW + timedelta(seconds=i) for i in range(4))
+    ids = iter(["event-1", "event-2", "event-3", "event-4"])
+    journal = ActivityEventJournal(
+        clock=lambda: next(ticks),
+        id_factory=lambda: next(ids),
+    )
+    for _ in range(4):
+        journal.append(
+            target_id="uuid:living",
+            type="session.control",
+            outcome=EventOutcome.SUCCESS,
+            summary_key="activity.control",
+        )
+
+    first_page = journal.query(limit=2)
+    second_page = journal.query(limit=2, cursor=first_page[-1].id)
+
+    assert [event.id for event in first_page] == ["event-4", "event-3"]
+    assert [event.id for event in second_page] == ["event-2", "event-1"]
+    assert journal.get("event-2").id == "event-2"

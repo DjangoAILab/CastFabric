@@ -1,0 +1,26 @@
+{
+  "system": [
+    "product", "version", "health", "hostname", "receiver_prefix",
+    "ports", "targets", "suites", "sessions", "discovery",
+    "observability", "extensions"
+  ],
+  "target": [
+    "id", "kind", "name", "receiver_alias", "location_host",
+    "enabled", "online", "observed_at", "capabilities", "suite_health"
+  ],
+  "suite": [
+    "target", "health", "ingress", "current_session_id", "last_activity_at"
+  ],
+  "session": [
+    "id", "target_id", "protocol", "state", "source", "media",
+    "started_at", "ended_at"
+  ],
+  "event": [
+    "id", "occurred_at", "target_id", "session_id", "protocol", "type",
+    "outcome", "summary_key", "reason_code", "details"
+  ],
+  "forbidden": [
+    "account", "password", "cookie", "passToken", "mi_did",
+    "default_target_id", "source_app", "app_name", "end_to_end_latency"
+  ]
+}

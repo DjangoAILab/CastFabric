@@ -70,6 +70,18 @@ class ReceiverSuite:
         # unknown until a completed discovery scan supplies a value.
         self.online: bool | None = None
         self.observed_at: datetime | None = None
+        self.capabilities: tuple[str, ...] = ()
+
+    def update_observation(
+        self,
+        *,
+        online: bool | None,
+        observed_at: datetime | None,
+        capabilities: tuple[str, ...] = (),
+    ) -> None:
+        self.online = online
+        self.observed_at = observed_at
+        self.capabilities = tuple(capabilities)
 
     def get_ingress(self, protocol: IngressProtocol) -> IngressRuntime | None:
         return self.ingress.get(protocol)
@@ -121,6 +133,7 @@ class ReceiverSuite:
             enabled=self.target.enabled,
             online=self.online,
             observed_at=self.observed_at,
+            capabilities=self.capabilities,
         )
         ingress = tuple(
             self.ingress[protocol].snapshot()
