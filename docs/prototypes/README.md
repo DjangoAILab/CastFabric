@@ -7,7 +7,9 @@
 | [`castfabric-console-v3.html`](castfabric-console-v3.html) | Superseded v3 / 信息架构参考 | 验证了总览、音响、活动三个独立页面；视觉主题已由 v4 取代，不得直接转为生产 UI。 |
 | [`castfabric-home-v4.html`](castfabric-home-v4.html) | Superseded v4 / 主题参考 | 暖色主题有效，但单会话大卡、中央 CF 节点与固定高度无法支持多端点和常见桌面视口。 |
 | [`castfabric-home-v5.html`](castfabric-home-v5.html) | Review v5 / 仅首页 | 固定三轨交换台；多发送端、多音响保持等重，1280×720 起桌面无滚动，移动端转为纵向会话卡。 |
+| [`castfabric-console-v6.html`](castfabric-console-v6.html) | Review v6 / 完整产品原型 | 保留已批准首页，补齐音响管理、详情编辑、结构化活动、事件详情和分区连接配置；所有动态字段通过机器数据契约检查。 |
 
-下一版必须先遵循
-[家庭音频控制台参考研究](../design/research/2026-08-30-castfabric-home-audio-console-references.md)，
-采用 Whole-home Sound Map 方向完成产品评审。
+当前评审以 v6 为唯一完整原型。新增字段或动作必须先登记到
+[控制台字段契约](../design/contracts/castfabric-console-fields.json)，并通过
+[`validate_console_prototype.py`](validate_console_prototype.py)；交互、国际化和响应式回归使用
+[`verify_console_prototype.cjs`](verify_console_prototype.cjs)。
