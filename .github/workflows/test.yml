@@ -55,7 +55,7 @@ jobs:
           }
           trap cleanup EXIT
           curl --fail --silent --show-error \
-            --retry 30 --retry-connrefused --retry-delay 1 \
+            --retry 30 --retry-all-errors --retry-connrefused --retry-delay 1 \
             http://127.0.0.1:18300/api/status \
             | python -c "import json,sys; d=json.load(sys.stdin); assert d['version']=='0.10.0a1'; assert d['xiaomi_extension_enabled'] is False"
           curl --fail --silent http://127.0.0.1:18300/api/v1/system \
