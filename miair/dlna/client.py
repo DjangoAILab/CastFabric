@@ -9,6 +9,7 @@ import socket
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from typing import Callable
 from urllib.parse import urljoin
 
 import aiohttp
@@ -76,9 +77,57 @@ def _parse_device_description(
 class LocalDLNAClient:
     """Discover and control a physical DLNA MediaRenderer on the LAN."""
 
-    def __init__(self, location: str, services: dict[str, str]):
+    def __init__(
+        self,
+        location: str,
+        services: dict[str, str],
+        *,
+        device_id: str = "",
+        interface_ip: str = "",
+        endpoint_changed: Callable[[str], None] | None = None,
+    ):
         self.location = location
         self.services = services
+        self.device_id = _normalize_udn(device_id)
+        self.interface_ip = str(interface_ip or "")
+        self._endpoint_changed = endpoint_changed
+        self._refresh_lock = asyncio.Lock()
+
+    def set_endpoint_changed_callback(
+        self,
+        callback: Callable[[str], None] | None,
+    ) -> None:
+        self._endpoint_changed = callback
+
+    def _apply_endpoint(
+        self,
+        location: str,
+        services: dict[str, str],
+    ) -> bool:
+        previous_location = self.location
+        changed = location != self.location or services != self.services
+        self.location = location
+        self.services = dict(services)
+        if self._endpoint_changed and location != previous_location:
+            try:
+                self._endpoint_changed(location)
+            except Exception as exc:
+                # Persistence must never turn a recovered control path into a
+                # playback failure.
+                log.warning(
+                    "保存实体 DLNA 新地址失败: %s",
+                    type(exc).__name__,
+                )
+        return changed
+
+    async def update_endpoint(
+        self,
+        location: str,
+        services: dict[str, str],
+    ) -> bool:
+        """Apply a discovery observation without replacing active adapters."""
+        async with self._refresh_lock:
+            return self._apply_endpoint(location, services)
 
     @classmethod
     async def connect(
@@ -98,7 +147,12 @@ class LocalDLNAClient:
             try:
                 services = await cls._load_services(location)
                 if AVTRANSPORT_URN in services and RENDERING_CONTROL_URN in services:
-                    return cls(location, services)
+                    return cls(
+                        location,
+                        services,
+                        device_id=device_id,
+                        interface_ip=interface_ip,
+                    )
             except Exception as exc:
                 log.debug("验证本地 DLNA 设备失败 %s: %s", location, type(exc).__name__)
         return None
@@ -229,7 +283,13 @@ class LocalDLNAClient:
                 payload = await response.read()
         return _parse_device_description(payload, location)
 
-    async def _soap(self, urn: str, action: str, arguments: dict) -> dict[str, str]:
+    async def _soap_once(
+        self,
+        service_url: str,
+        urn: str,
+        action: str,
+        arguments: dict,
+    ) -> dict[str, str]:
         inner = "".join(
             f"<{key}>{html.escape(str(value), quote=True)}</{key}>"
             for key, value in arguments.items()
@@ -248,7 +308,7 @@ class LocalDLNAClient:
         }
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
-                self.services[urn], data=payload, headers=headers
+                service_url, data=payload, headers=headers
             ) as response:
                 response.raise_for_status()
                 raw = await response.read()
@@ -258,6 +318,59 @@ class LocalDLNAClient:
             for node in root.iter()
             if len(node) == 0
         }
+
+    async def _refresh_after_connection_failure(
+        self,
+        urn: str,
+        failed_service_url: str,
+    ) -> bool:
+        """Atomically refresh a renderer whose reboot changed its HTTP port."""
+        if not self.device_id or not self.interface_ip:
+            return False
+        async with self._refresh_lock:
+            # Another concurrent command may already have refreshed the client.
+            current_url = self.services.get(urn, "")
+            if current_url and current_url != failed_service_url:
+                return True
+            location = await self._discover_location(
+                self.device_id,
+                self.interface_ip,
+            )
+            if not location:
+                return False
+            try:
+                services = await self._load_services(location)
+            except Exception as exc:
+                log.warning(
+                    "重新读取实体 DLNA 服务失败: %s",
+                    type(exc).__name__,
+                )
+                return False
+            if urn not in services:
+                return False
+            previous_location = self.location
+            self._apply_endpoint(location, services)
+            log.info(
+                "实体 DLNA 控制地址已重新发现: %s -> %s",
+                previous_location,
+                location,
+            )
+            return True
+
+    async def _soap(self, urn: str, action: str, arguments: dict) -> dict[str, str]:
+        service_url = self.services[urn]
+        try:
+            return await self._soap_once(service_url, urn, action, arguments)
+        except (aiohttp.ClientConnectionError, TimeoutError):
+            if not await self._refresh_after_connection_failure(urn, service_url):
+                raise
+            log.info("实体 DLNA 连接恢复，重试 SOAP %s", action)
+            return await self._soap_once(
+                self.services[urn],
+                urn,
+                action,
+                arguments,
+            )
 
     async def play_url(self, url: str) -> bool:
         await self._soap(

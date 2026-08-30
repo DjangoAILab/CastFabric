@@ -62,6 +62,7 @@ class CastFabric:
         self._miplay_session_ids: dict[str, str] = {}
         self.discovered_targets = {}
         self._auth_retry_task: asyncio.Task | None = None
+        self._target_discovery_task: asyncio.Task | None = None
         self.suite_registry = ReceiverSuiteRegistry(
             device_name_prefix=self.config.device_name_prefix
         )
@@ -94,6 +95,43 @@ class CastFabric:
         observed = await LocalDLNAClient.discover(self.config.hostname)
         virtual_ids = {f"uuid:{renderer.udn}" for renderer in self.renderers.values()}
         return [target for target in observed if target.id not in virtual_ids]
+
+    async def scan_output_targets(self):
+        """Refresh observations and live DLNA clients from one atomic scan."""
+        observations = await self.discovery_registry.scan()
+        persist_required = False
+        for target_id, observation in observations.items():
+            target = self.config.get_target(target_id)
+            if target is None:
+                continue
+            if target.location != observation.location:
+                target.location = observation.location
+                persist_required = True
+            controller = self.speaker_manager.get_controller_for_target(target_id)
+            local_dlna = controller.local_dlna if controller else None
+            if local_dlna is not None:
+                await local_dlna.update_endpoint(
+                    observation.location,
+                    observation.services,
+                )
+        if persist_required:
+            self.config.save()
+        return observations
+
+    async def _periodic_output_target_discovery(self):
+        """Keep physical renderer ports and online observations fresh."""
+        try:
+            while True:
+                try:
+                    await self.scan_output_targets()
+                except Exception as exc:
+                    log.warning(
+                        "周期发现实体 DLNA 输出失败: %s",
+                        type(exc).__name__,
+                    )
+                await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            pass
 
     async def get_all_devices(self) -> list[dict]:
         """获取小米账号下所有设备列表"""
@@ -200,6 +238,9 @@ class CastFabric:
             log.info(f"请访问 http://{self.config.hostname}:{self.config.web_port} 进行配置")
 
         self._device_check_task = asyncio.create_task(self._periodic_device_check())
+        self._target_discovery_task = asyncio.create_task(
+            self._periodic_output_target_discovery()
+        )
 
     async def _start_dlna_services(self):
         """启动 DLNA 相关服务 (登录、初始化音箱、SSDP、HTTP)"""
@@ -760,6 +801,13 @@ class CastFabric:
 
         if hasattr(self, '_device_check_task') and self._device_check_task:
             self._device_check_task.cancel()
+        if self._target_discovery_task:
+            self._target_discovery_task.cancel()
+            await asyncio.gather(
+                self._target_discovery_task,
+                return_exceptions=True,
+            )
+            self._target_discovery_task = None
         if self._auth_retry_task:
             self._auth_retry_task.cancel()
             self._auth_retry_task = None

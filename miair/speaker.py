@@ -153,6 +153,14 @@ class SpeakerManager:
         if local_dlna:
             target.location = local_dlna.location
             speaker.local_dlna_location = local_dlna.location
+
+            def persist_endpoint(location: str) -> None:
+                target.location = location
+                speaker.local_dlna_location = location
+                self.config.save()
+
+            if hasattr(local_dlna, "set_endpoint_changed_callback"):
+                local_dlna.set_endpoint_changed_callback(persist_endpoint)
             log.info(
                 "已连接实体音箱本地 DLNA: %s (%s)",
                 speaker.get_dlna_name(),

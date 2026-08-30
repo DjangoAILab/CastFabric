@@ -237,7 +237,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
 
     async def scan_targets(request):
         try:
-            await app.discovery_registry.scan()
+            await app.scan_output_targets()
         except DiscoveryBusyError:
             return _error(
                 "DISCOVERY_BUSY",

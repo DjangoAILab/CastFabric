@@ -2,7 +2,7 @@
 
 from miair.identity import PRODUCT_NAME
 
-VERSION = "0.10.0a1"
+VERSION = "0.10.0a2"
 UPNP_SERVER = f"{PRODUCT_NAME}/{VERSION} UPnP/1.0"
 
 
