@@ -42,3 +42,23 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Run MiPlay self-test in image
         run: docker run --rm --entrypoint python castfabric:test -m miair.miplay.probe self-test --duration 0.35
+      - name: Cold-start container and verify production HTTP surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name castfabric-ci \
+            -e CASTFABRIC_HOSTNAME=127.0.0.1 \
+            -p 18300:8300 castfabric:test
+          cleanup() {
+            docker logs castfabric-ci || true
+            docker rm -f castfabric-ci >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          curl --fail --silent --show-error \
+            --retry 30 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:18300/api/status \
+            | python -c "import json,sys; d=json.load(sys.stdin); assert d['version']=='0.10.0a1'; assert d['xiaomi_extension_enabled'] is False"
+          curl --fail --silent http://127.0.0.1:18300/api/v1/system \
+            | python -c "import json,sys; d=json.load(sys.stdin); assert d['product']=='CastFabric'; assert d['health']=='idle'; assert d['targets']['count']==0"
+          curl --fail --silent http://127.0.0.1:18300/ \
+            | grep -q 'console.js'

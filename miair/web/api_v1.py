@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import re
 import zipfile
 from typing import Any
 
@@ -14,11 +13,8 @@ from miair.const import VERSION
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
 from miair.runtime.discovery import DiscoveryBusyError
 from miair.runtime.models import EventOutcome, IngressProtocol, SessionState
-from miair.runtime.redaction import project_location_host
+from miair.runtime.redaction import project_location_host, redact_network_addresses
 from miair.targets import OutputTargetConfig, normalize_target_id
-
-
-_DIAGNOSTIC_IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
 
 def _redact_diagnostic(value):
@@ -27,7 +23,7 @@ def _redact_diagnostic(value):
     if isinstance(value, list):
         return [_redact_diagnostic(item) for item in value]
     if isinstance(value, str):
-        return _DIAGNOSTIC_IPV4.sub("<local-address>", value)
+        return redact_network_addresses(value)
     return value
 
 

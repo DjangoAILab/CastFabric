@@ -319,3 +319,29 @@ async def test_sessions_events_and_diagnostics_are_bounded_and_redacted(tmp_path
     assert "192.168.133.20" not in combined
     assert "192.168.133.21" not in combined
     assert "127.0.0.1" not in combined
+
+
+@pytest.mark.asyncio
+async def test_settings_save_failure_restores_every_mutated_runtime_value(tmp_path):
+    config, app = _build_app(tmp_path)
+    original_prefix = config.device_name_prefix
+    original_volume = config.default_volume
+    client = await _client(config, app)
+    with patch.object(config, "save", side_effect=OSError("disk full")):
+        try:
+            response = await client.patch(
+                "/api/v1/settings",
+                json={
+                    "identity": {"receiver_prefix": "Must Roll Back"},
+                    "playback": {"default_volume": 77},
+                },
+            )
+            payload = await response.json()
+        finally:
+            await client.close()
+
+    assert response.status == 500
+    assert payload["error"]["code"] == "SETTINGS_SAVE_FAILED"
+    assert config.device_name_prefix == original_prefix
+    assert config.default_volume == original_volume
+    assert app.suite_registry.device_name_prefix == original_prefix

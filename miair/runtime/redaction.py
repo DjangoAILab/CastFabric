@@ -20,6 +20,12 @@ _ALLOWED_EVENT_DETAILS = {
     "volume_percent",
 }
 _IPV4_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+_IPV6_RE = re.compile(
+    r"(?<![0-9A-Fa-f:])\[?"
+    r"(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}"
+    r"(?:%[A-Za-z0-9_.-]+)?\]?"
+    r"(?![0-9A-Fa-f:])"
+)
 _MAX_DETAIL_TEXT = 256
 
 
@@ -54,8 +60,24 @@ def _redact_url(value: str) -> str:
         return "<redacted>"
 
 
+def redact_network_addresses(value: str) -> str:
+    """Remove valid IPv4 and IPv6 literals from arbitrary diagnostic text."""
+    text = _IPV4_RE.sub("<local-address>", str(value))
+
+    def replace_ipv6(match: re.Match[str]) -> str:
+        candidate = match.group(0).strip("[]")
+        address = candidate.split("%", 1)[0]
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            return match.group(0)
+        return "<local-address>" if parsed.version == 6 else match.group(0)
+
+    return _IPV6_RE.sub(replace_ipv6, text)
+
+
 def _redact_text(value: str) -> str:
-    text = _IPV4_RE.sub("<local-address>", value)
+    text = redact_network_addresses(value)
     return text[:_MAX_DETAIL_TEXT]
 
 

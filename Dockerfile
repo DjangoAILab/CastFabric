@@ -21,9 +21,9 @@ RUN pip install --no-cache-dir \
     --index-url "${PIP_INDEX_URL}" \
     . --root-user-action=ignore
 
-# Verify the installed wheel contains the Web UI. Run away from /app so the
-# source tree cannot accidentally mask missing package data.
-RUN cd /tmp && python -c "from importlib.resources import files; p = files('miair.web').joinpath('static/index.html'); assert p.is_file() and p.read_text(encoding='utf-8').startswith('<!DOCTYPE html>')"
+# Verify the installed wheel contains the complete production console. Run
+# away from /app so the source tree cannot accidentally mask package defects.
+RUN cd /tmp && python -c "from importlib.resources import files; root = files('miair.web').joinpath('static'); html = root.joinpath('index.html').read_text(encoding='utf-8'); assert html.lstrip().lower().startswith('<!doctype html>'); assert root.joinpath('console.css').is_file(); assert root.joinpath('console.js').is_file()"
 
 COPY config-example.json .env.example ./
 RUN mkdir -p /app/conf

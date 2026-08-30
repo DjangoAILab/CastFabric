@@ -1,4 +1,8 @@
-from miair.runtime.redaction import project_location_host, redact_event_details
+from miair.runtime.redaction import (
+    project_location_host,
+    redact_event_details,
+    redact_network_addresses,
+)
 
 
 def test_location_projection_keeps_only_host():
@@ -43,3 +47,13 @@ def test_redaction_bounds_values_and_rejects_unregistered_fields():
     assert len(details["reason"]) == 256
     assert details["volume_percent"] == 38
     assert "arbitrary" not in details
+
+
+def test_network_redaction_removes_ipv4_ipv6_and_scoped_ipv6_literals():
+    redacted = redact_network_addresses(
+        "peers 192.168.133.225, [2001:db8::5], fe80::a%en0 at 12:30:00"
+    )
+
+    assert redacted == (
+        "peers <local-address>, <local-address>, <local-address> at 12:30:00"
+    )
