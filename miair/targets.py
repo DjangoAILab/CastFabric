@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from miair.identity import format_device_name
+
 
 def normalize_target_id(value: str) -> str:
     raw = str(value or "").strip().lower().split("::", 1)[0]
@@ -22,6 +24,7 @@ class OutputTargetConfig:
     enabled: bool = True
     virtual_udn: str = ""
     legacy_did: str = ""
+    receiver_alias: str = ""
 
     def __post_init__(self):
         self.id = normalize_target_id(self.id) or str(self.id).strip()
@@ -30,4 +33,7 @@ class OutputTargetConfig:
         self.location = str(self.location or "").strip()
         self.udn = normalize_target_id(self.udn or self.id)
         self.enabled = bool(self.enabled)
+        self.receiver_alias = str(self.receiver_alias or "").strip()
 
+    def get_receiver_alias(self, prefix: str) -> str:
+        return self.receiver_alias or format_device_name(prefix, self.name)

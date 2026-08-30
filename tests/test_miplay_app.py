@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from miair.app import MiAir
 from miair.config import Config
+from miair.targets import OutputTargetConfig
 
 
 class FakeSpeaker:
@@ -11,8 +12,13 @@ class FakeSpeaker:
         return "书房 M01"
 
 
-def test_app_starts_miplay_for_first_configured_speaker():
+def test_app_starts_miplay_for_configured_suite():
     async def scenario():
+        target = OutputTargetConfig(
+            id="uuid:study",
+            name="书房 M01",
+            virtual_udn="study-virtual",
+        )
         config = Config(
             hostname="192.168.31.9",
             enable_miplay=True,
@@ -22,17 +28,21 @@ def test_app_starts_miplay_for_first_configured_speaker():
             miplay_http_mode="content-length",
             miplay_content_type="audio/x-wav",
             miplay_stream_format="l16",
+            targets={target.id: target},
         )
         app = MiAir(config)
         controller = SimpleNamespace(
+            target_id=target.id,
             speaker=FakeSpeaker(),
             set_volume=AsyncMock(return_value=True),
         )
-        app.speaker_manager.controllers = {"speaker-did": controller}
+        app.speaker_manager.controllers = {target.id: controller}
+        app.suite_registry.register(target, target.id, controller)
 
         with patch("miair.app.MiPlayReceiver") as receiver_type:
             receiver = receiver_type.return_value
             receiver.start = AsyncMock()
+            receiver.port = 18899
             await app._start_miplay_for_speaker()
 
             receiver_type.assert_called_once()
@@ -56,7 +66,7 @@ def test_stopping_dlna_services_stops_miplay_before_clearing_state():
     async def scenario():
         app = MiAir(Config(hostname="127.0.0.1"))
         receiver = SimpleNamespace(stop=AsyncMock())
-        app.miplay_receiver = receiver
+        app.miplay_receivers = {"uuid:study": receiver}
         await app._stop_dlna_services()
         receiver.stop.assert_awaited_once()
         assert app.miplay_receiver is None

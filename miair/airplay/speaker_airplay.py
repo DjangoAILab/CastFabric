@@ -288,16 +288,36 @@ class AirPlayManager:
                 continue
 
             try:
-                speaker_airplay = SpeakerAirPlay(
-                    self.hostname, controller, self._shared_zeroconf,
-                    config=self.config
-                )
-                await speaker_airplay.start()
-                self.speaker_airplays[did] = speaker_airplay
+                await self.start_for_speaker(did, controller)
             except Exception as e:
                 log.error(f"为音箱 {controller.speaker.get_dlna_name()} 启动 AirPlay 失败: {e}")
 
         log.info(f"共启动了 {len(self.speaker_airplays)} 个音箱的 AirPlay 服务")
+
+    async def start_for_speaker(
+        self,
+        did: str,
+        controller: SpeakerController,
+    ) -> SpeakerAirPlay:
+        """Start and return one independently managed AirPlay receiver."""
+        existing = self.speaker_airplays.get(did)
+        if existing is not None:
+            return existing
+        if not self._shared_zeroconf:
+            self._shared_zeroconf = Zeroconf(
+                interfaces=[self.hostname],
+                ip_version=IPVersion.V4Only,
+            )
+            log.info("创建共享 Zeroconf 实例用于所有音箱，接口: %s", self.hostname)
+        speaker_airplay = SpeakerAirPlay(
+            self.hostname,
+            controller,
+            self._shared_zeroconf,
+            config=self.config,
+        )
+        await speaker_airplay.start()
+        self.speaker_airplays[did] = speaker_airplay
+        return speaker_airplay
 
     async def stop(self):
         """停止所有 AirPlay 服务"""
@@ -318,6 +338,16 @@ class AirPlayManager:
             self._shared_zeroconf = None
 
         log.info("所有 AirPlay 服务已停止")
+
+    async def stop_for_speaker(self, did: str) -> SpeakerAirPlay | None:
+        """Stop one receiver while keeping the shared Zeroconf instance alive."""
+        speaker_airplay = self.speaker_airplays.get(did)
+        if speaker_airplay is None:
+            return None
+        await speaker_airplay.stop()
+        del self.speaker_airplays[did]
+        log.info("已停止单个音箱的 AirPlay 服务: %s", did)
+        return speaker_airplay
 
     async def restart_for_speakers(self, controllers: dict[str, SpeakerController]):
         """重新为音箱启动 AirPlay 服务"""

@@ -39,6 +39,26 @@ class SSDPServer:
         self.renderers[udn] = friendly_name
         log.info(f"SSDP 注册渲染器: {friendly_name} (uuid:{udn})")
 
+    async def announce_renderer(self, udn: str) -> None:
+        """Send an alive burst for one dynamically registered renderer."""
+        if not self._transport or udn not in self.renderers:
+            return
+        for nt, usn in self._get_search_targets(udn):
+            data = self._build_notify_alive(nt, usn, udn)
+            self._transport.sendto(data, (SSDP_ADDR, SSDP_PORT))
+
+    async def unregister_renderer(self, udn: str) -> bool:
+        """Withdraw and remove one renderer without stopping shared SSDP."""
+        if udn not in self.renderers:
+            return False
+        if self._transport:
+            for nt, usn in self._get_search_targets(udn):
+                data = self._build_notify_byebye(nt, usn)
+                self._transport.sendto(data, (SSDP_ADDR, SSDP_PORT))
+        friendly_name = self.renderers.pop(udn)
+        log.info("SSDP 注销渲染器: %s (uuid:%s)", friendly_name, udn)
+        return True
+
     def _get_location(self, udn: str) -> str:
         """获取设备描述 URL"""
         return f"http://{self.hostname}:{self.dlna_port}/device/{udn}/description.xml"

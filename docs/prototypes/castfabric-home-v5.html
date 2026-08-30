@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CastFabric · 多端点首页 v5</title>
+  <style>
+    :root {
+      --canvas: #f6f1e8;
+      --surface: #fffdf9;
+      --surface-warm: #fff8f1;
+      --ink: #202421;
+      --muted: #6f746e;
+      --faint: #989b96;
+      --line: #d8d3ca;
+      --line-soft: rgba(54, 60, 56, .11);
+      --signal: #f35f45;
+      --signal-deep: #b94634;
+      --signal-pale: #fde3d9;
+      --healthy: #2f8064;
+      --healthy-pale: #dfede7;
+      --warning: #b87922;
+      --danger: #a63e32;
+      --header-h: 64px;
+      --shadow: 0 20px 60px rgba(68, 52, 35, .08);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; }
+    body {
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 3% 0%, rgba(243,95,69,.09), transparent 26%),
+        radial-gradient(circle at 96% 100%, rgba(47,128,100,.07), transparent 24%),
+        var(--canvas);
+      font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1480px, calc(100% - 32px)); margin: 0 auto; }
+
+    .app-header {
+      height: var(--header-h);
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand-mark {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border: 1.4px solid var(--ink);
+      border-radius: 50%;
+    }
+    .brand-mark::before, .brand-mark::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      width: 16px;
+      height: 1px;
+      background: var(--signal);
+      transform-origin: left center;
+    }
+    .brand-mark::before { top: 12px; transform: rotate(18deg); }
+    .brand-mark::after { top: 21px; transform: rotate(-18deg); }
+    .brand strong { display: block; font: 500 19px/1.05 Baskerville, "Songti SC", serif; }
+    .brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 7px; letter-spacing: .15em; }
+
+    .nav {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line-soft);
+      border-radius: 999px;
+      background: rgba(255,253,249,.58);
+    }
+    .nav button {
+      height: 32px;
+      padding: 0 17px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .nav button.active { color: var(--surface); background: var(--ink); }
+    .header-actions { justify-self: end; display: flex; gap: 8px; }
+    .header-actions button {
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,253,249,.62);
+    }
+    .language-button { width: 42px; }
+    .connection-button { padding: 0 16px; }
+
+    .home {
+      height: calc(100dvh - var(--header-h));
+      min-height: 0;
+      padding: clamp(12px, 2vh, 20px) 0 clamp(12px, 2vh, 18px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: clamp(10px, 1.7vh, 16px);
+    }
+    .home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+    .eyebrow { margin: 0 0 4px; color: var(--signal); font-size: 8px; font-weight: 750; letter-spacing: .17em; }
+    h1 { margin: 0; font: 500 clamp(31px, 3.3vw, 48px)/1.02 Baskerville, "Songti SC", serif; letter-spacing: -.035em; }
+    .health-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 248px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgba(255,253,249,.65);
+    }
+    .health-light { position: relative; width: 27px; height: 27px; flex: 0 0 auto; border: 1px solid var(--healthy); border-radius: 50%; }
+    .health-light::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--healthy); box-shadow: 0 0 0 4px var(--healthy-pale); }
+    .health-copy strong { display: block; font-size: 11px; }
+    .health-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; }
+
+    .switchboard {
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      border: 1px solid rgba(75,69,58,.20);
+      border-radius: 27px;
+      background:
+        linear-gradient(90deg, rgba(243,95,69,.026) 0 31%, transparent 31% 69%, rgba(47,128,100,.025) 69%),
+        rgba(255,253,249,.84);
+      box-shadow: var(--shadow);
+    }
+    .board-head, .board-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .board-head { min-height: 46px; padding: 0 22px; border-bottom: 1px solid var(--line-soft); }
+    .board-title { display: flex; align-items: baseline; gap: 9px; }
+    .board-title strong { font-size: 11px; }
+    .board-title span, .board-legend { color: var(--muted); font-size: 9px; }
+    .board-legend { display: flex; align-items: center; gap: 14px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-item i { width: 6px; height: 6px; border-radius: 50%; background: var(--healthy); }
+    .legend-item.live i { background: var(--signal); box-shadow: 0 0 0 4px rgba(243,95,69,.10); }
+
+    .lane-stack {
+      min-height: 0;
+      padding: clamp(8px, 1.5vh, 14px) 22px;
+      display: grid;
+      grid-template-rows: repeat(3, minmax(78px, 118px));
+      align-content: center;
+      gap: clamp(7px, 1.25vh, 11px);
+    }
+    .route-row {
+      position: relative;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.28fr) minmax(220px, 1fr);
+      align-items: stretch;
+      overflow: hidden;
+      border: 1px solid var(--line-soft);
+      border-radius: 18px;
+      background: rgba(255,253,249,.54);
+      opacity: 0;
+      transform: translateY(8px);
+      animation: laneIn .45s cubic-bezier(.22,.72,.24,1) forwards;
+    }
+    .route-row.live { border-color: rgba(243,95,69,.34); background: linear-gradient(90deg, rgba(253,227,217,.44), rgba(255,253,249,.70) 48%, rgba(253,227,217,.28)); }
+    .route-row.attention { border-color: rgba(184,121,34,.28); }
+    .route-row:nth-child(2) { animation-delay: .08s; }
+    .route-row:nth-child(3) { animation-delay: .16s; }
+    @keyframes laneIn { to { opacity: 1; transform: translateY(0); } }
+
+    .endpoint {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: clamp(9px, 1.4vh, 14px) 15px;
+      background: transparent;
+    }
+    .source-endpoint { border-right: 1px solid var(--line-soft); }
+    .output-endpoint { border-left: 1px solid var(--line-soft); }
+    .endpoint-icon {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(32,36,33,.32);
+      border-radius: 11px;
+      background: var(--canvas);
+    }
+    .endpoint-icon.phone::before { content: ""; position: absolute; inset: 6px 9px; border: 1.2px solid var(--ink); border-radius: 5px; }
+    .endpoint-icon.phone::after { content: ""; position: absolute; left: 15px; bottom: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--signal); }
+    .endpoint-icon.laptop::before { content: ""; position: absolute; left: 6px; top: 7px; width: 20px; height: 14px; border: 1.2px solid var(--ink); border-radius: 3px; }
+    .endpoint-icon.laptop::after { content: ""; position: absolute; left: 4px; bottom: 8px; width: 24px; height: 1px; background: var(--ink); }
+    .endpoint-icon.unknown::before { content: "?"; position: absolute; inset: 0; display: grid; place-items: center; font: 500 17px/1 Baskerville, serif; color: var(--muted); }
+    .endpoint-icon.speaker::before { content: ""; position: absolute; inset: 5px 9px; border: 1.2px solid var(--ink); border-radius: 7px; }
+    .endpoint-icon.speaker::after { content: ""; position: absolute; left: 14px; top: 10px; width: 6px; height: 6px; border: 1px solid var(--ink); border-radius: 50%; box-shadow: 0 10px 0 -1px var(--signal); }
+    .endpoint-copy { min-width: 0; }
+    .endpoint-copy small { display: block; margin-bottom: 3px; color: var(--muted); font-size: 8px; letter-spacing: .08em; }
+    .endpoint-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(12px, 1.1vw, 15px); }
+    .endpoint-copy span { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 9px; }
+    .endpoint-state { margin-left: auto; align-self: flex-start; padding: 4px 7px; border-radius: 999px; background: var(--healthy-pale); color: var(--healthy); white-space: nowrap; font-size: 8px; font-weight: 700; }
+    .route-row.live .endpoint-state { color: var(--signal-deep); background: var(--signal-pale); }
+    .route-row.attention .endpoint-state { color: var(--warning); background: #f5ead7; }
+
+    .route-channel {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(64px, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+    }
+    .protocol-chip, .route-result {
+      position: relative;
+      z-index: 2;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      white-space: nowrap;
+      font-size: 8px;
+      font-weight: 700;
+    }
+    .protocol-chip { color: var(--signal-deep); }
+    .route-result { color: var(--muted); }
+    .route-line { position: relative; height: 2px; overflow: visible; background: var(--line); }
+    .route-line::before { content: ""; position: absolute; right: -1px; top: -3px; width: 7px; height: 7px; border-top: 1.5px solid var(--muted); border-right: 1.5px solid var(--muted); transform: rotate(45deg); }
+    .route-row.live .route-line { height: 3px; background: linear-gradient(90deg, var(--signal), var(--signal-soft)); }
+    .route-row.live .route-line::before { border-color: var(--signal); }
+    .signal-packet { display: none; position: absolute; top: 50%; left: 0; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--signal); box-shadow: -10px 0 0 -2px rgba(243,95,69,.55), -19px 0 0 -3px rgba(243,95,69,.30); }
+    .route-row.live .signal-packet { display: block; animation: packetFlow 2.25s cubic-bezier(.45,0,.55,1) infinite; }
+    @keyframes packetFlow { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: calc(100% - 7px); opacity: 0; } }
+    .route-row.paused .route-line { background: repeating-linear-gradient(90deg, var(--line), var(--line) 7px, transparent 7px, transparent 12px); }
+    .route-row.attention .route-line { height: 2px; background: repeating-linear-gradient(90deg, var(--warning), var(--warning) 6px, transparent 6px, transparent 11px); }
+    .route-row.attention .route-line::before { border-color: var(--warning); }
+
+    .empty-lane { display: none; grid-column: 1 / -1; align-items: center; justify-content: center; gap: 10px; border: 1px dashed var(--line); border-radius: 15px; color: var(--faint); font-size: 9px; }
+    .empty-lane::before { content: ""; width: 36px; height: 1px; background: var(--line); }
+    body[data-mode="single"] .route-row:nth-child(n+2) > :not(.empty-lane), body[data-mode="idle"] .route-row > :not(.empty-lane) { display: none; }
+    body[data-mode="single"] .route-row:nth-child(n+2) .empty-lane, body[data-mode="idle"] .route-row .empty-lane { display: flex; }
+    body[data-mode="error"] .route-row:first-child .route-line { height: 2px; background: repeating-linear-gradient(90deg, var(--danger), var(--danger) 6px, transparent 6px, transparent 11px); }
+    body[data-mode="error"] .route-row:first-child .signal-packet { display: none; }
+    body[data-mode="error"] .route-row:first-child { border-color: rgba(166,62,50,.42); background: rgba(166,62,50,.04); }
+
+    .board-foot { min-height: 46px; padding: 0 22px; border-top: 1px solid var(--line-soft); }
+    .fleet-summary { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .fleet-summary strong { margin-right: 4px; font-size: 9px; }
+    .fleet-pill { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255,253,249,.72); white-space: nowrap; font-size: 8px; }
+    .fleet-pill i { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+    .fleet-pill.playing i { background: var(--signal); }
+    .fleet-pill.ready i { background: var(--healthy); }
+    .fleet-pill.attention i { background: var(--warning); }
+    .board-more { border: 0; background: transparent; color: var(--signal-deep); font-size: 9px; font-weight: 700; }
+
+    .review-tools { position: fixed; z-index: 20; right: 16px; bottom: 54px; display: none; align-items: center; gap: 7px; padding: 7px; border: 1px solid rgba(32,36,33,.16); border-radius: 14px; background: rgba(255,253,249,.95); box-shadow: 0 10px 28px rgba(47,40,30,.12); }
+    .review-tools.open { display: flex; }
+    .review-tools label { padding-left: 4px; color: var(--muted); font-size: 8px; font-weight: 700; }
+    .review-tools select { height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 9px; }
+    .review-toggle { position: fixed; z-index: 21; right: 16px; bottom: 14px; height: 31px; padding: 0 11px; border: 1px solid rgba(32,36,33,.16); border-radius: 999px; background: rgba(255,253,249,.94); color: var(--muted); font-size: 9px; }
+    .toast { position: fixed; z-index: 30; left: 50%; bottom: 16px; transform: translate(-50%, 12px); padding: 9px 13px; border-radius: 999px; background: var(--ink); color: var(--surface); opacity: 0; pointer-events: none; transition: .2s ease; font-size: 10px; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 980px) {
+      body { height: auto; min-height: 100%; overflow-y: auto; }
+      :root { --header-h: 108px; }
+      .shell { width: min(100% - 24px, 760px); }
+      .app-header { grid-template-columns: 1fr auto; grid-template-rows: 60px 48px; }
+      .nav { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+      .header-actions { grid-column: 2; grid-row: 1; }
+      .home { height: auto; min-height: calc(100dvh - var(--header-h)); }
+      .home-head { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .health-summary { width: 100%; }
+      .switchboard { overflow: visible; }
+      .lane-stack { grid-template-rows: none; }
+      .route-row { grid-template-columns: 1fr; gap: 0; }
+      .source-endpoint { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+      .output-endpoint { border-left: 0; border-top: 1px solid var(--line-soft); }
+      .route-channel { min-height: 54px; padding: 0 20px; background: rgba(243,95,69,.025); }
+      .empty-lane { min-height: 78px; }
+      .board-foot { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }
+      .fleet-summary { flex-wrap: wrap; }
+      .board-more { align-self: flex-end; }
+    }
+
+    @media (max-width: 560px) {
+      .brand small, .connection-button { display: none; }
+      .nav { width: 100%; }
+      .nav button { flex: 1; padding: 0 8px; }
+      h1 { font-size: 36px; }
+      .board-head { align-items: flex-start; flex-direction: column; justify-content: center; gap: 4px; padding-top: 10px; padding-bottom: 10px; }
+      .board-legend { width: 100%; }
+      .lane-stack { padding-left: 12px; padding-right: 12px; }
+      .endpoint { padding: 13px; }
+      .fleet-summary strong { width: 100%; }
+      .review-tools { right: 12px; max-width: calc(100% - 24px); flex-wrap: wrap; }
+      .review-toggle { right: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body data-mode="multi">
+  <div class="shell">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div><strong>CastFabric</strong><small>OPEN LOCAL AUDIO</small></div>
+      </div>
+      <nav class="nav" aria-label="主导航" data-i18n-aria="primaryNav">
+        <button class="active" data-i18n="overview">总览</button>
+        <button data-next data-i18n="speakers">音响</button>
+        <button data-next data-i18n="activity">活动</button>
+      </nav>
+      <div class="header-actions">
+        <button class="language-button" id="languageButton" aria-label="切换语言" data-i18n-aria="switchLanguage">EN</button>
+        <button class="connection-button" data-next data-i18n="connections">连接配置</button>
+      </div>
+    </header>
+
+    <main class="home">
+      <div class="home-head">
+        <div>
+          <p class="eyebrow">CASTFABRIC · LOCAL AUDIO ROUTER</p>
+          <h1 data-i18n="slogan">不挑协议，投了就播</h1>
+        </div>
+        <div class="health-summary">
+          <span class="health-light" aria-hidden="true"></span>
+          <div class="health-copy"><strong data-i18n="healthy">全屋声路正常</strong><span data-i18n="healthDetail">7 台音响 · 5 台已启用 · 1 条播放中</span></div>
+        </div>
+      </div>
+
+      <section class="switchboard" aria-label="全屋声音会话" data-i18n-aria="soundSessions">
+        <header class="board-head">
+          <div class="board-title"><strong data-i18n="currentRoutes">当前声路</strong><span data-i18n="routeCount">最多展开 3 条，其余自动汇总</span></div>
+          <div class="board-legend"><span class="legend-item live"><i></i><span data-i18n="legendLive">信号流动</span></span><span class="legend-item"><i></i><span data-i18n="legendReady">输出可达</span></span></div>
+        </header>
+
+        <div class="lane-stack">
+          <article class="route-row live">
+            <div class="endpoint source-endpoint">
+              <span class="endpoint-icon phone" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="sender">发送端</small><strong data-i18n="androidDevice">Android 设备</strong><span data-i18n="sourceUnavailable">App 信息未提供</span></div>
+              <span class="endpoint-state" data-i18n="sending">发送中</span>
+            </div>
+            <div class="route-channel"><span class="protocol-chip">MiPlay</span><span class="route-line"><i class="signal-packet"></i></span><span class="route-result" data-i18n="routing">转送中 · 3.1s</span></div>
+            <div class="endpoint output-endpoint">
+              <span class="endpoint-icon speaker" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="output">输出音响</small><strong data-i18n="livingRoom">客厅音箱</strong><span data-i18n="reachablePlaying">DLNA 可达 · 播放正常</span></div>
+              <span class="endpoint-state" data-i18n="playing">播放中</span>
+            </div>
+            <div class="empty-lane" data-i18n="availableLane">空闲声路容量</div>
+          </article>
+
+          <article class="route-row paused">
+            <div class="endpoint source-endpoint">
+              <span class="endpoint-icon laptop" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="sender">发送端</small><strong>Wang’s MacBook</strong><span data-i18n="deviceIdentified">设备名称已识别</span></div>
+              <span class="endpoint-state" data-i18n="paused">已暂停</span>
+            </div>
+            <div class="route-channel"><span class="protocol-chip">AirPlay</span><span class="route-line"></span><span class="route-result" data-i18n="held">会话保留</span></div>
+            <div class="endpoint output-endpoint">
+              <span class="endpoint-icon speaker" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="output">输出音响</small><strong data-i18n="bedroom">卧室音箱</strong><span data-i18n="reachablePaused">DLNA 可达 · 已暂停</span></div>
+              <span class="endpoint-state" data-i18n="ready">可继续</span>
+            </div>
+            <div class="empty-lane" data-i18n="availableLane">空闲声路容量</div>
+          </article>
+
+          <article class="route-row attention">
+            <div class="endpoint source-endpoint">
+              <span class="endpoint-icon unknown" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="sender">发送端</small><strong data-i18n="unknownSender">发送设备</strong><span data-i18n="sourceUnavailable">App 信息未提供</span></div>
+              <span class="endpoint-state" data-i18n="recent">2 分钟前</span>
+            </div>
+            <div class="route-channel"><span class="protocol-chip">DLNA</span><span class="route-line"></span><span class="route-result" data-i18n="ended">已结束</span></div>
+            <div class="endpoint output-endpoint">
+              <span class="endpoint-icon speaker" aria-hidden="true"></span>
+              <div class="endpoint-copy"><small data-i18n="output">输出音响</small><strong data-i18n="study">书房音箱</strong><span data-i18n="needsAttention">最近一次输出中断</span></div>
+              <span class="endpoint-state" data-i18n="attention">需留意</span>
+            </div>
+            <div class="empty-lane" data-i18n="availableLane">空闲声路容量</div>
+          </article>
+        </div>
+
+        <footer class="board-foot">
+          <div class="fleet-summary"><strong data-i18n="speakerOverview">音响概况</strong><span class="fleet-pill playing"><i></i><span data-i18n="onePlaying">1 播放中</span></span><span class="fleet-pill ready"><i></i><span data-i18n="fourReady">4 已就绪</span></span><span class="fleet-pill attention"><i></i><span data-i18n="oneAttention">1 需留意</span></span><span class="fleet-pill"><i></i><span data-i18n="oneDisabled">1 已停用</span></span></div>
+          <button class="board-more" data-next data-i18n="viewAll">查看全部 7 台音响 →</button>
+        </footer>
+      </section>
+    </main>
+  </div>
+
+  <aside class="review-tools" id="reviewTools" aria-label="原型评审工具" data-i18n-aria="reviewTools">
+    <label for="modeSelect" data-i18n="viewState">场景</label>
+    <select id="modeSelect">
+      <option value="multi" data-i18n="multiMode">多会话</option>
+      <option value="single" data-i18n="singleMode">单会话</option>
+      <option value="idle" data-i18n="idleMode">无会话</option>
+      <option value="error" data-i18n="errorMode">播放异常</option>
+    </select>
+  </aside>
+  <button class="review-toggle" id="reviewToggle" aria-expanded="false" aria-controls="reviewTools" data-i18n="reviewView">评审视图</button>
+  <div class="toast" id="toast" role="status" data-i18n="nextPageToast">本轮只确认首页；其他页面将在首页通过后设计</div>
+
+  <script>
+    const translations = {
+      primaryNav: ['主导航', 'Primary navigation'], switchLanguage: ['切换语言', 'Switch language'], soundSessions: ['全屋声音会话', 'Home sound sessions'], reviewTools: ['原型评审工具', 'Prototype review tools'],
+      overview: ['总览', 'Overview'], speakers: ['音响', 'Speakers'], activity: ['活动', 'Activity'], connections: ['连接配置', 'Connections'],
+      slogan: ['不挑协议，投了就播', 'Cast freely. It just plays.'], healthy: ['全屋声路正常', 'Every active route is healthy'], healthDetail: ['7 台音响 · 5 台已启用 · 1 条播放中', '7 speakers · 5 enabled · 1 playing'],
+      currentRoutes: ['当前声路', 'Current routes'], routeCount: ['最多展开 3 条，其余自动汇总', 'Up to 3 routes shown; the rest are summarized'], legendLive: ['信号流动', 'Signal flowing'], legendReady: ['输出可达', 'Output reachable'],
+      sender: ['发送端', 'Sender'], output: ['输出音响', 'Output speaker'], androidDevice: ['Android 设备', 'Android device'], sourceUnavailable: ['App 信息未提供', 'App details unavailable'], sending: ['发送中', 'Sending'], routing: ['转送中 · 3.1s', 'Routing · 3.1s'], livingRoom: ['客厅音箱', 'Living room speaker'], reachablePlaying: ['DLNA 可达 · 播放正常', 'DLNA reachable · playing'], playing: ['播放中', 'Playing'],
+      deviceIdentified: ['设备名称已识别', 'Device name identified'], paused: ['已暂停', 'Paused'], held: ['会话保留', 'Session held'], bedroom: ['卧室音箱', 'Bedroom speaker'], reachablePaused: ['DLNA 可达 · 已暂停', 'DLNA reachable · paused'], ready: ['可继续', 'Ready'],
+      unknownSender: ['发送设备', 'Sender device'], recent: ['2 分钟前', '2 min ago'], ended: ['已结束', 'Ended'], study: ['书房音箱', 'Study speaker'], needsAttention: ['最近一次输出中断', 'Last output was interrupted'], attention: ['需留意', 'Attention'], availableLane: ['空闲声路容量', 'Available route capacity'],
+      speakerOverview: ['音响概况', 'Speaker overview'], onePlaying: ['1 播放中', '1 playing'], fourReady: ['4 已就绪', '4 ready'], oneAttention: ['1 需留意', '1 attention'], oneDisabled: ['1 已停用', '1 disabled'], viewAll: ['查看全部 7 台音响 →', 'View all 7 speakers →'],
+      viewState: ['场景', 'Scenario'], multiMode: ['多会话', 'Multiple sessions'], singleMode: ['单会话', 'Single session'], idleMode: ['无会话', 'No sessions'], errorMode: ['播放异常', 'Playback error'], reviewView: ['评审视图', 'Review states'], nextPageToast: ['本轮只确认首页；其他页面将在首页通过后设计', 'This round reviews Home only; other pages follow after approval']
+    };
+
+    let language = 'zh';
+    const translate = () => {
+      const index = language === 'zh' ? 0 : 1;
+      document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+      document.getElementById('languageButton').textContent = language === 'zh' ? 'EN' : 'ZH';
+      document.querySelectorAll('[data-i18n]').forEach(node => {
+        const pair = translations[node.dataset.i18n];
+        if (pair) node.textContent = pair[index];
+      });
+      document.querySelectorAll('[data-i18n-aria]').forEach(node => {
+        const pair = translations[node.dataset.i18nAria];
+        if (pair) node.setAttribute('aria-label', pair[index]);
+      });
+    };
+
+    document.getElementById('languageButton').addEventListener('click', () => { language = language === 'zh' ? 'en' : 'zh'; translate(); });
+    document.getElementById('modeSelect').addEventListener('change', event => { document.body.dataset.mode = event.target.value; });
+    document.getElementById('reviewToggle').addEventListener('click', () => {
+      const tools = document.getElementById('reviewTools');
+      const open = tools.classList.toggle('open');
+      document.getElementById('reviewToggle').setAttribute('aria-expanded', String(open));
+    });
+    let toastTimer;
+    document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }));
+    translate();
+  </script>
+</body>
+</html>

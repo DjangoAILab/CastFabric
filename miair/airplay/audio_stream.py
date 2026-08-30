@@ -70,6 +70,7 @@ class AudioStreamServer:
         self._session_id = int(time.time())
         self._has_clients = False
         self._client_lock = threading.Lock()
+        self._client_connected = asyncio.Event()
 
         self._setup_routes()
 
@@ -120,6 +121,25 @@ class AudioStreamServer:
         if self._runner:
             await self._runner.cleanup()
 
+    async def wait_for_client(self, timeout: float) -> bool:
+        """Wait until a real GET request starts consuming the live stream.
+
+        A successful UPnP ``Play`` response only confirms that the renderer
+        accepted the command.  Playback cannot produce sound until the
+        physical renderer pulls this HTTP endpoint, so callers use this as
+        the verified output boundary.
+        """
+        try:
+            await asyncio.wait_for(self._client_connected.wait(), timeout)
+        except asyncio.TimeoutError:
+            return False
+        return True
+
+    @property
+    def has_clients(self) -> bool:
+        with self._client_lock:
+            return self._has_clients
+
     def set_audio_params(self, sample_rate: int, channels: int, sample_width: int = 2):
         if self._audio_format == "l16" and sample_width != 2:
             raise ValueError("audio/L16 requires 16-bit PCM input")
@@ -130,6 +150,7 @@ class AudioStreamServer:
     def start_streaming(self):
         self._active = True
         self._abort = False
+        self._client_connected.clear()
         self._session_id = int(time.time())
         # 快速清空队列
         while True:
@@ -296,6 +317,7 @@ class AudioStreamServer:
 
         with self._client_lock:
             self._has_clients = True
+        self._client_connected.set()
         self._abort = False  # 重置中断标志，允许续播
 
         log.info(
@@ -460,6 +482,11 @@ class AudioStreamServer:
                 self._has_clients = False
             await response.write_eof()
             return response
+
+        # MP3 output is viable only after the transcoder process exists.  A
+        # renderer GET alone must not be reported as an established output if
+        # the host cannot launch ffmpeg.
+        self._client_connected.set()
 
         def drain_stderr():
             try:

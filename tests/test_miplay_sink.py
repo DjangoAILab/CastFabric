@@ -41,15 +41,25 @@ class FakeSpeakerController:
 def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
     async def scenario():
         controller = FakeSpeakerController()
-        sink = MiAirLiveAudioSink("127.0.0.1", controller, play_type=1)
+        lifecycle = []
+
+        async def on_lifecycle(event, details):
+            lifecycle.append((event, details))
+
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1",
+            controller,
+            play_type=1,
+            lifecycle_callback=on_lifecycle,
+        )
         await sink.start(48_000, 2, 2)
         assert "/miplay/stream.wav" in controller.url
         await sink.write(struct.pack("<1920h", *([1000] * 1920)))
         await asyncio.wait_for(controller.fetch_task, timeout=3)
         await sink.stop()
-        return controller, sink
+        return controller, sink, lifecycle
 
-    controller, sink = asyncio.run(scenario())
+    controller, sink, lifecycle = asyncio.run(scenario())
 
     assert controller.audio[:4] == b"RIFF"
     assert controller.audio[8:12] == b"WAVE"
@@ -62,6 +72,11 @@ def test_live_audio_sink_exposes_miplay_wav_and_controls_speaker():
     assert controller.stop_calls == 1
     assert controller.play_type == 1
     assert sink.diagnostics()["active"] is False
+    assert [event for event, _ in lifecycle] == [
+        "output_started",
+        "pcm_forwarded",
+        "output_stopped",
+    ]
 
 
 def test_live_audio_sink_can_advertise_finite_http_content_length():
@@ -171,6 +186,49 @@ def test_live_audio_sink_cleans_up_when_speaker_rejects_url():
         assert sink.diagnostics()["active"] is False
 
     asyncio.run(scenario())
+
+
+def test_live_audio_sink_fails_when_control_succeeds_but_renderer_never_pulls():
+    class NonPullingController:
+        def __init__(self):
+            self.stop_calls = 0
+
+        async def play_url(self, url, *, play_type=2):
+            return True
+
+        async def stop(self):
+            self.stop_calls += 1
+            return True
+
+    async def scenario():
+        controller = NonPullingController()
+        lifecycle = []
+
+        async def on_lifecycle(event, details):
+            lifecycle.append((event, details))
+
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1",
+            controller,
+            output_pull_timeout=0.05,
+            lifecycle_callback=on_lifecycle,
+        )
+        try:
+            await sink.start(48_000, 2, 2)
+        except RuntimeError as exc:
+            assert "did not pull" in str(exc)
+        else:
+            raise AssertionError("expected an output pull timeout")
+        return controller, sink, lifecycle
+
+    controller, sink, lifecycle = asyncio.run(scenario())
+
+    assert controller.stop_calls == 1
+    assert sink.diagnostics()["active"] is False
+    assert sink.diagnostics()["pull_confirmed"] is False
+    assert lifecycle == [
+        ("output_failed", {"reason": "OUTPUT_PULL_TIMEOUT"})
+    ]
 
 
 def test_complete_miplay_wire_reaches_live_http_stream():

@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CastFabric Console Prototype</title>
+  <style>
+    :root {
+      --paper: #f5f2e9;
+      --paper-2: #fbfaf5;
+      --ink: #15342f;
+      --muted: #66746e;
+      --line: #d9ddd2;
+      --moss: #347764;
+      --moss-soft: #dfece4;
+      --apricot: #e58b59;
+      --apricot-soft: #f8e5d7;
+      --warn: #a36c22;
+      --warn-soft: #f5ead3;
+      --off: #959c96;
+      --shadow: 0 24px 70px rgba(36, 58, 49, .12);
+      --radius: 24px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 78% 8%, rgba(223,236,228,.8), transparent 27rem),
+        linear-gradient(115deg, rgba(255,255,255,.55), transparent 42%),
+        var(--paper);
+      font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button { font: inherit; }
+    button:focus-visible, [tabindex]:focus-visible { outline: 3px solid rgba(229,139,89,.45); outline-offset: 3px; }
+    .shell { width: min(1380px, calc(100% - 48px)); margin: 0 auto; padding-bottom: 64px; }
+    header { height: 92px; display: flex; align-items: center; gap: 36px; border-bottom: 1px solid rgba(21,52,47,.12); }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 248px; }
+    .mark { width: 34px; height: 34px; position: relative; border: 1.5px solid var(--moss); border-radius: 50%; }
+    .mark::before, .mark::after { content: ""; position: absolute; left: 7px; right: 7px; border-top: 1.5px solid var(--moss); border-radius: 50%; }
+    .mark::before { top: 10px; transform: rotate(18deg); }
+    .mark::after { top: 19px; transform: rotate(-18deg); }
+    .wordmark { font-family: Georgia, "Songti SC", serif; font-size: 22px; letter-spacing: -.4px; }
+    .slogan { color: var(--muted); font-size: 12px; margin-top: 2px; letter-spacing: .08em; }
+    nav { display: flex; align-self: stretch; gap: 28px; }
+    .nav-item { border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; padding: 4px 0 0; cursor: pointer; }
+    .nav-item.active { color: var(--ink); border-bottom-color: var(--apricot); }
+    .header-actions { display: flex; gap: 10px; margin-left: auto; }
+    .button { min-height: 42px; border: 1px solid var(--line); border-radius: 999px; padding: 0 17px; color: var(--ink); background: rgba(255,255,255,.5); cursor: pointer; }
+    .button:hover { background: white; border-color: #c3cac0; }
+    .button.primary { color: white; background: var(--ink); border-color: var(--ink); }
+    main { padding-top: 44px; }
+    .page { display: none; }
+    .page.active { display: block; animation: enter .35s ease both; }
+    @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+    .eyebrow { margin: 0 0 12px; color: var(--moss); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; max-width: 760px; font: 500 clamp(38px, 5.2vw, 72px)/1.08 Georgia, "Songti SC", serif; letter-spacing: -.045em; }
+    h2 { margin: 0; font: 500 27px/1.25 Georgia, "Songti SC", serif; }
+    p { color: var(--muted); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 54px; align-items: end; }
+    .hero-copy p { max-width: 610px; margin: 20px 0 0; font-size: 16px; line-height: 1.8; }
+    .health-summary { border-left: 1px solid var(--line); padding-left: 30px; }
+    .health-label { display: flex; align-items: center; gap: 9px; color: var(--moss); font-weight: 700; }
+    .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 0 7px rgba(52,119,100,.1); }
+    .summary-numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 25px; }
+    .summary-numbers strong { display: block; font: 500 31px Georgia, serif; }
+    .summary-numbers span { color: var(--muted); font-size: 12px; }
+    .section-head { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin: 56px 0 18px; }
+    .section-head p { margin: 5px 0 0; }
+    .section-head .button { white-space: nowrap; }
+    .speaker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .speaker-card { position: relative; min-height: 270px; padding: 24px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(251,250,245,.76); box-shadow: 0 1px 0 rgba(255,255,255,.8) inset; }
+    .speaker-card.live { background: linear-gradient(150deg, #fffaf4, var(--apricot-soft)); border-color: #edc9b1; }
+    .speaker-card.off { opacity: .66; background: rgba(236,235,227,.72); }
+    .card-top { display: flex; justify-content: space-between; gap: 12px; }
+    .room { font-size: 11px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
+    .speaker-name { margin-top: 5px; font: 500 22px Georgia, "Songti SC", serif; }
+    .state { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--moss-soft); color: var(--moss); font-size: 12px; white-space: nowrap; }
+    .state.live { background: white; color: #ad5b2d; }
+    .state.off { color: #686f69; background: #e3e4dd; }
+    .signal { height: 56px; margin: 28px -24px 20px; position: relative; }
+    .signal::before { content: ""; position: absolute; left: 0; right: 0; top: 27px; border-top: 1px solid rgba(52,119,100,.28); }
+    .signal i { position: absolute; width: 88px; height: 2px; top: 26px; left: -90px; background: linear-gradient(90deg, transparent, var(--apricot), transparent); animation: flow 3.2s linear infinite; }
+    .speaker-card:not(.live) .signal i { animation: none; display: none; }
+    @keyframes flow { to { transform: translateX(470px); } }
+    .protocols { display: flex; gap: 6px; flex-wrap: wrap; }
+    .protocol { padding: 6px 9px; border: 1px solid rgba(21,52,47,.13); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.48); font-size: 11px; }
+    .now { margin-top: 18px; }
+    .now strong { display: block; font-size: 14px; }
+    .now span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .activity { border-top: 1px solid var(--line); }
+    .activity-row { display: grid; grid-template-columns: 92px minmax(150px, 1.3fr) 1fr 1fr 110px; align-items: center; gap: 20px; min-height: 68px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .activity-row .time, .activity-row .source { color: var(--muted); }
+    .activity-row .result { text-align: right; color: var(--moss); }
+    .filter-row { display: flex; gap: 8px; margin: 22px 0; flex-wrap: wrap; }
+    .filter { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; color: var(--muted); background: transparent; }
+    .filter.active { color: var(--ink); background: white; }
+    .speaker-list { display: grid; gap: 14px; margin-top: 28px; }
+    .speaker-manage { display: grid; grid-template-columns: 1fr auto; gap: 28px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: rgba(251,250,245,.72); }
+    .speaker-manage p { margin: 7px 0 15px; font-size: 13px; }
+    .details { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+    .switch { width: 52px; height: 30px; border: 0; border-radius: 999px; padding: 3px; background: var(--moss); cursor: pointer; }
+    .switch::after { content: ""; display: block; width: 24px; height: 24px; margin-left: 22px; border-radius: 50%; background: white; transition: .2s; }
+    .switch.off { background: #c8ccc7; }
+    .switch.off::after { margin-left: 0; }
+    .modal-wrap { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; padding: 22px; background: rgba(28,43,38,.34); backdrop-filter: blur(8px); }
+    .modal-wrap.open { display: grid; }
+    .modal { width: min(860px, 100%); max-height: min(760px, calc(100vh - 44px)); overflow: auto; border: 1px solid rgba(255,255,255,.75); border-radius: 30px; background: var(--paper-2); box-shadow: var(--shadow); }
+    .modal-head { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 25px 28px; background: rgba(251,250,245,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    .close { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
+    .modal-grid { display: grid; grid-template-columns: 190px 1fr; min-height: 500px; }
+    .modal-nav { padding: 22px 16px; border-right: 1px solid var(--line); }
+    .modal-nav button { width: 100%; min-height: 42px; margin-bottom: 4px; border: 0; border-radius: 12px; color: var(--muted); background: transparent; text-align: left; padding: 0 12px; }
+    .modal-nav button.active { color: var(--ink); background: var(--moss-soft); }
+    .settings { padding: 28px 32px; }
+    .settings h3 { margin: 0 0 5px; font: 500 22px Georgia, "Songti SC", serif; }
+    .setting-row { display: flex; justify-content: space-between; gap: 20px; padding: 21px 0; border-bottom: 1px solid var(--line); }
+    .setting-row strong { display: block; font-size: 14px; }
+    .setting-row p { margin: 5px 0 0; font-size: 12px; }
+    .tag { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--muted); }
+    .locale { min-width: 56px; padding-inline: 12px; }
+    .prototype-note { margin-top: 40px; color: #7d8983; font-size: 11px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+    @media (max-width: 900px) {
+      .shell { width: min(100% - 28px, 720px); }
+      header { height: auto; min-height: 82px; flex-wrap: wrap; gap: 10px 20px; padding: 16px 0; }
+      .brand { min-width: 0; margin-right: auto; }
+      nav { order: 3; width: 100%; height: 43px; gap: 24px; overflow-x: auto; }
+      .header-actions .button.primary { padding: 0 13px; }
+      .hero { grid-template-columns: 1fr; gap: 28px; }
+      .health-summary { border-left: 0; border-top: 1px solid var(--line); padding: 22px 0 0; }
+      .speaker-grid { grid-template-columns: 1fr; }
+      .activity-row { grid-template-columns: 65px 1fr auto; gap: 12px; padding: 12px 0; }
+      .activity-row .source, .activity-row .protocol-cell { display: none; }
+      .modal-grid { grid-template-columns: 1fr; }
+      .modal-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .modal-nav button { min-width: max-content; }
+    }
+    @media (max-width: 520px) {
+      h1 { font-size: 40px; }
+      .wordmark { font-size: 20px; }
+      .slogan { display: none; }
+      .button { padding-inline: 13px; }
+      .summary-numbers { gap: 8px; }
+      .speaker-manage { grid-template-columns: 1fr auto; padding: 18px; }
+      .settings { padding: 22px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand" aria-label="CastFabric">
+        <span class="mark" aria-hidden="true"></span>
+        <div><div class="wordmark">CastFabric</div><div class="slogan" data-i18n="slogan">不挑协议，投了就播</div></div>
+      </div>
+      <nav aria-label="主要导航">
+        <button class="nav-item active" data-page="overview" data-i18n="navOverview">总览</button>
+        <button class="nav-item" data-page="speakers" data-i18n="navSpeakers">音响</button>
+        <button class="nav-item" data-page="activity" data-i18n="navActivity">活动</button>
+      </nav>
+      <div class="header-actions">
+        <button class="button locale" id="localeButton">EN</button>
+        <button class="button primary" id="openSettings" data-i18n="connections">连接配置</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="page active" id="overview">
+        <div class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow" data-i18n="eyebrow">本地声路 · 运行正常</p>
+            <h1 data-i18n="hero">家里的每一台音响，都已准备好。</h1>
+            <p data-i18n="heroBody">CastFabric 正在为两台音响发布独立的 DLNA、AirPlay 与 MiPlay 接收入口。无需选择全局输出，投向哪台，就由哪台播放。</p>
+          </div>
+          <aside class="health-summary">
+            <div class="health-label"><span class="pulse"></span><span data-i18n="allHealthy">全屋声路正常</span></div>
+            <div class="summary-numbers">
+              <div><strong>3</strong><span data-i18n="found">发现音响</span></div>
+              <div><strong>2</strong><span data-i18n="enabled">已启用</span></div>
+              <div><strong>1</strong><span data-i18n="playing">正在播放</span></div>
+            </div>
+          </aside>
+        </div>
+
+        <div class="section-head"><div><h2 data-i18n="wholeHome">全屋声路</h2><p data-i18n="wholeHomeHint">每台音响拥有自己的接收入口，彼此独立。</p></div></div>
+        <div class="speaker-grid">
+          <article class="speaker-card live" tabindex="0">
+            <div class="card-top"><div><div class="room">LIVING ROOM</div><div class="speaker-name" data-i18n="living">客厅音箱</div></div><span class="state live" data-i18n="live">正在播放</span></div>
+            <div class="signal"><i></i></div>
+            <div class="protocols"><span class="protocol">DLNA</span><span class="protocol">AirPlay</span><span class="protocol">MiPlay</span></div>
+            <div class="now"><strong data-i18n="netease">网易云音乐 · MiPlay</strong><span data-i18n="activeAgo">来自 Wang 的手机 · 12 分钟</span></div>
+          </article>
+          <article class="speaker-card" tabindex="0">
+            <div class="card-top"><div><div class="room">BEDROOM</div><div class="speaker-name" data-i18n="bedroom">卧室音箱</div></div><span class="state" data-i18n="ready">等待投放</span></div>
+            <div class="signal"><i></i></div>
+            <div class="protocols"><span class="protocol">DLNA</span><span class="protocol">AirPlay</span><span class="protocol">MiPlay</span></div>
+            <div class="now"><strong data-i18n="readyTitle">三个入口均已就绪</strong><span data-i18n="lastActive">最近活跃：昨天 23:18</span></div>
+          </article>
+          <article class="speaker-card off" tabindex="0">
+            <div class="card-top"><div><div class="room">STUDY</div><div class="speaker-name" data-i18n="study">书房音箱</div></div><span class="state off" data-i18n="disabled">已停用</span></div>
+            <div class="signal"><i></i></div>
+            <div class="protocols"><span class="protocol">DLNA</span><span class="protocol">AirPlay</span><span class="protocol">MiPlay</span></div>
+            <div class="now"><strong data-i18n="notPublished">未发布 CastFabric 入口</strong><span data-i18n="nativeReachable">实体 DLNA 仍可达</span></div>
+          </article>
+        </div>
+
+        <div class="section-head"><div><h2 data-i18n="recent">最近活动</h2><p data-i18n="recentHint">先说明哪台音响，再说明协议与结果。</p></div><button class="button" data-jump="activity" data-i18n="allActivity">查看全部</button></div>
+        <div class="activity">
+          <div class="activity-row"><span class="time">21:42</span><strong data-i18n="living">客厅音箱</strong><span class="protocol-cell">MiPlay</span><span class="source" data-i18n="playFrom">Wang 的手机开始播放</span><span class="result" data-i18n="playing">正在播放</span></div>
+          <div class="activity-row"><span class="time">21:37</span><strong data-i18n="bedroom">卧室音箱</strong><span class="protocol-cell">AirPlay</span><span class="source" data-i18n="sessionEnded">会话正常结束</span><span class="result" data-i18n="done">已完成</span></div>
+          <div class="activity-row"><span class="time">20:58</span><strong data-i18n="study">书房音箱</strong><span class="protocol-cell">System</span><span class="source" data-i18n="receiverDisabled">接收入口已停用</span><span class="result">—</span></div>
+        </div>
+      </section>
+
+      <section class="page" id="speakers">
+        <p class="eyebrow" data-i18n="outputs">输出端管理</p><h1 data-i18n="speakerTitle">每台音响，独立启用。</h1>
+        <p data-i18n="speakerBody">启停只作用于当前音响，不会改变其他音响的接收入口。</p>
+        <div class="speaker-list">
+          <article class="speaker-manage"><div><h2 data-i18n="living">客厅音箱</h2><p>192.168.133.118 · uuid:living-room</p><div class="details"><span data-i18n="nativeOk">实体 DLNA 可达</span><span>DLNA · AirPlay · MiPlay</span><span data-i18n="playing">正在播放</span></div></div><button class="switch" aria-label="启用客厅音箱"></button></article>
+          <article class="speaker-manage"><div><h2 data-i18n="bedroom">卧室音箱</h2><p>192.168.133.132 · uuid:bedroom</p><div class="details"><span data-i18n="nativeOk">实体 DLNA 可达</span><span>DLNA · AirPlay · MiPlay</span><span data-i18n="ready">等待投放</span></div></div><button class="switch" aria-label="启用卧室音箱"></button></article>
+          <article class="speaker-manage"><div><h2 data-i18n="study">书房音箱</h2><p>192.168.133.146 · uuid:study</p><div class="details"><span data-i18n="nativeOk">实体 DLNA 可达</span><span data-i18n="entryHidden">CastFabric 入口未发布</span><span data-i18n="disabled">已停用</span></div></div><button class="switch off" aria-label="启用书房音箱"></button></article>
+        </div>
+      </section>
+
+      <section class="page" id="activity">
+        <p class="eyebrow" data-i18n="diagnostics">播放与诊断</p><h1 data-i18n="activityTitle">每一次投放，都有迹可循。</h1>
+        <div class="filter-row"><button class="filter active" data-i18n="all">全部</button><button class="filter" data-i18n="living">客厅音箱</button><button class="filter" data-i18n="bedroom">卧室音箱</button><button class="filter">MiPlay</button><button class="filter">AirPlay</button></div>
+        <div class="activity">
+          <div class="activity-row"><span class="time">21:42</span><strong data-i18n="living">客厅音箱</strong><span class="protocol-cell">MiPlay</span><span class="source" data-i18n="playFrom">Wang 的手机开始播放</span><span class="result" data-i18n="playing">正在播放</span></div>
+          <div class="activity-row"><span class="time">21:37</span><strong data-i18n="bedroom">卧室音箱</strong><span class="protocol-cell">AirPlay</span><span class="source" data-i18n="sessionEnded">会话正常结束</span><span class="result" data-i18n="done">已完成</span></div>
+          <div class="activity-row"><span class="time">20:58</span><strong data-i18n="study">书房音箱</strong><span class="protocol-cell">System</span><span class="source" data-i18n="receiverDisabled">接收入口已停用</span><span class="result">—</span></div>
+          <div class="activity-row"><span class="time">19:26</span><strong data-i18n="living">客厅音箱</strong><span class="protocol-cell">DLNA</span><span class="source" data-i18n="volumeChanged">音量调整至 36%</span><span class="result" data-i18n="done">已完成</span></div>
+        </div>
+      </section>
+      <div class="prototype-note">CASTFABRIC PRODUCT PROTOTYPE · FIXTURE DATA · NO PRODUCTION API</div>
+    </main>
+  </div>
+
+  <div class="modal-wrap" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <section class="modal">
+      <div class="modal-head"><div><div class="eyebrow" style="margin-bottom:5px">CASTFABRIC</div><h2 id="settingsTitle" data-i18n="connections">连接配置</h2></div><button class="close" id="closeSettings" aria-label="关闭">×</button></div>
+      <div class="modal-grid">
+        <aside class="modal-nav"><button class="active" data-i18n="discovery">局域网发现</button><button data-i18n="receiverEntry">接收入口</button><button data-i18n="network">网络与端口</button><button data-i18n="extensions">扩展</button><button data-i18n="system">系统</button></aside>
+        <div class="settings">
+          <h3 data-i18n="discovery">局域网发现</h3><p data-i18n="discoveryHint">发现音响不会自动启用，也不会清空已有设备。</p>
+          <div class="setting-row"><div><strong data-i18n="scanStatus">扫描状态</strong><p data-i18n="scanDetail">3 台音响 · 2 分钟前完成</p></div><button class="tag" data-i18n="rescan">重新发现</button></div>
+          <div class="setting-row"><div><strong data-i18n="interface">局域网接口</strong><p>en0 · 192.168.133.225/24</p></div><span class="tag" data-i18n="auto">自动</span></div>
+          <div class="setting-row"><div><strong data-i18n="identity">接收入口名称</strong><p>CastFabric · &lt;音响名称&gt;</p></div><button class="tag" data-i18n="edit">编辑</button></div>
+          <div class="setting-row"><div><strong data-i18n="xiaomiExtension">小米账号扩展</strong><p data-i18n="optional">未启用 · 可选扩展，不影响标准 DLNA 音响</p></div><span class="tag" data-i18n="off">关闭</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const copy = {
+      en: { slogan:'Cast freely. It just plays.', navOverview:'Overview', navSpeakers:'Speakers', navActivity:'Activity', connections:'Connections', eyebrow:'LOCAL ROUTES · HEALTHY', hero:'Every speaker at home is ready.', heroBody:'CastFabric publishes an independent DLNA, AirPlay and MiPlay receiver suite for each enabled speaker. There is no global output to select—cast to a speaker, and that speaker plays.', allHealthy:'Every active route is healthy', found:'discovered', enabled:'enabled', playing:'Playing', wholeHome:'Home routes', wholeHomeHint:'Every speaker owns an independent receiver suite.', living:'Living room', bedroom:'Bedroom', study:'Study', live:'Playing', ready:'Ready', disabled:'Disabled', netease:'NetEase Music · MiPlay', activeAgo:"From Wang's phone · 12 min", readyTitle:'All three receivers are ready', lastActive:'Last active: yesterday 23:18', notPublished:'CastFabric receivers not published', nativeReachable:'Native DLNA remains reachable', recent:'Recent activity', recentHint:'Speaker first, then protocol and result.', allActivity:'View all', playFrom:"Wang's phone started playback", sessionEnded:'Session ended normally', receiverDisabled:'Receiver suite disabled', done:'Completed', outputs:'OUTPUT MANAGEMENT', speakerTitle:'Enable every speaker independently.', speakerBody:'A switch only affects this speaker. Other receiver suites stay untouched.', nativeOk:'Native DLNA reachable', entryHidden:'CastFabric receivers not published', diagnostics:'PLAYBACK & DIAGNOSTICS', activityTitle:'Every cast leaves a useful trace.', all:'All', volumeChanged:'Volume changed to 36%', discovery:'LAN discovery', receiverEntry:'Receiver identity', network:'Network & ports', extensions:'Extensions', system:'System', discoveryHint:'Discovery never auto-enables devices or clears saved speakers.', scanStatus:'Scan status', scanDetail:'3 speakers · completed 2 minutes ago', rescan:'Scan again', interface:'LAN interface', auto:'Auto', identity:'Receiver names', edit:'Edit', xiaomiExtension:'Xiaomi account extension', optional:'Off · optional and never required for standard DLNA', off:'Off' }
+    };
+    let locale = 'zh';
+    const pages = document.querySelectorAll('.page');
+    function showPage(id) {
+      pages.forEach(p => p.classList.toggle('active', p.id === id));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === id));
+      scrollTo({top:0,behavior:'smooth'});
+    }
+    document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+    document.querySelectorAll('[data-jump]').forEach(button => button.addEventListener('click', () => showPage(button.dataset.jump)));
+    document.querySelectorAll('.switch').forEach(button => button.addEventListener('click', () => button.classList.toggle('off')));
+    const modal = document.getElementById('settingsModal');
+    document.getElementById('openSettings').addEventListener('click', () => modal.classList.add('open'));
+    document.getElementById('closeSettings').addEventListener('click', () => modal.classList.remove('open'));
+    modal.addEventListener('click', event => { if (event.target === modal) modal.classList.remove('open'); });
+    addEventListener('keydown', event => { if (event.key === 'Escape') modal.classList.remove('open'); });
+    document.getElementById('localeButton').addEventListener('click', () => {
+      locale = locale === 'zh' ? 'en' : 'zh';
+      document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
+      document.getElementById('localeButton').textContent = locale === 'zh' ? 'EN' : '中';
+      document.querySelectorAll('[data-i18n]').forEach(node => {
+        if (!node.dataset.zh) node.dataset.zh = node.textContent;
+        node.textContent = locale === 'zh' ? node.dataset.zh : (copy.en[node.dataset.i18n] || node.dataset.zh);
+      });
+    });
+  </script>
+</body>
+</html>

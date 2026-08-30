@@ -11,6 +11,7 @@ from miair.dlna.client import LocalDLNAClient
 from miair.outputs.base import FallbackPlaybackTarget, UnavailablePlaybackTarget
 from miair.outputs.dlna import DLNAOutputAdapter
 from miair.outputs.xiaomi import XiaomiOutputAdapter
+from miair.targets import OutputTargetConfig
 
 
 log = logging.getLogger("miair")
@@ -30,10 +31,13 @@ class SpeakerController:
         speaker: Speaker,
         auth: AuthManager | None,
         local_dlna: LocalDLNAClient | None = None,
+        *,
+        target_id: str = "",
     ):
         self.speaker = speaker
         self.auth = auth
         self.local_dlna = local_dlna
+        self.target_id = target_id or speaker.did
         self.cloud_output = XiaomiOutputAdapter(speaker, auth) if auth else None
         adapters = []
         if local_dlna is not None:
@@ -98,6 +102,7 @@ class SpeakerManager:
         self.config = config
         self.auth = auth
         self.controllers: dict[str, SpeakerController] = {}
+        self._target_to_controller_id: dict[str, str] = {}
 
     async def init_speakers(self, *, refresh_from_cloud: bool = True):
         if refresh_from_cloud:
@@ -108,57 +113,82 @@ class SpeakerManager:
             log.info("使用标准 DLNA 输出目标，不需要厂商云认证")
 
         self.controllers.clear()
+        self._target_to_controller_id.clear()
         for target in self.config.get_enabled_targets():
-            if target.legacy_did:
-                speaker = self.config.get_speaker(target.legacy_did)
-            else:
-                if not target.virtual_udn:
-                    target.virtual_udn = str(
-                        uuid.uuid5(
-                            uuid.NAMESPACE_URL,
-                            f"castfabric-output:{target.id}",
-                        )
-                    )
-                speaker = Speaker(
-                    did=target.id,
-                    device_id=target.udn,
-                    name=target.name,
-                    dlna_name=target.name,
-                    udn=target.virtual_udn,
-                    local_dlna_location=target.location,
-                    enabled=target.enabled,
-                )
-            local_dlna = await LocalDLNAClient.connect(
-                target.udn,
-                self.config.hostname,
-                target.location,
-            )
-            if local_dlna:
-                target.location = local_dlna.location
-                speaker.local_dlna_location = local_dlna.location
-                log.info(
-                    "已连接实体音箱本地 DLNA: %s (%s)",
-                    speaker.get_dlna_name(),
-                    local_dlna.location,
-                )
+            await self.add_target(target)
 
-            controller_id = target.legacy_did or target.id
-            cloud_auth = (
-                self.auth
-                if target.legacy_did and self.config.enable_xiaomi_extension
-                else None
+    async def add_target(
+        self,
+        target: OutputTargetConfig,
+    ) -> tuple[str, SpeakerController]:
+        """Build one controller without disturbing controllers already running."""
+        existing_id = self._target_to_controller_id.get(target.id)
+        if existing_id and existing_id in self.controllers:
+            return existing_id, self.controllers[existing_id]
+
+        if target.legacy_did:
+            speaker = self.config.get_speaker(target.legacy_did)
+        else:
+            if not target.virtual_udn:
+                target.virtual_udn = str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"castfabric-output:{target.id}",
+                    )
+                )
+            speaker = Speaker(
+                did=target.id,
+                device_id=target.udn,
+                name=target.name,
+                dlna_name=target.name,
+                udn=target.virtual_udn,
+                local_dlna_location=target.location,
+                enabled=target.enabled,
             )
-            self.controllers[controller_id] = SpeakerController(
-                speaker, cloud_auth, local_dlna=local_dlna
-            )
+        local_dlna = await LocalDLNAClient.connect(
+            target.udn,
+            self.config.hostname,
+            target.location,
+        )
+        if local_dlna:
+            target.location = local_dlna.location
+            speaker.local_dlna_location = local_dlna.location
             log.info(
-                "已初始化输出控制器: %s (target=%s)",
+                "已连接实体音箱本地 DLNA: %s (%s)",
                 speaker.get_dlna_name(),
-                target.id,
+                local_dlna.location,
             )
+
+        controller_id = target.legacy_did or target.id
+        cloud_auth = (
+            self.auth
+            if target.legacy_did and self.config.enable_xiaomi_extension
+            else None
+        )
+        controller = SpeakerController(
+            speaker,
+            cloud_auth,
+            local_dlna=local_dlna,
+            target_id=target.id,
+        )
+        self.controllers[controller_id] = controller
+        self._target_to_controller_id[target.id] = controller_id
+        log.info(
+            "已初始化输出控制器: %s (target=%s)",
+            speaker.get_dlna_name(),
+            target.id,
+        )
+        return controller_id, controller
 
     def get_controller(self, did: str) -> SpeakerController | None:
         return self.controllers.get(did)
+
+    def get_controller_for_target(self, target_id: str) -> SpeakerController | None:
+        controller_id = self._target_to_controller_id.get(target_id)
+        return self.controllers.get(controller_id) if controller_id else None
+
+    def get_controller_id_for_target(self, target_id: str) -> str | None:
+        return self._target_to_controller_id.get(target_id)
 
     def get_controller_by_udn(self, udn: str) -> SpeakerController | None:
         for controller in self.controllers.values():

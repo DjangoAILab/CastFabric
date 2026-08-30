@@ -8,11 +8,11 @@
 
 **Tech Stack:** Python 3.10+, asyncio, aiohttp, zeroconf, UPnP/SSDP/SOAP, ffmpeg, pytest, Docker Buildx, GitHub Actions.
 
-**Implementation status (2026-08-29):** Tasks 1–4 and 6–7 are complete. Task 5's
-independence goal is complete through the output-adapter boundary and startup
-regression tests; the proposed standalone `CastRouter` remains a later session
-arbitration enhancement rather than a migration blocker. Task 8's automated
-Home Server gates are complete; sender-device interaction gates remain manual.
+**Status (2026-08-30): PAUSED.** This is an implementation-plan draft, not a record
+of completed work. Product modeling and the reviewable console prototype must be
+accepted first. Do not execute any task in this document until the user explicitly
+starts the implementation phase. The earlier single/default-target assumptions are
+superseded by ADR-0004 and must be rewritten before execution.
 
 ---
 

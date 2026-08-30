@@ -1,4 +1,7 @@
-# MiAir Cast 原型生成提示词
+# MiAir Cast 安卓客户端原型提示词（历史资料）
+
+> 本文件描述的是早期安卓 PCM 推流客户端，不是 CastFabric 控制台，也不代表当前
+> 项目名称或产品模型。保留它仅用于未来可能恢复安卓发送端探索。
 
 生成方式：Codex 内置 imagegen  
 用途：产品方向评审，不作为像素级实现规范
@@ -35,4 +38,3 @@ Show two actions “换个应用试试” and “查看诊断”. Use amber warn
 
 Constraints: render all specified Chinese text verbatim and only once where requested; practical Android UI; no song artwork; no fake song metadata; no microphone icon; no screen-recording preview; no Apple styling; no gradients except extremely subtle surface depth; no logos, no watermarks, no decorative clutter.
 ```
-

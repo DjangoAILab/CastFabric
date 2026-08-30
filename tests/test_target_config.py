@@ -75,3 +75,27 @@ def test_target_round_trip_preserves_selection(tmp_path):
 
     assert loaded.get_default_target() == config.get_default_target()
 
+
+def test_target_round_trip_preserves_receiver_alias_without_using_default_target(tmp_path):
+    target = OutputTargetConfig(
+        id="uuid:renderer",
+        name="Speaker",
+        receiver_alias="Living fabric",
+    )
+    config = Config(
+        hostname="127.0.0.1",
+        conf_path=str(tmp_path),
+        targets={target.id: target},
+    )
+
+    config.save()
+    loaded = Config.load(str(tmp_path))
+
+    assert loaded.get_target(target.id).receiver_alias == "Living fabric"
+    assert loaded.get_target(target.id).get_receiver_alias("CastFabric") == "Living fabric"
+
+
+def test_target_alias_falls_back_to_prefix_and_target_name():
+    target = OutputTargetConfig(id="uuid:renderer", name="客厅音箱")
+
+    assert target.get_receiver_alias("CastFabric") == "CastFabric · 客厅音箱"

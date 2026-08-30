@@ -26,8 +26,8 @@ DLNA 和小米 MiNA 云控制，应用编排器也把全部协议统称为“DLN
   适配器实现统一的播放目标接口；会话层负责生命周期、抢占、状态和诊断。
 - 标准 DLNA 输出是内置核心能力，发现和控制不依赖任何厂商账号。小米 MiNA 云控制
   移入可选输出适配器，只能作为显式配置的补充或回退路径。
-- CastFabric 默认继续发布一个面向所选输出目标的虚拟 DLNA MediaRenderer；AirPlay
-  和 MiPlay 使用相同的名称前缀与目标绑定。
+- CastFabric 为每台已启用的输出音响发布独立的虚拟 DLNA MediaRenderer、AirPlay
+  和 MiPlay 接收器组；不存在全局唯一的所选输出。详细模型见 ADR-0004。
 - 迁移采用逐层替换，不一次性重命名 Python 包或配置目录，避免破坏现有 Home Server
   部署和用户的 `config.json`。
 
@@ -74,4 +74,4 @@ DLNA 和小米 MiNA 云控制，应用编排器也把全部协议统称为“DLN
 - [ADR-0002：局域网投送发现与小米云认证解耦](0002-decouple-lan-discovery-from-xiaomi-cloud-auth.md)
 - [CastFabric 系统设计](../architecture/castfabric-system-design.md)
 - [CastFabric 重构实施计划](../plans/2026-08-29-castfabric-refactor.md)
-
+- [ADR-0004：每个输出音响拥有独立接收器组](0004-one-receiver-suite-per-output.md)

@@ -12,11 +12,15 @@ def test_loopback_source_reaches_receiver_pcm_sink():
         sink = RecordingPcmSink()
         volume_changed = asyncio.Event()
         volumes = []
+        lifecycle = []
 
         async def set_volume(volume):
             volumes.append(volume)
             volume_changed.set()
             return True
+
+        async def on_lifecycle(event, details):
+            lifecycle.append((event, details))
 
         receiver = MiPlayReceiver(
             host="127.0.0.1",
@@ -24,6 +28,7 @@ def test_loopback_source_reaches_receiver_pcm_sink():
             sink_factory=lambda: sink,
             advertise=False,
             volume_setter=set_volume,
+            lifecycle_callback=on_lifecycle,
         )
         await receiver.start()
         try:
@@ -38,11 +43,11 @@ def test_loopback_source_reaches_receiver_pcm_sink():
             result = await asyncio.wait_for(simulator.run(), timeout=15)
             await asyncio.wait_for(volume_changed.wait(), timeout=2)
             await asyncio.wait_for(receiver.wait_for_idle(), timeout=5)
-            return sink, receiver.diagnostics(), result, volumes
+            return sink, receiver.diagnostics(), result, volumes, lifecycle
         finally:
             await receiver.stop()
 
-    sink, diagnostics, result, volumes = asyncio.run(scenario())
+    sink, diagnostics, result, volumes, lifecycle = asyncio.run(scenario())
     pcm = b"".join(sink.chunks)
     samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
 
@@ -53,8 +58,16 @@ def test_loopback_source_reaches_receiver_pcm_sink():
     assert diagnostics["last_session"]["authenticated"] is True
     assert diagnostics["last_session"]["rtsp_ready"] is True
     assert diagnostics["last_session"]["media_frames"] == result.media_frames
+    assert diagnostics["last_session"]["peer"] == "<local-address>"
+    assert "127.0.0.1" not in str(diagnostics)
     assert sink.sample_rate == 48_000
     assert sink.channels == 2
     assert len(pcm) > 48_000 * 2 * 2 // 5
     assert max(abs(value) for value in samples) > 500
     assert volumes == [43]
+    assert [event for event, _ in lifecycle] == [
+        "session_started",
+        "media_started",
+        "session_ended",
+    ]
+    assert lifecycle[0][1].get("source_app") is None
