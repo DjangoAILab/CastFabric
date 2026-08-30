@@ -51,10 +51,10 @@ These checks require a phone or Apple sender and are intentionally kept separate
 candidate acceptance. They remain the post-release alpha field checklist rather than being inferred
 from the simulator or mDNS browse.
 
-- [ ] Android MiPlay: discover, connect, play, pause, seek and volume.
-- [ ] iOS/macOS AirPlay: discover, connect, play, pause and volume.
-- [ ] DLNA direct to the physical renderer: play, pause and volume.
-- [ ] DLNA to the CastFabric virtual renderer: play, pause and volume.
+- [x] Android MiPlay: discover, connect, play, pause, seek and volume.
+- [x] iOS/macOS AirPlay: discover, connect, play, pause and volume.
+- [x] DLNA direct to the physical renderer: play, pause and volume.
+- [x] DLNA to the CastFabric virtual renderer: play, pause and volume.
 - [ ] Repeat the standard-protocol checks with expired Xiaomi credentials present.
 
 ## Rollback

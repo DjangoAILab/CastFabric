@@ -52,6 +52,20 @@ The current MiPlay path is AAC → 48 kHz stereo PCM → HTTP WAV/L16 → physic
 was independently implemented from public material and observed wire behavior. It ships as a
 prerelease capability in the `0.10` line.
 
+### Latency boundary
+
+- **Native DLNA casting:** normally starts in under one second on the current test speaker and is the
+  preferred route when responsiveness matters.
+- **AirPlay / MiPlay live bridging:** has about four seconds of observed audible delay on the current
+  test speaker. MiPlay emits its first decoded PCM in about 3–4 ms, and the speaker starts pulling and
+  receiving PCM in about 0.1 s. The remaining delay is most consistent with firmware read-ahead for
+  a live HTTP stream, which standard DLNA controls cannot disable.
+
+Four seconds is not a universal constant for every renderer, but lip sync is not promised until a
+native or low-latency output adapter exists. Choose the physical renderer's DLNA entry when minimum
+latency matters. See [Live-bridge latency boundary](docs/architecture/live-bridge-latency.md) for the
+evidence, eliminated variants and future POCs.
+
 ## Quick start with Docker
 
 SSDP and mDNS need LAN multicast. A Linux home server with host networking is recommended:
@@ -126,6 +140,7 @@ reading, diagnostic privacy, Docker cold start, in-image wire testing, and amd64
 - [Runtime v2 architecture](docs/architecture/castfabric-runtime-v2-design.md)
 - [One Receiver Suite per output](docs/adr/0004-one-receiver-suite-per-output.md)
 - [Verified physical DMR pull boundary](docs/adr/0007-verify-physical-output-pull.md)
+- [AirPlay / MiPlay live-bridge latency boundary](docs/architecture/live-bridge-latency.md)
 - [Console data contract](docs/architecture/castfabric-console-data-contract.md)
 - [MiPlay sources and independent implementation boundary](docs/research/miplay-protocol-sources.md)
 - [Home Server acceptance checklist](docs/testing/castfabric-home-server-checklist.md)

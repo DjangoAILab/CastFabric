@@ -1,6 +1,6 @@
 [project]
 name = "castfabric"
-version = "0.10.0a1"
+version = "0.10.0a2"
 description = "Open-source multi-protocol casting fabric for LAN audio devices"
 readme = "README.md"
 license = {file = "LICENSE"}

@@ -46,6 +46,17 @@ UPnP/DLNA MediaRenderer 的局域网音响。标准声路完全不依赖小米�
 妙播当前声路为 AAC → 48 kHz 双声道 PCM → HTTP WAV/L16 → 实体 DLNA DMR。妙播接收端
 基于公开资料和抓包行为独立实现，随 `0.10` 版本以预发布功能提供。
 
+### 延迟边界
+
+- **原生 DLNA 直投**：在当前测试音箱上通常低于 1 秒，适合优先考虑响应速度的场景。
+- **AirPlay / 妙播实时桥接**：在当前测试音箱上听感约 4 秒。CastFabric 的 MiPlay 解码首帧
+  只需约 3–4 ms，音箱开始拉流并收到首批 PCM 约需 0.1 秒；剩余等待最符合实体 DMR 对
+  实时 HTTP 流进行固件预读的行为，无法由 CastFabric 通过标准 DLNA 控制指令关闭。
+
+这不是所有音响都固定为 4 秒，但在新增原生或低延迟输出适配器之前，不承诺视频口型同步。
+需要最低延迟时，请直接选择实体音响的 DLNA 入口。测试证据、已排除方案与后续 POC 见
+[实时桥接延迟边界](docs/architecture/live-bridge-latency.md)。
+
 ## Docker 快速部署
 
 SSDP 和 mDNS 依赖局域网组播，推荐在 Linux Home Server 上使用 host 网络：
@@ -121,6 +132,7 @@ castfabric-miplay simulate --target 192.168.1.20 --duration 1
 - [Runtime v2 架构](docs/architecture/castfabric-runtime-v2-design.md)
 - [每输出音响独立 Receiver Suite](docs/adr/0004-one-receiver-suite-per-output.md)
 - [实体 DMR 拉流验证边界](docs/adr/0007-verify-physical-output-pull.md)
+- [AirPlay / 妙播实时桥接延迟边界](docs/architecture/live-bridge-latency.md)
 - [控制台数据契约](docs/architecture/castfabric-console-data-contract.md)
 - [妙播协议研究与独立实现边界](docs/research/miplay-protocol-sources.md)
 - [Home Server 验收清单](docs/testing/castfabric-home-server-checklist.md)
