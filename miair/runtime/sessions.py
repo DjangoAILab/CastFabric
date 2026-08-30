@@ -1,0 +1,86 @@
+"""Per-output media-session ownership and stale callback protection."""
+
+from __future__ import annotations
+
+import asyncio
+import uuid
+from dataclasses import replace
+from datetime import datetime, timezone
+from typing import Callable
+
+from miair.runtime.events import ActivityEventJournal
+from miair.runtime.models import (
+    EventOutcome, IngressProtocol, MediaSessionSnapshot,
+    SessionSourceSnapshot, SessionState,
+)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class MediaSessionCoordinator:
+    def __init__(self, *, journal: ActivityEventJournal | None = None,
+                 clock: Callable[[], datetime] = _utcnow,
+                 id_factory: Callable[[], str] = lambda: str(uuid.uuid4())):
+        self.journal = journal
+        self.clock = clock
+        self.id_factory = id_factory
+        self._current: dict[str, MediaSessionSnapshot] = {}
+        self._session_targets: dict[str, str] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    def current(self, target_id: str) -> MediaSessionSnapshot | None:
+        return self._current.get(target_id)
+
+    async def begin(self, target_id: str, protocol: IngressProtocol, *,
+                    source: SessionSourceSnapshot | None = None,
+                    media_format: str | None = None) -> MediaSessionSnapshot:
+        async with self._locks.setdefault(target_id, asyncio.Lock()):
+            old = self._current.get(target_id)
+            if old and self.journal:
+                self.journal.append(target_id=target_id, session_id=old.id,
+                    protocol=old.protocol, type="session.preempted",
+                    outcome=EventOutcome.INFO, summary_key="activity.session_preempted")
+            session = MediaSessionSnapshot(
+                id=self.id_factory(), target_id=target_id, protocol=protocol,
+                state=SessionState.STARTING,
+                source=source or SessionSourceSnapshot(),
+                media_format=media_format, started_at=self.clock(),
+            )
+            self._current[target_id] = session
+            self._session_targets[session.id] = target_id
+            if self.journal:
+                self.journal.append(target_id=target_id, session_id=session.id,
+                    protocol=protocol, type="session.started",
+                    outcome=EventOutcome.SUCCESS, summary_key="activity.session_started",
+                    details={"media_format": media_format} if media_format else None)
+            return session
+
+    async def transition(self, session_id: str, state: SessionState) -> bool:
+        target_id = self._session_targets.get(session_id)
+        if not target_id:
+            return False
+        async with self._locks.setdefault(target_id, asyncio.Lock()):
+            current = self._current.get(target_id)
+            if current is None or current.id != session_id:
+                return False
+            self._current[target_id] = replace(current, state=state)
+            return True
+
+    async def end(self, session_id: str, *, failed: bool = False) -> bool:
+        target_id = self._session_targets.get(session_id)
+        if not target_id:
+            return False
+        async with self._locks.setdefault(target_id, asyncio.Lock()):
+            current = self._current.get(target_id)
+            if current is None or current.id != session_id:
+                return False
+            del self._current[target_id]
+            if self.journal:
+                self.journal.append(target_id=target_id, session_id=session_id,
+                    protocol=current.protocol,
+                    type="session.failed" if failed else "session.ended",
+                    outcome=EventOutcome.FAILED if failed else EventOutcome.SUCCESS,
+                    summary_key="activity.session_failed" if failed else "activity.session_ended")
+            return True
