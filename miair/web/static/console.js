@@ -111,7 +111,7 @@
       'activity.session_ended': ['投放已结束', 'Casting ended'],
       'activity.session_failed': ['投放异常结束', 'Casting failed'],
       'activity.session_preempted': ['投放被新会话接管', 'Casting was taken over'],
-      'activity.miplay_output_started': ['实体音响已接受播放地址', 'Speaker accepted the playback URL'],
+      'activity.miplay_output_started': ['实体音响已开始拉取音频', 'Speaker started pulling audio'],
       'activity.miplay_pcm_forwarded': ['音频已送入实体输出', 'Audio reached the physical output'],
       'activity.miplay_output_failed': ['实体输出未建立', 'Physical output was not established'],
       'activity.miplay_output_stopped': ['实体输出已停止', 'Physical output stopped'],

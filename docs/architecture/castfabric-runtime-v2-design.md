@@ -83,6 +83,7 @@ path 类型摘要；客户端地址哈希或截断；details 使用字段白名�
 | 旧会话迟到回调 | coordinator 按 session id 丢弃 |
 | 小米认证失效 | extension degraded，不改变 core health |
 | 动态停用失败 | 恢复 config.enabled 和原 suite，返回 typed error |
+| SOAP Play 成功但实体 DMR 未拉流 | 5 秒后 `OUTPUT_PULL_TIMEOUT`，回滚播放并关闭临时流 |
 
 ## 验证门槛
 
@@ -92,3 +93,4 @@ path 类型摘要；客户端地址哈希或截断；details 使用字段白名�
 - 事件 URL/query、Cookie、客户端地址脱敏反例测试。
 - 旧配置冷启动、升级、回滚和再次升级测试。
 - v6 UI schema/fixture 与 API 响应契约测试一一对应。
+- 两个 fake DMR 接收真实 SOAP 并分别 GET 自己的 WAV/PCM，控制成功但不 GET 的反例必须失败。
