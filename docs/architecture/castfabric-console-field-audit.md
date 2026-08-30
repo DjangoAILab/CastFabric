@@ -2,13 +2,23 @@
 
 ## 审计结论
 
-本审计以 `be67337` 的运行代码为证据，逐项核对 v6 原型需要的字段。结论不是“页面能否
+本审计最初以 `be67337` 的运行代码为证据，逐项核对 v6 原型需要的字段。结论不是“页面能否
 拼出一个值”，而是该值是否有稳定语义、明确所有者和可靠降级。
 
 - 18 项可直接读取现有配置或安全 API。
 - 4 项可由现有、可信对象无歧义投影，但仍需集中到新的 read model。
 - 31 项必须由目标注册表、Receiver Suite、MediaSession 或 ActivityEvent 新增。
 - 2 项禁止猜测：发送 App 名称和端到端听感延迟。
+
+## Runtime v2 关闭状态（2026-08-30）
+
+生产控制台接入 `/api/v1` 后，机器合同现为 47 项 current、5 项 derived、1 项 planned、
+2 项 forbidden；10 个产品动作全部有 current owner。唯一仍为 planned 的
+`system.interface` 没有被伪造：控制台按合同 fallback 只显示服务绑定的局域网地址。
+
+生产 HTML 已删除固定音响、会话和活动样例。来源设备名只有协议明确提供才显示，否则固定
+回退为“发送设备 / 协议未提供设备名称”；来源 App 和端到端听感延迟仍保持 forbidden，
+未进入 API、控制台或诊断包。
 
 本轮复核把 `system.discovery.state`、`session.protocol` 和 `session.state` 从“可推导”
 收紧为“规划”。旧代码虽然各处有局部状态，但没有稳定的扫描生命周期，也无法把多个

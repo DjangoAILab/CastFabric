@@ -1,0 +1,25 @@
+/* Runtime-only refinements layered over the accepted v6 visual prototype. */
+.review-tools,.review-toggle{display:none!important}
+body[data-live-ready="false"] .lane-stack>*{visibility:hidden}
+body[data-live-ready="false"] .health-summary{opacity:.55}
+.route-empty{grid-template-columns:1fr;min-height:150px;place-items:center;text-align:center}
+.route-empty .empty-signal{display:grid;place-items:center;gap:12px;padding:24px}
+.route-empty .empty-orbit{position:relative;width:54px;height:54px;border:1px solid var(--healthy);border-radius:50%}
+.route-empty .empty-orbit:before,.route-empty .empty-orbit:after{content:"";position:absolute;border-radius:50%;border:1px solid rgba(47,128,100,.22)}
+.route-empty .empty-orbit:before{inset:8px}.route-empty .empty-orbit:after{inset:18px;background:var(--healthy);border:0;box-shadow:0 0 0 7px var(--healthy-pale)}
+.route-empty strong{font:500 18px/1.1 Baskerville,"Songti SC",serif}.route-empty span{color:var(--muted);font-size:9px}
+.page.is-loading .normal-content,.page.is-empty .normal-content,.page.is-error .normal-content{display:none}
+.page.is-loading .state-loading,.page.is-empty .state-empty,.page.is-error .state-error{display:grid}
+.page.is-degraded .degraded-banner{display:flex}
+.speaker-row.is-busy{pointer-events:none;opacity:.58}.suite-toggle[disabled]{cursor:wait}
+.registry-live{min-height:120px}.event-list-live{overflow:hidden}
+.error-inline{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 15px;border:1px solid rgba(166,62,50,.24);border-radius:15px;background:var(--danger-pale);color:var(--danger);font-size:9px}
+.scan-target button[disabled],button[disabled]{cursor:not-allowed;opacity:.52}
+.settings-save-state{font-weight:700;color:var(--warning)}
+.event-details-empty{padding:13px;color:var(--muted);font-size:9px}
+.event-item.info .event-dot{background:var(--faint);box-shadow:0 0 0 5px rgba(111,116,110,.08)}
+.ingress-pill.active i{background:var(--signal);box-shadow:0 0 0 4px rgba(243,95,69,.10)}
+.health-summary.degraded .health-light{border-color:var(--warning)}.health-summary.degraded .health-light:after{background:var(--warning);box-shadow:0 0 0 4px var(--warning-pale)}
+.health-summary.idle .health-light{border-color:var(--faint)}.health-summary.idle .health-light:after{background:var(--faint);box-shadow:none}
+[data-action="system.update"]{display:none!important}
+@media(max-width:980px){body[data-live-ready="false"] .lane-stack{min-height:280px}.route-empty{min-height:230px}}
