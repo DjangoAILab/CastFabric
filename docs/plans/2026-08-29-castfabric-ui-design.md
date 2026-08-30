@@ -11,7 +11,7 @@ Superseded on 2026-08-30。
 
 - [CastFabric 产品与控制台设计](2026-08-30-castfabric-product-console-design.md)
 - [每个输出音响拥有独立接收器组](../adr/0004-one-receiver-suite-per-output.md)
-- [可交互控制台原型](../prototypes/castfabric-console.html)
+- [可交互控制台原型 v1（已否决，仅供对照）](../prototypes/castfabric-console.html)
 
 ## 保留的设计结论
 
