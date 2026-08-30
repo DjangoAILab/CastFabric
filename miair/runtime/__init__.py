@@ -12,6 +12,7 @@ from miair.runtime.models import (
     SessionSourceSnapshot,
     SessionState,
 )
+from miair.runtime.suites import ReceiverSuiteRegistry, SuiteLifecycleError
 
 __all__ = [
     "ActivityEventSnapshot",
@@ -24,4 +25,6 @@ __all__ = [
     "ReceiverSuiteSnapshot",
     "SessionSourceSnapshot",
     "SessionState",
+    "ReceiverSuiteRegistry",
+    "SuiteLifecycleError",
 ]

@@ -20,6 +20,8 @@ from miair.miplay.mdns import MiPlayIdentity
 from miair.miplay.receiver import MiPlayReceiver
 from miair.streaming.sink import CastFabricLiveAudioSink
 from miair.identity import PRODUCT_NAME, PRODUCT_SLUG
+from miair.runtime.models import IngressProtocol, IngressState
+from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
 
 log = logging.getLogger("miair")
 
@@ -43,6 +45,9 @@ class CastFabric:
         self.miplay_receiver: MiPlayReceiver | None = None
         self.discovered_targets = {}
         self._auth_retry_task: asyncio.Task | None = None
+        self.suite_registry = ReceiverSuiteRegistry(
+            device_name_prefix=self.config.device_name_prefix
+        )
 
     def get_renderer_by_did(self, did: str) -> DLNARenderer | None:
         """根据 DID 获取渲染器"""
@@ -211,19 +216,24 @@ class CastFabric:
             # 为每个音箱创建 DLNA 渲染器
             self.ssdp_server = SSDPServer(self.config.hostname, self.config.dlna_port)
             self.device_server = DeviceServer(self.config.hostname, self.config.dlna_port, self.config)
+            self.suite_registry.clear()
 
             for did, controller in self.speaker_manager.controllers.items():
-                speaker = controller.speaker
-                udn = speaker.udn
-                friendly_name = self.config.get_device_name(speaker.get_dlna_name())
-
-                renderer = DLNARenderer(udn, friendly_name, controller, self.config.default_volume, config=self.config)
-                self.renderers[udn] = renderer
-                self._did_to_udn[did] = udn
-
-                self.ssdp_server.register_renderer(udn, friendly_name)
-                self.device_server.register_renderer(renderer)
-                log.info(f"已创建渲染器: {friendly_name} (udn={udn})")
+                target = self.config.get_target(controller.target_id)
+                if target is None:
+                    log.error("控制器缺少输出目标配置: %s", controller.target_id)
+                    continue
+                suite = self.suite_registry.register(target, did, controller)
+                try:
+                    await self._register_dlna_renderer(suite)
+                except Exception as exc:
+                    log.error("为输出目标 %s 创建 DLNA 入口失败: %s", target.id, exc)
+                    self.suite_registry.set_ingress(
+                        target.id,
+                        IngressProtocol.DLNA,
+                        IngressState.UNAVAILABLE,
+                        error_code="DLNA_START_FAILED",
+                    )
 
             # 启动 SSDP
             await self.ssdp_server.start()
@@ -263,6 +273,7 @@ class CastFabric:
             # 清空渲染器和控制器，避免显示旧设备
             self.renderers.clear()
             self._did_to_udn.clear()
+            self.suite_registry.clear()
             if hasattr(self, 'speaker_manager'):
                 self.speaker_manager.controllers.clear()
             self._schedule_auth_retry()
@@ -276,8 +287,146 @@ class CastFabric:
 
             self.airplay_manager = AirPlayManager(self.config.hostname, config=self.config)
             await self.airplay_manager.start_for_speakers(self.speaker_manager.controllers)
+            for did, controller in self.speaker_manager.controllers.items():
+                wrapper = self.airplay_manager.speaker_airplays.get(did)
+                if wrapper is None:
+                    self.suite_registry.set_ingress(
+                        controller.target_id,
+                        IngressProtocol.AIRPLAY,
+                        IngressState.UNAVAILABLE,
+                        error_code="AIRPLAY_START_FAILED",
+                    )
+                    continue
+                server = wrapper.airplay_server
+                self.suite_registry.set_ingress(
+                    controller.target_id,
+                    IngressProtocol.AIRPLAY,
+                    IngressState.READY,
+                    handle=wrapper,
+                    port=server.rtsp_port if server else None,
+                )
         except Exception as e:
             log.error(f"启动 AirPlay 服务失败: {e}")
+            for suite_snapshot in self.suite_registry.snapshots():
+                self.suite_registry.set_ingress(
+                    suite_snapshot.target.id,
+                    IngressProtocol.AIRPLAY,
+                    IngressState.UNAVAILABLE,
+                    error_code="AIRPLAY_START_FAILED",
+                )
+
+    async def _register_dlna_renderer(self, suite: ReceiverSuite) -> DLNARenderer:
+        """Register one virtual renderer on the process-wide DLNA servers."""
+        if self.ssdp_server is None or self.device_server is None:
+            raise RuntimeError("shared DLNA servers are not initialized")
+        speaker = suite.controller.speaker
+        renderer = DLNARenderer(
+            speaker.udn,
+            suite.target.get_receiver_alias(self.config.device_name_prefix),
+            suite.controller,
+            self.config.default_volume,
+            config=self.config,
+        )
+        try:
+            self.renderers[renderer.udn] = renderer
+            self._did_to_udn[suite.controller_id] = renderer.udn
+            self.ssdp_server.register_renderer(renderer.udn, renderer.friendly_name)
+            self.device_server.register_renderer(renderer)
+            self.suite_registry.set_ingress(
+                suite.target.id,
+                IngressProtocol.DLNA,
+                IngressState.READY,
+                handle=renderer,
+                port=self.config.dlna_port,
+            )
+        except Exception:
+            self.renderers.pop(renderer.udn, None)
+            self._did_to_udn.pop(suite.controller_id, None)
+            if renderer.udn in self.device_server.renderers:
+                await self.device_server.unregister_renderer(renderer.udn)
+            if renderer.udn in self.ssdp_server.renderers:
+                await self.ssdp_server.unregister_renderer(renderer.udn)
+            raise
+        log.info("已创建渲染器: %s (udn=%s)", renderer.friendly_name, renderer.udn)
+        return renderer
+
+    async def _start_receiver_suite(self, suite: ReceiverSuite) -> None:
+        dlna_runtime = suite.get_ingress(IngressProtocol.DLNA)
+        renderer = dlna_runtime.handle if dlna_runtime else None
+        renderer_is_live = bool(
+            renderer is not None
+            and renderer.udn in self.renderers
+            and self.ssdp_server
+            and renderer.udn in self.ssdp_server.renderers
+            and self.device_server
+            and renderer.udn in self.device_server.renderers
+        )
+        if not renderer_is_live:
+            renderer = await self._register_dlna_renderer(suite)
+            if self.ssdp_server:
+                await self.ssdp_server.announce_renderer(renderer.udn)
+        if self.airplay_manager is None:
+            self.airplay_manager = AirPlayManager(self.config.hostname, config=self.config)
+        try:
+            wrapper = await self.airplay_manager.start_for_speaker(
+                suite.controller_id,
+                suite.controller,
+            )
+        except Exception:
+            self.suite_registry.set_ingress(
+                suite.target.id,
+                IngressProtocol.AIRPLAY,
+                IngressState.UNAVAILABLE,
+                error_code="AIRPLAY_START_FAILED",
+            )
+        else:
+            server = wrapper.airplay_server
+            self.suite_registry.set_ingress(
+                suite.target.id,
+                IngressProtocol.AIRPLAY,
+                IngressState.READY,
+                handle=wrapper,
+                port=server.rtsp_port if server else None,
+            )
+
+    async def _stop_receiver_suite(self, suite: ReceiverSuite) -> None:
+        if self.airplay_manager:
+            await self.airplay_manager.stop_for_speaker(suite.controller_id)
+        airplay = suite.get_ingress(IngressProtocol.AIRPLAY)
+        if airplay is not None:
+            suite.set_ingress(
+                IngressProtocol.AIRPLAY,
+                IngressState.STOPPED,
+                handle=None,
+                port=airplay.port,
+            )
+
+        renderer_runtime = suite.get_ingress(IngressProtocol.DLNA)
+        renderer = renderer_runtime.handle if renderer_runtime else None
+        if renderer is not None:
+            if self.ssdp_server:
+                await self.ssdp_server.unregister_renderer(renderer.udn)
+            if self.device_server:
+                await self.device_server.unregister_renderer(renderer.udn)
+            self.renderers.pop(renderer.udn, None)
+            self._did_to_udn.pop(suite.controller_id, None)
+        suite.set_ingress(
+            IngressProtocol.DLNA,
+            IngressState.STOPPED,
+            handle=None,
+            port=self.config.dlna_port,
+        )
+
+    async def set_target_enabled(self, target_id: str, enabled: bool) -> ReceiverSuite:
+        """Transactionally enable or disable one already registered suite."""
+        suite = await self.suite_registry.set_enabled(
+            target_id,
+            enabled,
+            start=self._start_receiver_suite,
+            stop=self._stop_receiver_suite,
+        )
+        self.config.save()
+        return suite
 
     async def _start_miplay_for_speaker(self):
         """发布单个 MiPlay 网关，并把音频送到首个已配置音箱。"""
@@ -348,6 +497,7 @@ class CastFabric:
             self.device_server = None
         self.renderers.clear()
         self._did_to_udn.clear()
+        self.suite_registry.clear()
         self.dlna_running = False
 
     async def stop(self):

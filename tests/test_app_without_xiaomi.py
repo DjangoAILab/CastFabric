@@ -6,6 +6,7 @@ import pytest
 from miair.app import CastFabric
 from miair.config import Config
 from miair.targets import OutputTargetConfig
+from miair.runtime.models import IngressProtocol, IngressState
 
 
 @pytest.mark.asyncio
@@ -53,6 +54,10 @@ async def test_generic_dlna_target_starts_ingress_without_xiaomi_login(tmp_path)
     assert next(iter(app.renderers.values())).friendly_name == (
         "CastFabric · Living Room"
     )
+    suite = app.suite_registry.get(target.id)
+    assert suite is not None
+    assert suite.controller is controller
+    assert suite.get_ingress(IngressProtocol.DLNA).state is IngressState.READY
 
 
 @pytest.mark.asyncio
@@ -88,3 +93,4 @@ async def test_offline_generic_target_remains_advertised(tmp_path):
     assert app.dlna_running
     assert len(app.renderers) == 1
     assert not app.has_local_speaker_control()
+    assert app.suite_registry.get(target.id).snapshot().target.online is None

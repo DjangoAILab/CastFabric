@@ -134,6 +134,46 @@ class DeviceServer:
         renderer.pre_buffer_func = self.start_buffering
         renderer.abort_proxy_func = self.abort_proxy_for_renderer
         renderer.resume_proxy_func = self.resume_proxy_for_renderer
+        if self._runner is not None:
+            em.start_cleanup()
+
+    async def unregister_renderer(self, udn: str) -> DLNARenderer | None:
+        """Remove one renderer and all of its shared-server runtime state."""
+        renderer = self.renderers.pop(udn, None)
+        if renderer is None:
+            return None
+
+        active_tasks = list(self._active_proxy_tasks.get(udn, ()))
+        self.abort_proxy_for_renderer(udn)
+        if active_tasks:
+            await asyncio.gather(*active_tasks, return_exceptions=True)
+        self._paused_proxy_udns.discard(udn)
+        self._active_proxy_tasks.pop(udn, None)
+        resume_task = self._resume_tasks.pop(udn, None)
+        if resume_task and not resume_task.done():
+            resume_task.cancel()
+            try:
+                await resume_task
+            except asyncio.CancelledError:
+                pass
+
+        self._proxy_tokens = {
+            token: entry
+            for token, entry in self._proxy_tokens.items()
+            if entry[2] != udn
+        }
+        event_manager = self.event_managers.pop(udn, None)
+        if event_manager is not None:
+            await event_manager.stop()
+
+        renderer.event_manager = None
+        renderer.proxy_url_func = None
+        renderer.seek_url_func = None
+        renderer.pre_buffer_func = None
+        renderer.abort_proxy_func = None
+        renderer.resume_proxy_func = None
+        log.info("DLNA HTTP 注销渲染器: %s", udn)
+        return renderer
 
     # ---- 音频缓冲/代理系统 ----
 
@@ -1490,4 +1530,5 @@ class DeviceServer:
                 await asyncio.wait_for(self._runner.cleanup(), timeout=3.0)
             except asyncio.TimeoutError:
                 log.warning("DLNA HTTP 服务关闭超时")
+            self._runner = None
         log.info("DLNA HTTP 服务已停止")
