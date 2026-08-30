@@ -42,6 +42,8 @@ class MediaSessionCoordinator:
                 self.journal.append(target_id=target_id, session_id=old.id,
                     protocol=old.protocol, type="session.preempted",
                     outcome=EventOutcome.INFO, summary_key="activity.session_preempted")
+            if old:
+                self._session_targets.pop(old.id, None)
             session = MediaSessionSnapshot(
                 id=self.id_factory(), target_id=target_id, protocol=protocol,
                 state=SessionState.STARTING,
@@ -77,6 +79,7 @@ class MediaSessionCoordinator:
             if current is None or current.id != session_id:
                 return False
             del self._current[target_id]
+            self._session_targets.pop(session_id, None)
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session_id,
                     protocol=current.protocol,

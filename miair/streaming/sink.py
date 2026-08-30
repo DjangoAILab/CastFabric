@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import inspect
 import time
+from collections.abc import Awaitable, Callable
 
 from miair.airplay.audio_stream import AudioStreamServer
 
@@ -20,6 +23,8 @@ class CastFabricLiveAudioSink:
         play_type: int = 2,
         http_mode: str = "close",
         content_type: str = "audio/wav",
+        lifecycle_callback: Callable[[str, dict], Awaitable[object] | object]
+        | None = None,
     ):
         self.hostname = hostname
         self.controller = controller
@@ -27,12 +32,26 @@ class CastFabricLiveAudioSink:
         self.play_type = play_type
         self.http_mode = http_mode
         self.content_type = content_type
+        self.lifecycle_callback = lifecycle_callback
         self.stream_server: AudioStreamServer | None = None
         self._play_started = False
         self._active = False
         self._pcm_bytes = 0
         self._started_at: float | None = None
         self._first_pcm_at: float | None = None
+
+    async def _emit_lifecycle(self, event: str, details: dict | None = None) -> None:
+        if self.lifecycle_callback is None:
+            return
+        try:
+            result = self.lifecycle_callback(event, dict(details or {}))
+            if inspect.isawaitable(result):
+                await result
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            # The output stream is the product path; diagnostics are best-effort.
+            log.debug("MiPlay 输出生命周期回调失败 (%s): %s", event, type(exc).__name__)
 
     async def start(
         self, sample_rate: int, channels: int, sample_width: int
@@ -63,6 +82,13 @@ class CastFabricLiveAudioSink:
             if not accepted:
                 raise RuntimeError("Xiaomi speaker rejected the MiPlay live URL")
             self._play_started = True
+            await self._emit_lifecycle(
+                "output_started",
+                {
+                    "output_adapter": type(self.controller).__name__,
+                    "media_format": self.audio_format,
+                },
+            )
             log.info(
                 "MiPlay 音频已请求音箱拉流: %s "
                 "(player_play_url type=%s, HTTP=%s, Content-Type=%s)",
@@ -72,6 +98,10 @@ class CastFabricLiveAudioSink:
                 self.content_type,
             )
         except Exception:
+            await self._emit_lifecycle(
+                "output_failed",
+                {"reason": "OUTPUT_PLAY_URL_REJECTED"},
+            )
             self._active = False
             server.stop_streaming()
             await server.stop()
@@ -90,6 +120,10 @@ class CastFabricLiveAudioSink:
                 else 0
             )
             log.info("MiPlay 首个 PCM 已送入音箱拉流: 启动后 %.0fms", elapsed_ms)
+            await self._emit_lifecycle(
+                "pcm_forwarded",
+                {"media_format": self.audio_format},
+            )
         self._pcm_bytes += len(payload)
         self.stream_server.write_pcm(payload)
 
@@ -106,6 +140,7 @@ class CastFabricLiveAudioSink:
                 await self.controller.stop()
             except Exception as exc:
                 log.debug("停止 MiPlay 音箱播放失败: %s", exc)
+        await self._emit_lifecycle("output_stopped")
 
     def diagnostics(self) -> dict:
         return {

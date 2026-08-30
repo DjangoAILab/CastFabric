@@ -217,6 +217,7 @@ async def test_compensation_start_reuses_a_dlna_renderer_that_is_still_live(tmp_
         Config(
             hostname="127.0.0.1",
             conf_path=str(tmp_path),
+            enable_miplay=False,
             targets={target.id: target},
         )
     )

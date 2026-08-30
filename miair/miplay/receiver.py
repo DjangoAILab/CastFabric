@@ -41,6 +41,8 @@ class MiPlayReceiver:
         advertise_address: str | None = None,
         ffmpeg: str = "ffmpeg",
         volume_setter: Callable[[int], Awaitable[object]] | None = None,
+        lifecycle_callback: Callable[[str, dict], Awaitable[object] | object]
+        | None = None,
     ):
         self.host = host
         self.port = port
@@ -50,6 +52,7 @@ class MiPlayReceiver:
         self.advertise_address = advertise_address
         self.ffmpeg = ffmpeg
         self.volume_setter = volume_setter
+        self.lifecycle_callback = lifecycle_callback
         self._server: asyncio.AbstractServer | None = None
         self._zeroconf: Zeroconf | None = None
         self._service_info = None
@@ -61,6 +64,21 @@ class MiPlayReceiver:
         self._pending_volume: int | None = None
         self._volume_event = asyncio.Event()
         self._volume_task: asyncio.Task | None = None
+
+    async def _emit_lifecycle(self, event: str, details: dict | None = None) -> None:
+        """Notify the runtime without allowing observability to break playback."""
+        if self.lifecycle_callback is None:
+            return
+        try:
+            result = self.lifecycle_callback(event, dict(details or {}))
+            if inspect.isawaitable(result):
+                await result
+        except asyncio.CancelledError:
+            # Lifecycle reporting is best-effort and must not interrupt protocol
+            # cleanup or media delivery.
+            return
+        except Exception as exc:
+            log.warning("MiPlay 生命周期回调失败 (%s): %s", event, type(exc).__name__)
 
     async def start(self) -> None:
         if self._server is not None:
@@ -154,7 +172,7 @@ class MiPlayReceiver:
             peer_endpoint=peer_endpoint,
         )
         report = {
-            "peer": str(peer[0]) if peer else "unknown",
+            "peer": "<local-address>" if peer else "unknown",
             "authenticated": False,
             "control_frames": 0,
             "control_trace": [],
@@ -167,6 +185,13 @@ class MiPlayReceiver:
             "error": None,
         }
         wfd_task: asyncio.Task | None = None
+        await self._emit_lifecycle(
+            "session_started",
+            {
+                "client_address": str(peer[0]) if peer else "",
+                "media_format": "mpegts",
+            },
+        )
 
         async def write_control(writes: list[bytes]) -> None:
             if not writes or writer.is_closing():
@@ -223,7 +248,7 @@ class MiPlayReceiver:
                 wfd_task.cancel()
             raise
         except Exception as exc:
-            report["error"] = f"{type(exc).__name__}: {exc}"
+            report["error"] = type(exc).__name__
             log.warning("MiPlay 会话结束: %s", report["error"])
             if wfd_task and not wfd_task.done():
                 wfd_task.cancel()
@@ -236,6 +261,13 @@ class MiPlayReceiver:
                 pass
             self._last_session = report
             self._active_session = False
+            await self._emit_lifecycle(
+                "session_ended",
+                {
+                    "failed": bool(report["error"]),
+                    "reason_code": "MIPLAY_SESSION_FAILED" if report["error"] else None,
+                },
+            )
             self._session_tasks.discard(task)
             if not self._session_tasks:
                 self._idle.set()
@@ -310,6 +342,10 @@ class MiPlayReceiver:
                     await decoder.write(packet.transport_stream)
                     if first_media:
                         first_media = False
+                        await self._emit_lifecycle(
+                            "media_started",
+                            {"media_format": "pcm_s16le"},
+                        )
                         await write_control(control_session.media_started())
             await decoder.stop()
             report["decoder"] = decoder.diagnostics()

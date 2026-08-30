@@ -211,6 +211,9 @@ class ReceiverSuiteRegistry:
     def snapshots(self) -> tuple[ReceiverSuiteSnapshot, ...]:
         return tuple(self._suites[key].snapshot() for key in sorted(self._suites))
 
+    def values(self) -> tuple[ReceiverSuite, ...]:
+        return tuple(self._suites[key] for key in sorted(self._suites))
+
     async def set_enabled(
         self,
         target_id: str,
