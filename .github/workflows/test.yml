@@ -54,10 +54,11 @@ jobs:
             docker rm -f castfabric-ci >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
+          expected_version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
           curl --fail --silent --show-error \
             --retry 30 --retry-all-errors --retry-connrefused --retry-delay 1 \
             http://127.0.0.1:18300/api/status \
-            | python -c "import json,sys; d=json.load(sys.stdin); assert d['version']=='0.10.0a1'; assert d['xiaomi_extension_enabled'] is False"
+            | EXPECTED_VERSION="$expected_version" python -c "import json,os,sys; d=json.load(sys.stdin); assert d['version']==os.environ['EXPECTED_VERSION']; assert d['xiaomi_extension_enabled'] is False"
           curl --fail --silent http://127.0.0.1:18300/api/v1/system \
             | python -c "import json,sys; d=json.load(sys.stdin); assert d['product']=='CastFabric'; assert d['health']=='idle'; assert d['targets']['count']==0"
           curl --fail --silent http://127.0.0.1:18300/ \
