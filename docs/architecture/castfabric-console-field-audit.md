@@ -24,19 +24,22 @@
 收紧为“规划”。旧代码虽然各处有局部状态，但没有稳定的扫描生命周期，也无法把多个
 协议状态无歧义归并为每音响唯一会话。
 
-## 当前代码证据
+## Runtime v2 代码证据
 
-| 产品域 | 当前证据 | 能直接承诺的语义 | 缺口 |
+| 产品域 | 当前证据 | 能直接承诺的语义 | 剩余降级 |
 |---|---|---|---|
-| 系统 | `miair/web/api.py` 的 `/api/status`、`Config` | 版本、绑定地址、端口、基础配置 | 无统一健康快照和独立发现生命周期 |
-| 输出目标 | `OutputTargetConfig`、`LocalDLNAClient.discover` | id、kind、name、location、enabled、一次扫描是否出现 | 无 `observed_at`、标准能力集和独立别名 |
-| 虚拟 DLNA | `CastFabric.renderers` | 每目标 renderer 是否创建、transport state | 运行对象仍按 UDN 分散，无 suite 投影 |
-| AirPlay | `AirPlayManager.speaker_airplays` | 每目标 server、playing、client_name | 没有统一 session id、事件和结果原因 |
-| MiPlay | `CastFabric.miplay_receiver` | 单个全局 receiver 的诊断 | 只映射首个 controller，不能冒充每音响状态 |
-| 活动 | 文本日志和局部 diagnostics | 只适合诊断 | 没有结构化、可查询、可本地化的产品事件 |
-| 扩展 | `_extension_auth_status`、脱敏 helper | 小米扩展开关和安全认证状态 | 不得升级为核心系统健康 |
+| 系统 | `/api/v1/system`、`SystemSnapshotProjector` | 版本、绑定地址、端口、健康与聚合计数 | `system.interface` 暂以绑定地址可信回退 |
+| 输出目标 | `TargetDiscoveryRegistry`、`OutputTargetConfig` | id、名称、独立别名、启停、扫描状态与最近 observation | 扫描前 online 必须保持 null |
+| Receiver Suite | `ReceiverSuiteRegistry` | 每目标 DLNA/AirPlay/MiPlay 状态、端口、错误和会话引用 | 单入口失败只降级对应协议 |
+| 会话 | `MediaSessionCoordinator` | 每目标当前/近期会话、协议、状态和有来源说明的 sender 字段 | 协议未提供时 sender 为 null |
+| MiPlay 输出 | `miplay_receivers`、`CastFabricLiveAudioSink` | 每目标独立 receiver、PCM 前送、实体 DMR 拉流确认和失败原因 | 不推断扬声器实际发声时刻 |
+| 活动 | `ActivityEventJournal`、`/api/v1/events` | 有界、可筛选、可本地化且脱敏的结构化事件 | 不提供长期统计数据库 |
+| 扩展 | `/api/v1/settings` extensions 分区 | 显式开关和安全认证状态 | 永不升级为核心系统健康 |
 
 ## 字段分组
+
+以下分组保留原型冻结时的审计基线；其中“必须新增”项已经由上表所列 Runtime v2 组件关闭，
+用于解释字段为什么存在，而不是表示尚未实现。
 
 ### 当前可读
 
@@ -74,14 +77,14 @@
 
 | 动作 | 当前能力 | 目标语义 |
 |---|---|---|
-| 扫描 | `/api/setting?need_device_list=true` 隐式触发 | `POST /api/targets/scan`，保留旧快照直到完成 |
-| 独立启停 | 旧接口批量写 `target_ids` 并重启进程 | `PATCH /api/targets/{id}`，只改变该 suite；失败回滚 |
-| 编辑名称/别名 | 仅旧 DID rename | 通用 target patch；别名与物理 friendly name 分离 |
-| 活动筛选/详情 | 无 | journal 查询，不解析文本日志 |
-| 保存连接配置 | `/api/setting` 全量保存并重启 | 分区白名单 patch，明确 `restart_required` |
-| 导出诊断 | 无 | 服务端脱敏后生成，不向浏览器暴露原始 Cookie/URL |
+| 扫描 | `POST /api/v1/targets/scan` | 单 owner 扫描，完成前保留旧快照，忙时返回 typed 409 |
+| 独立启停 | `PATCH /api/v1/targets/{id}` | 只改变该 suite；失败执行补偿并恢复持久化状态 |
+| 编辑名称/别名 | target patch 白名单 | 控制台名称与投放列表 receiver alias 分离 |
+| 活动筛选/详情 | `/api/v1/events` 集合/详情 | journal 查询，不解析文本日志 |
+| 保存连接配置 | `PATCH /api/v1/settings` | 分区白名单、落盘失败全量回滚、明确 `restart_required` |
+| 导出诊断 | `/api/v1/diagnostics/export` | 服务端递归脱敏后生成 ZIP，不暴露凭据、URL query 或完整 IP |
 
-## 实现门槛
+## 已执行的实现门槛
 
 1. 生产页面接字段前，登记表的对应项必须从 `planned` 改为 `current/derived`，并补测试证据。
 2. 新 API 的 JSON schema 测试必须证明缺失值走 fallback，不复用上一会话数据。

@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted for product design；运行时数据模型和 API 尚未实现。
+Accepted and implemented in the CastFabric 0.10 prerelease line.
 
 ## 背景
 

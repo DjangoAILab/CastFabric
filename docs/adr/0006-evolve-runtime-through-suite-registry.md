@@ -2,7 +2,7 @@
 
 ## 状态
 
-Accepted for implementation
+Accepted and implemented in the CastFabric 0.10 prerelease line.
 
 ## 背景
 
