@@ -12,8 +12,9 @@ MiPlay 和未来自定义 PCM 输入，将同一套播放、暂停、停止和�
 ## 功能需求
 
 - 自动发现局域网中的 UPnP MediaRenderer，并保存稳定的目标标识与 description URL。
-- 允许用户选择一个或多个输出目标，并为每个目标发布 CastFabric 虚拟 DLNA/AirPlay
-  入口；MiPlay 第一阶段绑定默认目标。
+- 允许用户同时启用一个或多个输出音响，并为每台启用的音响发布独立的 CastFabric
+  虚拟 DLNA、AirPlay 和 MiPlay 接收器组。
+- 音响启停彼此独立，不设置全局唯一的“当前输出”或“默认音响”。
 - 所有入口共享统一的名称前缀，默认 `CastFabric`，可在配置中修改。
 - 输入会话能够开始、写入、暂停、停止、调节音量并暴露诊断状态。
 - 小米账号未配置、token 过期或云端不可用时，标准 DLNA 链路完整工作。
@@ -37,8 +38,8 @@ MiPlay 和未来自定义 PCM 输入，将同一套播放、暂停、停止和�
        │                    │                    │                  │
        └──────────── input adapters ────────────┴──────────────────┘
                                 │
-                    MediaSession / CastRouter
-                 lifecycle · ownership · diagnostics
+                 Receiver Suite / MediaSession
+             per-output lifecycle · ownership · diagnostics
                                 │
                        PlaybackTarget port
                                 │
@@ -77,10 +78,11 @@ class PlaybackTarget(Protocol):
 URL。发现结果是短期快照；用户选中的目标把 UDN、friendly name 和 location 缓存到
 配置。缓存 location 失效时重新发现，而不是要求云端刷新。
 
-### `CastRouter`
+### `ReceiverSuite`
 
-维护默认目标和当前输入会话所有者。第一阶段保持现有“后到输入可以接管”的行为，
-但把状态集中记录；后续可增加拒绝、排队或混音策略，不让协议适配器彼此引用。
+每个已启用的输出音响拥有独立的接收器组和媒体会话。接收器组维护自己的目标、入口
+实例、当前会话所有者和诊断状态。同一音响内保持“后到输入可以接管”，不同音响间
+互不抢占并允许并行播放。协议适配器不能直接引用其他音响的会话。
 
 ### 输入适配器
 
@@ -101,13 +103,13 @@ URL。发现结果是短期快照；用户选中的目标把 UDN、friendly name
 ```json
 {
   "device_name_prefix": "CastFabric",
-  "default_target_id": "uuid:physical-renderer-udn",
   "targets": {
     "uuid:physical-renderer-udn": {
       "kind": "dlna",
       "name": "客厅音箱",
       "location": "http://192.168.133.132:1958/...",
-      "enabled": true
+      "enabled": true,
+      "receiver_alias": "CastFabric · 客厅音箱"
     }
   },
   "extensions": {
@@ -116,7 +118,8 @@ URL。发现结果是短期快照；用户选中的目标把 UDN、friendly name
 }
 ```
 
-迁移顺序：先读取新字段；没有新目标时从旧 `mi_did/speakers` 构造兼容目标；旧
+迁移顺序：先读取新字段；没有新目标时从旧 `mi_did/speakers` 构造兼容目标并启用；
+旧的单一默认目标字段只作为迁移提示，不继续形成互斥选择关系；旧
 `miplay_name=OpenXiaoCast` 视为未自定义并迁移成 `CastFabric`；用户明确设置的旧名称
 保持不变。保存时暂不删除旧字段，直到迁移发布完成并有真实部署回滚记录。
 
@@ -129,7 +132,8 @@ URL。发现结果是短期快照；用户选中的目标把 UDN、friendly name
 | DLNA 目标离线 | 当前播放失败 | 会话进入 error；入口继续发布 |
 | 小米 token 过期 | 小米扩展不可用 | 不影响标准 DLNA 和所有入口发现 |
 | AirPlay/MiPlay 解码退出 | 当前实时流停止 | 清理会话和子进程，保留其他服务 |
-| 两个输入同时接管 | 前一流被停止 | 路由器串行切换并记录接管原因 |
+| 同一音响的两个输入同时接管 | 前一流被停止 | 该音响的会话串行切换并记录接管原因 |
+| 不同音响同时播放 | 无冲突 | 各 Receiver Suite 独立维护会话和输出 |
 | 配置迁移异常 | 启动失败风险 | 原文件原子保存；兼容字段只增不删 |
 
 ## 验证与发布门槛
@@ -137,6 +141,5 @@ URL。发现结果是短期快照；用户选中的目标把 UDN、friendly name
 1. 单元测试覆盖目标接口、发现去重、配置迁移和故障回退。
 2. 离线集成测试覆盖虚拟 DLNA/AirPlay/MiPlay 到 fake DLNA target。
 3. Docker 构建、健康检查、冷启动、旧配置挂载和回滚镜像验证通过。
-4. Home Server 上同时发现实体 DMR 和 `CastFabric · <目标>`。
+4. Home Server 上为每台启用音响同时发现实体 DMR 和独立的 `CastFabric · <音响>`。
 5. DLNA 直通、AirPlay、MiPlay 分别完成播放/暂停/音量回归；认证失效测试不影响核心。
-

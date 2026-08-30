@@ -1,88 +1,29 @@
-# CastFabric UI design: Acoustic Weave
+# CastFabric UI 方向记录（已被新版原型取代）
 
-## Dawn revision
+## 状态
 
-The first dark-room implementation established the correct product hierarchy,
-but visual review showed that it felt too dim and that protocol labels appeared
-mechanically attached to paths at some aspect ratios. The accepted revision is
-**Acoustic Weave / Dawn**:
+Superseded on 2026-08-30。
 
-- use an ivory daylight field, soft botanical green structure and a warm coral
-  signal accent;
-- separate protocol labels from the animated geometry;
-- animate particles along continuous Bezier waves so motion remains registered
-  to the path at every viewport size;
-- keep the landing surface focused on route health, targets and playback;
-- move playback, network and extension preferences into a dedicated modal.
+本文件曾记录 “Acoustic Weave” 暗色首页以及后续 Dawn 明色修订。它验证了“协议汇聚”
+这个视觉隐喻，但仍以单一选中输出和装饰性路径动画为中心，不再作为实现依据。
 
-This revision retains the underlying information architecture and API contracts
-while making the interface calmer, brighter and less dashboard-like.
+当前有效的产品与界面定义是：
 
-## Intent
+- [CastFabric 产品与控制台设计](2026-08-30-castfabric-product-console-design.md)
+- [每个输出音响拥有独立接收器组](../adr/0004-one-receiver-suite-per-output.md)
+- [可交互控制台原型](../prototypes/castfabric-console.html)
 
-CastFabric is not a device-control dashboard and should not look like one. It is
-a quiet routing layer that lets different casting protocols arrive at the same
-speaker. The interface should make that invisible infrastructure legible in one
-glance, then get out of the way.
+## 保留的设计结论
 
-The selected direction is **Acoustic Weave**: a dark, restrained listening room
-with fine signal threads, warm type and one luminous output field. DLNA,
-AirPlay and MiPlay appear as incoming strands rather than unrelated feature
-cards. Their convergence is the memorable product gesture and will later become
-the visual foundation of the public website.
+- 使用明亮、安静的视觉基调，而不是暗色控制台。
+- 首页只承载能力、系统状态、全部音响和近期活动。
+- 配置进入独立弹窗或二级页面，不与首页内容竞争。
+- 动效必须解释真实状态，并与对应音响绑定；不再使用左右硬拼的装饰拓扑。
+- 中英文切换、移动端布局、减少动态效果和键盘操作属于基础能力。
 
-Two alternatives were considered and rejected for the first iteration:
+## 被否决的假设
 
-- A light editorial system would communicate openness well, but loses the
-  atmospheric quality of audio playback and makes live status feel secondary.
-- A hardware-style hi-fi console would feel precise, but overstates transport
-  controls that CastFabric does not own and risks looking like an audio player.
-
-## Information architecture
-
-The page has three layers:
-
-1. **Signal stage** — product identity, overall health, three ingress protocols,
-   the active CastFabric fabric and the selected DLNA output.
-2. **Daily operation** — output-target selection and current renderer/media
-   state. These are the only persistent work surfaces.
-3. **System detail** — collapsed configuration for behavior, ports and the
-   optional Xiaomi extension. Advanced controls stay available without defining
-   the product.
-
-No unfinished pairing-code surface is introduced. Xiaomi account configuration
-remains explicitly optional and visually subordinate.
-
-## Visual system
-
-- Near-black blue-green background with warm ivory foreground.
-- Jade indicates a healthy local route; amber marks attention or a compatibility
-  path; protocol colors are subtle identifiers rather than competing themes.
-- Fine one-pixel rules, large negative space and low-opacity grain provide depth.
-- Display typography uses a high-contrast editorial face where available;
-  interface text uses a humanist sans with Chinese system fallbacks.
-- Motion is slow and causal: strands travel toward the output, the central field
-  breathes, and content reveals in sequence. `prefers-reduced-motion` disables
-  non-essential movement.
-
-## Interaction and responsive behavior
-
-Output targets remain selectable with the existing API and apply action. The
-now-playing panel refreshes from the existing renderer endpoint. The settings
-surface uses a native disclosure element so keyboard and mobile behavior remain
-predictable. Status text and protocol chips are updated from live diagnostics.
-
-On narrow screens the signal topology becomes vertical, touch targets grow to at
-least 44 px, and the two operational panels stack. The hero preserves the same
-protocol-to-output story rather than becoming a decorative banner.
-
-## Verification gates
-
-- Existing setting, target selection, Xiaomi extension and update flows retain
-  every required DOM hook.
-- JavaScript parses independently and the Python suite stays green.
-- Desktop and mobile screenshots are reviewed at 1440×1000 and 390×844.
-- Reduced-motion and narrow-width layouts have no clipped controls or horizontal
-  overflow.
-- Home Server health, SSDP, AirPlay and MiPlay services remain unchanged after
-  deployment.
+- 不存在全局“当前输出”“默认音响”或单选目标。
+- 不用巨型 slogan 占据首页主视觉；首页主标题表达实时系统状态。
+- 不把 DLNA、AirPlay、MiPlay 做成三个功能售卖卡片。
+- 不在首屏暴露端口、账号、token、配对码和未完成能力。
