@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CastFabric 是面向局域网音响的开源多协议投放层。">
+  <title>CastFabric · 不挑协议，投了就播</title>
+  <style>
+    :root {
+      --canvas: #f6f1e8;
+      --surface: #fffdf8;
+      --surface-strong: #fffaf3;
+      --ink: #202421;
+      --ink-soft: #373c38;
+      --muted: #6f746e;
+      --faint: #969a94;
+      --line: #d8d3ca;
+      --line-soft: rgba(58, 62, 58, .12);
+      --signal: #f35f45;
+      --signal-deep: #b94634;
+      --signal-soft: #fde3d9;
+      --healthy: #2f8064;
+      --healthy-soft: #dfede7;
+      --warning: #a96f20;
+      --danger: #9c3f34;
+      --shadow: 0 28px 80px rgba(66, 52, 37, .09);
+      --display: Baskerville, "Songti SC", STSong, "Noto Serif CJK SC", serif;
+      --body: "Avenir Next", Avenir, "PingFang SC", "Microsoft YaHei", sans-serif;
+      --max: 1440px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(243, 95, 69, .10), transparent 27%),
+        radial-gradient(circle at 94% 28%, rgba(47, 128, 100, .08), transparent 24%),
+        var(--canvas);
+      font-family: var(--body);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      opacity: .23;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E");
+    }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    img { max-width: 100%; }
+    ::selection { color: var(--ink); background: var(--signal-soft); }
+    :focus-visible { outline: 3px solid rgba(243, 95, 69, .40); outline-offset: 3px; }
+
+    .shell { width: min(var(--max), calc(100% - 48px)); margin-inline: auto; }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(63, 62, 57, .10);
+      background: rgba(246, 241, 232, .84);
+      backdrop-filter: blur(18px);
+    }
+    .header-inner {
+      height: 72px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 24px;
+    }
+    .brand {
+      width: fit-content;
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      text-decoration: none;
+    }
+    .brand img { width: 34px; height: 34px; }
+    .brand-copy strong { display: block; font: 500 20px/1 var(--display); letter-spacing: -.02em; }
+    .brand-copy small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; letter-spacing: .16em; }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line-soft);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, .62);
+    }
+    .nav a {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 15px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: none;
+    }
+    .nav a:hover { color: var(--ink); background: rgba(255, 255, 255, .58); }
+    .header-actions { justify-self: end; display: flex; gap: 8px; }
+    .round-action {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, .72);
+      font-size: 11px;
+      font-weight: 650;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .round-action:hover { border-color: rgba(32, 36, 33, .36); background: var(--surface); }
+    .language-button { min-width: 46px; }
+    .github-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+
+    .hero {
+      position: relative;
+      min-height: calc(100svh - 72px);
+      display: grid;
+      align-items: center;
+      padding: clamp(30px, 5.2vh, 58px) 0 clamp(36px, 6vh, 66px);
+      overflow: clip;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -11vw;
+      top: 8%;
+      width: min(46vw, 700px);
+      aspect-ratio: 1;
+      border: 1px solid rgba(47, 128, 100, .10);
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 64px rgba(47, 128, 100, .018), inset 0 0 0 128px rgba(47, 128, 100, .012);
+      pointer-events: none;
+    }
+    .hero-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(430px, .82fr) minmax(660px, 1.18fr);
+      align-items: center;
+      gap: clamp(42px, 5vw, 84px);
+    }
+    .hero-copy { padding-top: 4px; }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 20px;
+      color: var(--signal-deep);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 38px; height: 1px; background: var(--signal); }
+    h1 {
+      max-width: 640px;
+      margin: 0;
+      font: 500 clamp(52px, 5.3vw, 82px)/.98 var(--display);
+      letter-spacing: -.055em;
+    }
+    .signal-word { position: relative; display: inline-block; color: var(--signal-deep); }
+    .signal-word::after {
+      content: "";
+      position: absolute;
+      left: 2%;
+      right: -3%;
+      bottom: -5px;
+      height: 7px;
+      opacity: .34;
+      border-radius: 999px;
+      background: var(--signal);
+      transform: rotate(-1deg);
+    }
+    .hero-lead {
+      max-width: 570px;
+      margin: 25px 0 0;
+      color: var(--muted);
+      font-size: clamp(15px, 1.25vw, 18px);
+      line-height: 1.75;
+    }
+    .value-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .value-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid rgba(58, 62, 58, .15);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, .48);
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .value-pill i { width: 5px; height: 5px; border-radius: 50%; background: var(--healthy); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .button {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 20px;
+      border: 1px solid var(--ink);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      text-decoration: none;
+      transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button-primary { color: var(--surface); background: var(--ink); box-shadow: 0 12px 28px rgba(32, 36, 33, .16); }
+    .button-secondary { border-color: var(--line); background: rgba(255, 253, 248, .64); }
+    .button-arrow { color: var(--signal); font-size: 16px; }
+    .quick-command {
+      width: min(100%, 540px);
+      min-height: 52px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      margin-top: 14px;
+      padding: 6px 7px 6px 14px;
+      border: 1px solid rgba(32, 36, 33, .18);
+      border-radius: 15px;
+      background: rgba(255, 253, 248, .82);
+      box-shadow: 0 12px 34px rgba(65, 54, 40, .06);
+    }
+    .terminal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
+    .quick-command code { overflow: hidden; color: var(--ink-soft); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .copy-button {
+      min-width: 68px;
+      min-height: 38px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--signal-soft);
+      color: var(--signal-deep);
+      font-size: 10px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .copy-button[data-state="copied"] { color: var(--healthy); background: var(--healthy-soft); }
+
+    .route-figure {
+      position: relative;
+      margin: 0;
+      border: 1px solid rgba(55, 57, 52, .22);
+      border-radius: 30px;
+      background:
+        linear-gradient(90deg, rgba(243, 95, 69, .035), transparent 33% 68%, rgba(47, 128, 100, .035)),
+        rgba(255, 253, 248, .87);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .route-figure::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .22;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(45, 49, 45, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(45, 49, 45, .05) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, transparent, #000 24%, #000 76%, transparent);
+    }
+    .route-head {
+      position: relative;
+      z-index: 2;
+      min-height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .route-head-copy small { display: block; color: var(--signal-deep); font-size: 8px; font-weight: 800; letter-spacing: .15em; }
+    .route-head-copy strong { display: block; margin-top: 4px; font: 500 17px/1.1 var(--display); }
+    .local-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      color: var(--healthy);
+      background: var(--healthy-soft);
+      font-size: 8px;
+      font-weight: 750;
+    }
+    .local-badge i { width: 5px; height: 5px; border-radius: 50%; background: var(--healthy); }
+    .route-stack { position: relative; z-index: 2; display: grid; gap: 10px; padding: 18px; }
+    .route-row {
+      min-height: 116px;
+      display: grid;
+      grid-template-columns: minmax(142px, .82fr) minmax(252px, 1.55fr) minmax(150px, .9fr);
+      align-items: stretch;
+      border: 1px solid var(--line-soft);
+      border-radius: 18px;
+      background: rgba(255, 253, 248, .71);
+      opacity: 0;
+      transform: translateY(10px);
+      animation: routeIn .6s cubic-bezier(.22, .75, .24, 1) forwards;
+    }
+    .route-row:nth-child(2) { animation-delay: .12s; }
+    .route-row:nth-child(3) { animation-delay: .24s; }
+    .route-row.primary { border-color: rgba(243, 95, 69, .30); background: linear-gradient(90deg, rgba(253, 227, 217, .48), rgba(255, 253, 248, .78) 52%, rgba(223, 237, 231, .38)); }
+    @keyframes routeIn { to { opacity: 1; transform: translateY(0); } }
+    .route-endpoint { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 13px; }
+    .source-endpoint { border-right: 1px solid var(--line-soft); }
+    .output-endpoint { border-left: 1px solid var(--line-soft); }
+    .device-icon {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(32, 36, 33, .28);
+      border-radius: 11px;
+      background: var(--canvas);
+    }
+    .device-icon.phone::before { content: ""; position: absolute; inset: 6px 9px; border: 1.3px solid var(--ink); border-radius: 5px; }
+    .device-icon.phone::after { content: ""; position: absolute; left: 15px; bottom: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--signal); }
+    .device-icon.computer::before { content: ""; position: absolute; left: 6px; top: 7px; width: 20px; height: 14px; border: 1.3px solid var(--ink); border-radius: 3px; }
+    .device-icon.computer::after { content: ""; position: absolute; left: 4px; bottom: 8px; width: 25px; height: 1px; background: var(--ink); }
+    .device-icon.app::before { content: ""; position: absolute; inset: 7px; border: 1.3px solid var(--ink); border-radius: 7px; box-shadow: inset 0 0 0 4px var(--surface); background: var(--signal); }
+    .device-icon.speaker::before { content: ""; position: absolute; inset: 5px 9px; border: 1.3px solid var(--ink); border-radius: 7px; }
+    .device-icon.speaker::after { content: ""; position: absolute; left: 14px; top: 10px; width: 6px; height: 6px; border: 1px solid var(--ink); border-radius: 50%; box-shadow: 0 10px 0 -1px var(--signal); }
+    .endpoint-copy { min-width: 0; }
+    .endpoint-copy small { display: block; color: var(--muted); font-size: 7px; letter-spacing: .11em; }
+    .endpoint-copy strong { display: block; margin-top: 3px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .endpoint-copy span { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+    .route-core {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(34px, 1fr) auto minmax(34px, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+    }
+    .protocol-chip, .route-state {
+      position: relative;
+      z-index: 3;
+      padding: 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      white-space: nowrap;
+      font-size: 7px;
+      font-weight: 800;
+    }
+    .protocol-chip { color: var(--signal-deep); }
+    .route-state { color: var(--healthy); border-color: rgba(47, 128, 100, .24); background: var(--healthy-soft); }
+    .fabric-stamp {
+      position: relative;
+      z-index: 3;
+      padding: 8px 7px;
+      border: 1px solid rgba(32, 36, 33, .25);
+      border-radius: 9px;
+      background: var(--ink);
+      color: var(--surface);
+      font: 500 8px/1 var(--display);
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+    .signal-line { position: relative; height: 2px; background: var(--line); }
+    .signal-line::after { content: ""; position: absolute; right: -1px; top: -3px; width: 7px; height: 7px; border-top: 1.4px solid var(--muted); border-right: 1.4px solid var(--muted); transform: rotate(45deg); }
+    .primary .signal-line { height: 3px; background: linear-gradient(90deg, var(--signal), #f6a36e); }
+    .primary .signal-line::after { border-color: var(--signal-deep); }
+    .signal-pulse {
+      position: absolute;
+      left: -4px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: var(--signal);
+      box-shadow: 0 0 0 5px rgba(243, 95, 69, .13);
+      animation: signalMove 2.4s cubic-bezier(.4, 0, .2, 1) infinite;
+    }
+    .signal-line:nth-of-type(2) .signal-pulse { animation-delay: 1.1s; }
+    @keyframes signalMove { 0% { left: -3px; opacity: 0; } 15% { opacity: 1; } 78% { opacity: 1; } 100% { left: calc(100% - 4px); opacity: 0; } }
+    .route-foot {
+      position: relative;
+      z-index: 2;
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 21px;
+      border-top: 1px solid var(--line-soft);
+      color: var(--muted);
+      font-size: 8px;
+    }
+    .route-summary { display: flex; flex-wrap: wrap; gap: 14px; }
+    .route-summary span { display: inline-flex; align-items: center; gap: 6px; }
+    .route-summary i { width: 5px; height: 5px; border-radius: 50%; background: var(--healthy); }
+    .route-note { font-style: normal; }
+
+    .section { padding: clamp(84px, 10vw, 142px) 0; }
+    .section-label { margin: 0 0 15px; color: var(--signal-deep); font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .section-heading { max-width: 880px; margin: 0; font: 500 clamp(38px, 4.5vw, 66px)/1.02 var(--display); letter-spacing: -.045em; }
+    .section-lead { max-width: 760px; margin: 22px 0 0; color: var(--muted); font-size: 16px; line-height: 1.75; }
+
+    .proof-section { padding: 0 0 46px; }
+    .proof-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-block: 1px solid var(--line);
+    }
+    .proof-item { min-height: 120px; padding: 25px 22px; border-right: 1px solid var(--line); }
+    .proof-item:last-child { border-right: 0; }
+    .proof-item small { display: block; color: var(--muted); font-size: 8px; letter-spacing: .12em; }
+    .proof-item strong { display: block; margin-top: 8px; font: 500 27px/1 var(--display); }
+    .proof-item p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+
+    .product-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .55fr); gap: 38px; align-items: center; margin-top: 54px; }
+    .console-frame {
+      position: relative;
+      padding: 10px;
+      border: 1px solid rgba(32, 36, 33, .22);
+      border-radius: 25px;
+      background: rgba(255, 253, 248, .64);
+      box-shadow: var(--shadow);
+    }
+    .browser-bar { height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+    .browser-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+    .browser-bar i:first-child { background: var(--signal); }
+    .browser-bar span { margin-left: 7px; color: var(--faint); font: 600 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .browser-bar .browser-language { margin-left: auto; }
+    .console-frame img { display: block; width: 100%; border: 1px solid var(--line-soft); border-radius: 16px; }
+    .product-notes { display: grid; gap: 13px; }
+    .product-note { padding: 17px 18px; border: 1px solid var(--line-soft); border-radius: 16px; background: rgba(255, 253, 248, .55); }
+    .product-note b { display: block; font: 500 18px/1.1 var(--display); }
+    .product-note p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .mobile-proof { width: 172px; margin: 12px auto 0; padding: 7px; border: 1px solid var(--line); border-radius: 25px; background: var(--surface); transform: rotate(1.8deg); box-shadow: 0 18px 40px rgba(66, 52, 37, .10); }
+    .mobile-proof img { display: block; border-radius: 19px; }
+
+    .how-section { position: relative; border-block: 1px solid var(--line-soft); background: rgba(255, 253, 248, .42); }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 52px; border: 1px solid var(--line); border-radius: 23px; background: var(--line); overflow: hidden; }
+    .step { min-height: 286px; padding: 28px; background: var(--surface); }
+    .step-index { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; color: var(--signal-deep); font: 500 15px/1 var(--display); }
+    .step h3 { margin: 44px 0 0; font: 500 26px/1.05 var(--display); }
+    .step p { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.75; }
+    .step-code { display: block; margin-top: 20px; color: var(--ink-soft); font: 600 9px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .deploy-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(320px, .62fr) minmax(480px, 1.38fr);
+      gap: 54px;
+      padding: clamp(32px, 5vw, 66px);
+      border-radius: 30px;
+      color: var(--surface);
+      background: var(--ink);
+      box-shadow: 0 34px 86px rgba(32, 36, 33, .18);
+      overflow: hidden;
+    }
+    .deploy-card::after { content: ""; position: absolute; right: -90px; bottom: -160px; width: 420px; height: 420px; border: 1px solid rgba(243, 95, 69, .24); border-radius: 50%; box-shadow: inset 0 0 0 70px rgba(243, 95, 69, .03), inset 0 0 0 140px rgba(243, 95, 69, .02); }
+    .deploy-copy, .terminal { position: relative; z-index: 2; }
+    .deploy-copy .section-label { color: #f7a087; }
+    .deploy-copy h2 { margin: 0; font: 500 clamp(38px, 4vw, 58px)/1 var(--display); letter-spacing: -.045em; }
+    .deploy-copy p { margin: 20px 0 0; color: rgba(255, 253, 248, .64); font-size: 13px; line-height: 1.75; }
+    .deploy-link { display: inline-flex; margin-top: 26px; color: #f7a087; font-size: 11px; font-weight: 750; text-underline-offset: 4px; }
+    .terminal { border: 1px solid rgba(255, 255, 255, .14); border-radius: 18px; background: #151815; overflow: hidden; }
+    .terminal-head { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 15px; border-bottom: 1px solid rgba(255, 255, 255, .10); }
+    .terminal-head span { color: rgba(255, 255, 255, .45); font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .terminal-head button { min-height: 30px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, .13); border-radius: 8px; color: rgba(255, 255, 255, .78); background: rgba(255, 255, 255, .05); font-size: 8px; cursor: pointer; }
+    .terminal pre { margin: 0; padding: 24px; overflow-x: auto; color: #e9e5db; font: 600 11px/1.9 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .terminal .prompt { color: #f7a087; }
+    .terminal .comment { color: #6c877b; }
+
+    .boundary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 24px; border: 1px solid rgba(169, 111, 32, .25); border-radius: 20px; background: #f6ead7; }
+    .boundary-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(169, 111, 32, .40); border-radius: 50%; color: var(--warning); font: 500 20px/1 var(--display); }
+    .boundary strong { display: block; font-size: 12px; }
+    .boundary p { margin: 6px 0 0; color: #755e3e; font-size: 11px; line-height: 1.6; }
+    .boundary a { min-height: 40px; display: inline-flex; align-items: center; padding: 0 13px; border: 1px solid rgba(169, 111, 32, .28); border-radius: 999px; color: #755016; font-size: 9px; font-weight: 750; text-decoration: none; }
+
+    .site-footer { padding: 36px 0 48px; border-top: 1px solid var(--line); }
+    .footer-grid { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 30px; }
+    .footer-brand { display: flex; align-items: center; gap: 12px; }
+    .footer-brand img { width: 34px; height: 34px; }
+    .footer-brand strong { display: block; font: 500 18px/1 var(--display); }
+    .footer-brand span { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 18px; }
+    .footer-links a { color: var(--muted); font-size: 10px; text-underline-offset: 4px; }
+
+    @media (max-width: 1180px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 50px; }
+      .hero-copy { max-width: 760px; }
+      .route-figure { max-width: 880px; }
+      .hero { min-height: auto; }
+      .product-grid { grid-template-columns: 1fr; }
+      .product-notes { grid-template-columns: repeat(3, 1fr); }
+      .mobile-proof { display: none; }
+    }
+
+    @media (max-width: 820px) {
+      .shell { width: min(100% - 28px, var(--max)); }
+      .header-inner { height: 64px; grid-template-columns: 1fr auto; }
+      .nav { display: none; }
+      .brand-copy small { display: none; }
+      .round-action.github-action span:last-child { display: none; }
+      .round-action.github-action { width: 42px; padding: 0; }
+      .hero { min-height: auto; padding-top: 38px; }
+      h1 { font-size: clamp(48px, 14vw, 70px); }
+      .hero-lead { font-size: 15px; }
+      .hero-actions .button { flex: 1 1 auto; }
+      .quick-command { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .route-figure { border-radius: 22px; }
+      .route-stack { padding: 12px; }
+      .route-row { grid-template-columns: 1fr; min-height: 0; }
+      .route-endpoint { min-height: 72px; }
+      .source-endpoint { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+      .output-endpoint { border-left: 0; border-top: 1px solid var(--line-soft); }
+      .route-core { min-height: 66px; padding: 0 14px; grid-template-columns: auto minmax(28px, 1fr) auto minmax(28px, 1fr) auto; }
+      .route-foot { align-items: flex-start; flex-direction: column; padding-block: 14px; }
+      .proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .proof-item:nth-child(2) { border-right: 0; }
+      .proof-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .product-notes { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .step { min-height: 220px; }
+      .step h3 { margin-top: 30px; }
+      .deploy-card { grid-template-columns: 1fr; gap: 34px; }
+      .boundary { grid-template-columns: auto 1fr; }
+      .boundary a { grid-column: 1 / -1; width: fit-content; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .footer-links { justify-content: flex-start; }
+    }
+
+    @media (max-width: 460px) {
+      .header-actions { gap: 5px; }
+      .round-action { min-height: 38px; }
+      .hero-grid { gap: 38px; }
+      .eyebrow { font-size: 8px; }
+      h1 { font-size: 48px; }
+      .signal-word::after { height: 5px; }
+      .value-pills { gap: 6px; }
+      .value-pill { font-size: 9px; }
+      .quick-command { padding-left: 11px; }
+      .quick-command code { font-size: 9px; }
+      .route-head { padding-inline: 15px; }
+      .route-head-copy strong { font-size: 15px; }
+      .route-core { gap: 5px; padding-inline: 7px; }
+      .fabric-stamp { font-size: 7px; padding-inline: 5px; }
+      .protocol-chip, .route-state { font-size: 6px; padding-inline: 5px; }
+      .proof-item { min-height: 132px; padding-inline: 15px; }
+      .proof-item strong { font-size: 22px; }
+      .section { padding-block: 82px; }
+      .section-heading { font-size: 39px; }
+      .deploy-card { padding: 26px 18px; border-radius: 22px; }
+      .terminal pre { padding: 18px 14px; font-size: 9px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+      .signal-pulse { display: none; }
+      .route-row { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="#top" aria-label="CastFabric home">
+        <img src="../assets/castfabric-mark.svg" alt="">
+        <span class="brand-copy"><strong>CastFabric</strong><small>LOCAL AUDIO FABRIC</small></span>
+      </a>
+      <nav class="nav" aria-label="Primary navigation">
+        <a href="#capabilities" data-copy="navCapabilities">核心能力</a>
+        <a href="#how" data-copy="navHow">工作原理</a>
+        <a href="#deploy" data-copy="navDeploy">快速部署</a>
+      </nav>
+      <div class="header-actions">
+        <button class="round-action language-button" id="languageButton" type="button" aria-label="Switch to English">EN</button>
+        <a class="round-action github-action" href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer"><i class="github-dot"></i><span>GitHub</span><span data-copy="viewSource">查看源码</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow" data-copy="eyebrow">为家庭服务器而生的本地音频投放层</p>
+          <h1><span data-copy="heroLineOne">不挑协议，</span><br><span class="signal-word" data-copy="heroLineTwo">投了就播。</span></h1>
+          <p class="hero-lead" data-copy="heroLead">把 DLNA、AirPlay 与妙播编织成一条本地声音路径。无需云端账号，也无需更换家中支持 DLNA 的音响。</p>
+          <div class="value-pills" aria-label="Product traits">
+            <span class="value-pill"><i></i><span data-copy="pillLocal">完全运行在局域网</span></span>
+            <span class="value-pill"><i></i><span data-copy="pillAccount">标准声路无需账号</span></span>
+            <span class="value-pill"><i></i><span data-copy="pillDocker">Docker 快速部署</span></span>
+          </div>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#deploy"><span data-copy="primaryCta">Docker 快速部署</span><span class="button-arrow">↘</span></a>
+            <a class="button button-secondary" href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer"><span data-copy="secondaryCta">在 GitHub 查看</span><span>↗</span></a>
+          </div>
+          <div class="quick-command" aria-label="Quick Docker command">
+            <i class="terminal-dot"></i>
+            <code>docker compose up -d</code>
+            <button class="copy-button" type="button" data-copy-command="docker compose up -d"><span data-copy="copy">复制</span></button>
+          </div>
+        </div>
+
+        <figure class="route-figure" aria-labelledby="routeTitle">
+          <div class="route-head">
+            <div class="route-head-copy"><small data-copy="routeEyebrow">ROUTE PREVIEW · 协议路径示意</small><strong id="routeTitle" data-copy="routeTitle">每台音响，都有自己的接收入口</strong></div>
+            <span class="local-badge"><i></i><span data-copy="localOnly">LOCAL ONLY</span></span>
+          </div>
+          <div class="route-stack">
+            <article class="route-row primary">
+              <div class="route-endpoint source-endpoint"><i class="device-icon phone"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong data-copy="androidPhone">Android 手机</strong><span data-copy="usualApp">来自常用音乐 App</span></span></div>
+              <div class="route-core"><span class="protocol-chip">MiPlay</span><i class="signal-line"><i class="signal-pulse"></i></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"><i class="signal-pulse"></i></i><span class="route-state" data-copy="ready">就绪</span></div>
+              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="livingSpeaker">客厅音响</strong><span>DLNA MediaRenderer</span></span></div>
+            </article>
+            <article class="route-row">
+              <div class="route-endpoint source-endpoint"><i class="device-icon computer"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong>iPhone / Mac</strong><span data-copy="systemOutput">系统音频输出</span></span></div>
+              <div class="route-core"><span class="protocol-chip">AirPlay</span><i class="signal-line"></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"></i><span class="route-state" data-copy="ready">就绪</span></div>
+              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="bedroomSpeaker">卧室音响</strong><span>DLNA MediaRenderer</span></span></div>
+            </article>
+            <article class="route-row">
+              <div class="route-endpoint source-endpoint"><i class="device-icon app"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong data-copy="dlnaController">DLNA 控制端</strong><span data-copy="mediaUrl">原始媒体地址</span></span></div>
+              <div class="route-core"><span class="protocol-chip">DLNA</span><i class="signal-line"></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"></i><span class="route-state" data-copy="direct">直通</span></div>
+              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="studySpeaker">书房音响</strong><span>DLNA MediaRenderer</span></span></div>
+            </article>
+          </div>
+          <figcaption class="route-foot">
+            <span class="route-summary"><span><i></i><span data-copy="threeProtocols">3 种接收协议</span></span><span><i></i><span data-copy="independentSuites">每台音响独立启停</span></span><span><i></i><span data-copy="verifiedOutput">实体拉流可验证</span></span></span>
+            <em class="route-note" data-copy="previewNote">示意图，不读取你的设备</em>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="proof-section" id="capabilities">
+      <div class="shell proof-grid">
+        <article class="proof-item"><small data-copy="proofIngress">RECEIVER INPUTS</small><strong>DLNA · AirPlay · MiPlay</strong><p data-copy="proofIngressText">继续使用手机和电脑里熟悉的投放入口。</p></article>
+        <article class="proof-item"><small data-copy="proofModel">OUTPUT MODEL</small><strong data-copy="perSpeaker">每音响一套入口</strong><p data-copy="proofModelText">不是全局单选；多台音响彼此独立。</p></article>
+        <article class="proof-item"><small data-copy="proofCloud">CLOUD DEPENDENCY</small><strong data-copy="noAccount">无需厂商账号</strong><p data-copy="proofCloudText">标准 DLNA 发现、控制与播放完全本地化。</p></article>
+        <article class="proof-item"><small>CONTAINER IMAGES</small><strong>amd64 · arm64</strong><p data-copy="proofContainerText">适配常见 NAS、迷你主机与树莓派环境。</p></article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="consoleTitle">
+      <div class="shell">
+        <p class="section-label" data-copy="productProof">PRODUCT PROOF · 真实产品</p>
+        <h2 class="section-heading" id="consoleTitle" data-copy="consoleTitle">声音路径看得见，<br>系统状态也说得清。</h2>
+        <p class="section-lead" data-copy="consoleLead">控制台只展示能被系统确认的事实：哪些音响可投、当前协议、最终输出和失败原因。配置与诊断留在二级页面，不打扰日常使用。</p>
+        <div class="product-grid">
+          <div class="console-frame">
+            <div class="browser-bar"><i></i><i></i><i></i><span>192.168.1.10:8300</span><span class="browser-language" data-copy="screenshotLanguage">截图为中文界面 · 控制台支持 English</span></div>
+            <img src="../assets/console-overview.png" alt="CastFabric console overview" loading="lazy">
+          </div>
+          <div class="product-notes">
+            <article class="product-note"><b data-copy="noteOverview">一眼看懂全屋声路</b><p data-copy="noteOverviewText">最多展开三条活跃路径，其余聚合，不让音响数量破坏首页。</p></article>
+            <article class="product-note"><b data-copy="noteManage">每台音响独立管理</b><p data-copy="noteManageText">启停只影响当前音响的 Receiver Suite，不存在全局默认输出。</p></article>
+            <article class="product-note"><b data-copy="noteTruth">成功必须真的拉到声音</b><p data-copy="noteTruthText">实体音响没有拉取 HTTP 音频时，不把控制命令成功冒充播放成功。</p></article>
+            <div class="mobile-proof"><img src="../assets/console-mobile.png" alt="CastFabric mobile console" loading="lazy"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section how-section" id="how" aria-labelledby="howTitle">
+      <div class="shell">
+        <p class="section-label" data-copy="howEyebrow">HOW IT WORKS · 三步接通</p>
+        <h2 class="section-heading" id="howTitle" data-copy="howTitle">协议很复杂，<br>使用不应该复杂。</h2>
+        <div class="steps">
+          <article class="step"><span class="step-index">01</span><h3 data-copy="stepDiscover">发现局域网音响</h3><p data-copy="stepDiscoverText">扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。</p><code class="step-code">SSDP → device description → services</code></article>
+          <article class="step"><span class="step-index">02</span><h3 data-copy="stepPublish">发布独立接收入口</h3><p data-copy="stepPublishText">每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。</p><code class="step-code">Receiver Suite × output speaker</code></article>
+          <article class="step"><span class="step-index">03</span><h3 data-copy="stepVerify">把声音送到实体输出</h3><p data-copy="stepVerifyText">CastFabric 不止发送控制命令，还确认实体 DMR 真正打开并拉取音频流。</p><code class="step-code">SOAP Play → HTTP GET → verified output</code></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="deploy" aria-labelledby="deployTitle">
+      <div class="shell deploy-card">
+        <div class="deploy-copy">
+          <p class="section-label" data-copy="deployEyebrow">SELF-HOST IN MINUTES</p>
+          <h2 id="deployTitle" data-copy="deployTitle">让 Home Server<br>接住家里的声音。</h2>
+          <p data-copy="deployLead">推荐 Linux host network，以便 SSDP 和 mDNS 在局域网正常工作。配置保存在本地目录，更新容器不会删除音响设置。</p>
+          <a class="deploy-link" href="https://github.com/wangerzi/CastFabric#docker-%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2" target="_blank" rel="noreferrer" data-copy="fullGuide">查看完整部署与网络说明 ↗</a>
+        </div>
+        <div class="terminal">
+          <div class="terminal-head"><span>HOME-SERVER / CASTFABRIC</span><button type="button" data-copy-command="git clone https://github.com/wangerzi/CastFabric.git&#10;cd CastFabric&#10;docker compose pull&#10;docker compose up -d"><span data-copy="copyAll">复制全部</span></button></div>
+          <pre><span class="comment"># 1 · clone</span>
+<span class="prompt">$</span> git clone https://github.com/wangerzi/CastFabric.git
+<span class="prompt">$</span> cd CastFabric
+
+<span class="comment"># 2 · pull &amp; start</span>
+<span class="prompt">$</span> docker compose pull
+<span class="prompt">$</span> docker compose up -d
+
+<span class="comment"># 3 · open the console</span>
+<span class="prompt">→</span> http://HOME_SERVER_IP:8300</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="boundaryTitle">
+      <div class="shell boundary">
+        <span class="boundary-icon">i</span>
+        <div><strong id="boundaryTitle" data-copy="boundaryTitle">关于实时桥接延迟，我们选择说清楚。</strong><p data-copy="boundaryText">原生 DLNA 是最低延迟路径；AirPlay 与妙播经实时 PCM / DLNA 桥接时，在当前测试音箱约有 4 秒听感延迟，不承诺视频口型同步。</p></div>
+        <a href="https://github.com/wangerzi/CastFabric/blob/main/docs/architecture/live-bridge-latency.md" target="_blank" rel="noreferrer" data-copy="readEvidence">查看测试证据 ↗</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-grid">
+      <div class="footer-brand"><img src="../assets/castfabric-mark.svg" alt=""><span><strong>CastFabric</strong><span data-copy="footerCopy">开源、本地优先的家庭音频投放层 · MIT License</span></span></div>
+      <nav class="footer-links" aria-label="Footer navigation"><a href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/wangerzi/CastFabric/releases" target="_blank" rel="noreferrer">Releases</a><a href="https://github.com/wangerzi/CastFabric/blob/main/README.en.md" target="_blank" rel="noreferrer">English README</a><a href="#top" data-copy="backTop">回到顶部 ↑</a></nav>
+    </div>
+  </footer>
+
+  <script>
+    const copy = {
+      navCapabilities: ['核心能力', 'Capabilities'], navHow: ['工作原理', 'How it works'], navDeploy: ['快速部署', 'Deploy'], viewSource: ['查看源码', 'View source'],
+      eyebrow: ['为家庭服务器而生的本地音频投放层', 'A LOCAL AUDIO FABRIC FOR YOUR HOME SERVER'], heroLineOne: ['不挑协议，', 'Cast freely.'], heroLineTwo: ['投了就播。', 'It just plays.'], heroLead: ['把 DLNA、AirPlay 与妙播编织成一条本地声音路径。无需云端账号，也无需更换家中支持 DLNA 的音响。', 'Weave DLNA, AirPlay and MiPlay into one local path. No cloud account, and no need to replace the DLNA speakers you already own.'],
+      pillLocal: ['完全运行在局域网', 'Runs entirely on your LAN'], pillAccount: ['标准声路无需账号', 'No account on the standard path'], pillDocker: ['Docker 快速部署', 'Docker-first deployment'], primaryCta: ['Docker 快速部署', 'Deploy with Docker'], secondaryCta: ['在 GitHub 查看', 'View on GitHub'], copy: ['复制', 'Copy'], copied: ['已复制', 'Copied'], copyFailed: ['请手动复制', 'Select and copy'],
+      routeEyebrow: ['ROUTE PREVIEW · 协议路径示意', 'ROUTE PREVIEW · NOT LIVE DATA'], routeTitle: ['每台音响，都有自己的接收入口', 'Every speaker gets its own receiver suite'], localOnly: ['仅限本地', 'LOCAL ONLY'], sourceLabel: ['发送设备', 'SOURCE'], outputLabel: ['输出音响', 'OUTPUT'], androidPhone: ['Android 手机', 'Android phone'], usualApp: ['来自常用音乐 App', 'From your usual music app'], systemOutput: ['系统音频输出', 'System audio output'], dlnaController: ['DLNA 控制端', 'DLNA controller'], mediaUrl: ['原始媒体地址', 'Original media URL'], livingSpeaker: ['客厅音响', 'Living room'], bedroomSpeaker: ['卧室音响', 'Bedroom'], studySpeaker: ['书房音响', 'Study'], ready: ['就绪', 'READY'], direct: ['直通', 'DIRECT'], threeProtocols: ['3 种接收协议', '3 receiver protocols'], independentSuites: ['每台音响独立启停', 'Independent per speaker'], verifiedOutput: ['实体拉流可验证', 'Verified physical pull'], previewNote: ['示意图，不读取你的设备', 'Illustration only — no device data'],
+      proofIngress: ['RECEIVER INPUTS', 'RECEIVER INPUTS'], proofIngressText: ['继续使用手机和电脑里熟悉的投放入口。', 'Keep the casting controls already built into your phone and computer.'], proofModel: ['OUTPUT MODEL', 'OUTPUT MODEL'], perSpeaker: ['每音响一套入口', 'One suite per speaker'], proofModelText: ['不是全局单选；多台音响彼此独立。', 'No global selection. Every speaker stays independent.'], proofCloud: ['CLOUD DEPENDENCY', 'CLOUD DEPENDENCY'], noAccount: ['无需厂商账号', 'No vendor account'], proofCloudText: ['标准 DLNA 发现、控制与播放完全本地化。', 'Standard discovery, control and playback remain local.'], proofContainerText: ['适配常见 NAS、迷你主机与树莓派环境。', 'Built for common NAS, mini-PC and Raspberry Pi setups.'],
+      productProof: ['PRODUCT PROOF · 真实产品', 'PRODUCT PROOF · THE REAL CONSOLE'], screenshotLanguage: ['截图为中文界面 · 控制台支持 English', 'Screenshot shown in Chinese · English UI available'], consoleTitle: ['声音路径看得见，\n系统状态也说得清。', 'See the sound path.\nUnderstand the system.'], consoleLead: ['控制台只展示能被系统确认的事实：哪些音响可投、当前协议、最终输出和失败原因。配置与诊断留在二级页面，不打扰日常使用。', 'The console shows only what CastFabric can verify: available speakers, active protocol, physical output and typed failures. Configuration and diagnostics stay one level down.'], noteOverview: ['一眼看懂全屋声路', 'One view of every active route'], noteOverviewText: ['最多展开三条活跃路径，其余聚合，不让音响数量破坏首页。', 'Up to three active routes stay visible while additional speakers are summarized.'], noteManage: ['每台音响独立管理', 'Manage every speaker independently'], noteManageText: ['启停只影响当前音响的 Receiver Suite，不存在全局默认输出。', 'A switch affects one receiver suite only. There is no global default output.'], noteTruth: ['成功必须真的拉到声音', 'Success requires a real audio pull'], noteTruthText: ['实体音响没有拉取 HTTP 音频时，不把控制命令成功冒充播放成功。', 'A successful control command is not reported as playback until the physical renderer pulls audio.'],
+      howEyebrow: ['HOW IT WORKS · 三步接通', 'HOW IT WORKS · THREE LOCAL STEPS'], howTitle: ['协议很复杂，\n使用不应该复杂。', 'Complex protocols.\nA simple result.'], stepDiscover: ['发现局域网音响', 'Discover LAN speakers'], stepDiscoverText: ['扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。', 'Discover standard UPnP/DLNA MediaRenderers without signing in to Xiaomi or another vendor.'], stepPublish: ['发布独立接收入口', 'Publish independent receivers'], stepPublishText: ['每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。', 'Every enabled speaker gets its own DLNA, AirPlay and MiPlay identity, so multiple rooms can coexist.'], stepVerify: ['把声音送到实体输出', 'Verify the physical output'], stepVerifyText: ['CastFabric 不止发送控制命令，还确认实体 DMR 真正打开并拉取音频流。', 'CastFabric goes beyond control acknowledgements and confirms that the physical DMR opens the audio stream.'],
+      deployEyebrow: ['几分钟完成自托管', 'SELF-HOST IN MINUTES'], deployTitle: ['让 Home Server\n接住家里的声音。', 'Let your Home Server\ncarry the sound.'], deployLead: ['推荐 Linux host network，以便 SSDP 和 mDNS 在局域网正常工作。配置保存在本地目录，更新容器不会删除音响设置。', 'Linux host networking is recommended so SSDP and mDNS work across your LAN. Configuration stays in a local directory and survives container updates.'], fullGuide: ['查看完整部署与网络说明 ↗', 'Read the complete deployment guide ↗'], copyAll: ['复制全部', 'Copy all'],
+      boundaryTitle: ['关于实时桥接延迟，我们选择说清楚。', 'We are explicit about live-bridge latency.'], boundaryText: ['原生 DLNA 是最低延迟路径；AirPlay 与妙播经实时 PCM / DLNA 桥接时，在当前测试音箱约有 4 秒听感延迟，不承诺视频口型同步。', 'Native DLNA is the lowest-latency route. AirPlay and MiPlay live bridging has about four seconds of audible delay on the current test speaker and does not promise video lip sync.'], readEvidence: ['查看测试证据 ↗', 'Read the evidence ↗'], footerCopy: ['开源、本地优先的家庭音频投放层 · MIT License', 'Open-source, local-first home audio casting · MIT License'], backTop: ['回到顶部 ↑', 'Back to top ↑']
+    };
+
+    const storageKey = 'castfabric-landing-language-v1';
+    const languageButton = document.getElementById('languageButton');
+    let language = localStorage.getItem(storageKey) === 'en' ? 'en' : 'zh';
+
+    function applyLanguage(next) {
+      language = next;
+      const index = language === 'zh' ? 0 : 1;
+      document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+      document.querySelectorAll('[data-copy]').forEach(node => {
+        const value = copy[node.dataset.copy]?.[index];
+        if (value !== undefined) node.innerText = value;
+      });
+      languageButton.textContent = language === 'zh' ? 'EN' : 'ZH';
+      languageButton.setAttribute('aria-label', language === 'zh' ? 'Switch to English' : '切换到中文');
+      document.title = language === 'zh' ? 'CastFabric · 不挑协议，投了就播' : 'CastFabric · Cast freely. It just plays.';
+      localStorage.setItem(storageKey, language);
+    }
+
+    languageButton.addEventListener('click', () => applyLanguage(language === 'zh' ? 'en' : 'zh'));
+
+    async function writeClipboard(value) {
+      if (navigator.clipboard?.writeText) {
+        try { await navigator.clipboard.writeText(value); return true; } catch (_) {}
+      }
+      const area = document.createElement('textarea');
+      area.value = value;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const success = document.execCommand('copy');
+      area.remove();
+      return success;
+    }
+
+    document.querySelectorAll('[data-copy-command]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const success = await writeClipboard(button.dataset.copyCommand);
+        const label = button.querySelector('[data-copy]') || button;
+        label.textContent = copy[success ? 'copied' : 'copyFailed'][language === 'zh' ? 0 : 1];
+        button.dataset.state = success ? 'copied' : 'failed';
+        window.setTimeout(() => {
+          label.textContent = copy[button.querySelector('[data-copy="copyAll"]') ? 'copyAll' : 'copy'][language === 'zh' ? 0 : 1];
+          button.dataset.state = '';
+        }, 1800);
+      });
+    });
+
+    applyLanguage(language);
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@
 | [`castfabric-home-v4.html`](castfabric-home-v4.html) | Superseded v4 / 主题参考 | 暖色主题有效，但单会话大卡、中央 CF 节点与固定高度无法支持多端点和常见桌面视口。 |
 | [`castfabric-home-v5.html`](castfabric-home-v5.html) | Review v5 / 仅首页 | 固定三轨交换台；多发送端、多音响保持等重，1280×720 起桌面无滚动，移动端转为纵向会话卡。 |
 | [`castfabric-console-v6.html`](castfabric-console-v6.html) | Review v6 / 完整产品原型 | 保留已批准首页，补齐音响管理、详情编辑、结构化活动、事件详情和分区连接配置；所有动态字段通过机器数据契约检查。 |
+| [`castfabric-landing-v1.html`](castfabric-landing-v1.html) | Review v1 / GitHub Pages | 面向家庭服务器与自托管用户的 Warm Signal Editorial 官网原型；与生产控制台和 API 完全隔离。 |
 
 当前评审以 v6 为唯一完整原型。新增字段或动作必须先登记到
 [控制台字段契约](../design/contracts/castfabric-console-fields.json)，并通过
