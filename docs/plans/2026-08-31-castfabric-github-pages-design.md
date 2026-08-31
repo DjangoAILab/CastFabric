@@ -2,8 +2,8 @@
 
 ## 状态
 
-视觉方向已确认，进入独立原型评审。本文授权修改 `docs/prototypes/` 中的静态原型，不授权
-启用 GitHub Pages、修改生产控制台或发布官网。
+视觉方向与能力矩阵已确认，授权把已验收原型发布为首版 GitHub Pages。生产控制台和
+运行时不在本次发布范围内。
 
 ## 目标
 
@@ -133,10 +133,10 @@ shadow          warm, low-contrast, never neon
 
 ## 正式实现边界
 
-用户接受原型后才进入正式实现。届时：
+正式实现：
 
-- 建立独立静态站点源目录和官方 GitHub Pages Actions；
-- 生成与品牌一致的 Open Graph 图；
-- 替换根目录旧 MiAir `preview.png`；
-- 更新已过期的 P5 路线状态；
-- 构建、链接检查、Lighthouse/可访问性检查通过后再启用 Pages。
+- 首版直接以已验收原型为页面源，通过 `scripts/build_pages.sh` 生成无本地路径的静态产物；
+- 使用官方 GitHub Pages Actions 发布，不维护 `gh-pages` 分支；
+- 使用真实控制台截图作为首版 Open Graph 预览图；专用社交分享图留给后续视觉迭代；
+- 本轮不替换根目录旧 MiAir `preview.png`，避免把官网发布和 README 素材更新混为一批；
+- 本地构建、链接、双语、桌面/移动和 Reduced Motion 检查通过后启用 Pages。
