@@ -9,8 +9,9 @@
 
 为家庭服务器和自托管用户建立一个中英文开源项目官网。访客应在十秒内理解：
 
-1. CastFabric 把 DLNA、AirPlay 和妙播统一送到局域网 DLNA 音响；
-2. 它运行在用户自己的 Home Server，不依赖云端或小米账号；
+1. CastFabric 接收 DLNA、AirPlay 和妙播，并输出到标准 DLNA MediaRenderer；
+2. 核心链路运行在用户自己的 Home Server，不依赖云端或小米账号；旧小米音箱另有
+   默认关闭、需要账号的 MiNA 兼容输出；
 3. 每台音响拥有独立接收入口，多台音响可以同时存在；
 4. 最快的开始方式是 Docker；完整代码、Release 和架构在 GitHub。
 
@@ -23,7 +24,8 @@
 慢的叙事节奏。视觉记忆点不是 `CF` 标志或音频频谱，而是一个清晰的本地声路交换台：
 
 ```text
-手机 / 电脑 → DLNA · AirPlay · MiPlay → CastFabric → 多台音响
+手机 / 电脑 → DLNA · AirPlay · MiPlay → CastFabric → 标准 DLNA 音响
+                                                   └→ 可选 Xiaomi MiNA 兼容输出
 ```
 
 交换台内输入、协议和输出保持视觉平衡。CastFabric 只是路径中的路由层，不使用高权重
@@ -42,14 +44,16 @@
 
 ### 2. Hero
 
-左侧：slogan、定位说明、本地/无账号/Docker 三个短标签、主次 CTA 和可复制命令。  
-右侧：静态标注为“协议路径示意”的三轨交换台，展示多发送端与多音响，不冒充用户家中的
-实时状态。首屏底部露出下一段标题，提示页面可以继续滚动。
+左侧：slogan、定位说明、局域网/每音响独立/双架构三个短标签、主次 CTA 和公开 GHCR
+镜像入口。
+右侧：能力矩阵明确分开“发送设备与接收协议”“每音响独立 Receiver Suite”“当前输出
+协议与设备”。标准 DLNA 是本地核心输出；Xiaomi MiNA 是已实现但默认关闭、需要账号的
+旧 MiAir 兼容输出。未来能力只标注 `PlaybackTarget` 扩展边界，不列出未实现协议。
 
 ### 3. Proof strip
 
-四项可验证事实：三种接收协议、每音响独立 Receiver Suite、无需厂商账号、amd64/arm64
-容器。数字和状态只使用仓库可以证明的事实。
+四项可验证事实：三种已实现接收协议、标准 DLNA 核心输出、Xiaomi MiNA 可选输出、
+`PlaybackTarget` 扩展边界。数字和状态只使用仓库可以证明的事实。
 
 ### 4. Product proof
 
@@ -63,13 +67,14 @@
 
 ### 6. Docker deployment
 
-展示 clone、compose pull/up、打开 `:8300` 三步；命令支持复制，失败时保留可手工选择的
-纯文本。链接到 README 的完整网络和多网卡说明。
+展示可直接执行的 Linux `docker run`，从公开 GHCR 拉取 amd64/arm64 镜像，使用 host
+network 并把配置绑定到宿主机目录。命令支持复制，链接到 README 的 Compose、多网卡和
+完整网络说明。Hero 不再展示缺少 Compose 文件前提的 `docker compose up -d`。
 
 ### 7. Honest boundary
 
-简短说明原生 DLNA 是最低延迟路径，AirPlay/MiPlay 实时桥接在当前测试音箱约四秒，不
-承诺视频口型同步。链接到完整延迟证据，而不是隐藏限制。
+标题直接写“两条声路，两种延迟”。原生 DLNA 在当前测试音箱通常低于一秒；AirPlay /
+MiPlay 实时桥接约四秒，不适合要求音画同步的视频。链接到完整延迟证据。
 
 ### 8. Open-source footer
 
@@ -118,8 +123,8 @@ shadow          warm, low-contrast, never neon
 
 必须验证：
 
-1. 1440×900 Hero 无横向溢出，主 CTA、命令和完整声路可见；
-2. 390×844 无横向溢出，导航、命令和声路自然纵向排列；
+1. 1440×900 Hero 无横向溢出，主 CTA、GHCR 和完整能力矩阵可见；
+2. 390×844 无横向溢出，导航和能力矩阵自然纵向排列；
 3. 中英文模式没有混合可见文案；
 4. 复制按钮成功、失败降级与键盘路径可用；
 5. Reduced Motion 下不存在循环动画；

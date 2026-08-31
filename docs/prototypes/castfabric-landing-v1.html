@@ -225,7 +225,7 @@
     .button-primary { color: var(--surface); background: var(--ink); box-shadow: 0 12px 28px rgba(32, 36, 33, .16); }
     .button-secondary { border-color: var(--line); background: rgba(255, 253, 248, .64); }
     .button-arrow { color: var(--signal); font-size: 16px; }
-    .quick-command {
+    .registry-note {
       width: min(100%, 540px);
       min-height: 52px;
       display: grid;
@@ -238,9 +238,13 @@
       border-radius: 15px;
       background: rgba(255, 253, 248, .82);
       box-shadow: 0 12px 34px rgba(65, 54, 40, .06);
+      text-decoration: none;
     }
     .terminal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 4px var(--signal-soft); }
-    .quick-command code { overflow: hidden; color: var(--ink-soft); font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .registry-copy { min-width: 0; }
+    .registry-copy small { display: block; color: var(--faint); font-size: 7px; font-weight: 750; letter-spacing: .1em; }
+    .registry-copy code { display: block; margin-top: 3px; overflow: hidden; color: var(--ink-soft); font: 600 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .registry-arch { padding: 8px 9px; border-radius: 9px; color: var(--healthy); background: var(--healthy-soft); font-size: 7px; font-weight: 800; white-space: nowrap; }
     .copy-button {
       min-width: 68px;
       min-height: 38px;
@@ -300,26 +304,67 @@
       font-weight: 750;
     }
     .local-badge i { width: 5px; height: 5px; border-radius: 50%; background: var(--healthy); }
-    .route-stack { position: relative; z-index: 2; display: grid; gap: 10px; padding: 18px; }
-    .route-row {
-      min-height: 116px;
+    .capability-map {
+      position: relative;
+      z-index: 2;
       display: grid;
-      grid-template-columns: minmax(142px, .82fr) minmax(252px, 1.55fr) minmax(150px, .9fr);
-      align-items: stretch;
-      border: 1px solid var(--line-soft);
-      border-radius: 18px;
-      background: rgba(255, 253, 248, .71);
-      opacity: 0;
-      transform: translateY(10px);
-      animation: routeIn .6s cubic-bezier(.22, .75, .24, 1) forwards;
+      grid-template-columns: minmax(210px, 1fr) 116px minmax(235px, 1.06fr);
+      align-items: center;
+      gap: 16px;
+      padding: 18px;
     }
-    .route-row:nth-child(2) { animation-delay: .12s; }
-    .route-row:nth-child(3) { animation-delay: .24s; }
-    .route-row.primary { border-color: rgba(243, 95, 69, .30); background: linear-gradient(90deg, rgba(253, 227, 217, .48), rgba(255, 253, 248, .78) 52%, rgba(223, 237, 231, .38)); }
-    @keyframes routeIn { to { opacity: 1; transform: translateY(0); } }
-    .route-endpoint { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 13px; }
-    .source-endpoint { border-right: 1px solid var(--line-soft); }
-    .output-endpoint { border-left: 1px solid var(--line-soft); }
+    .map-column { min-width: 0; }
+    .map-kicker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 9px;
+      color: var(--muted);
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: .12em;
+    }
+    .implemented-label { color: var(--healthy); letter-spacing: 0; }
+    .source-list, .output-list { position: relative; display: grid; gap: 8px; }
+    .source-list::before, .output-list::before {
+      content: "";
+      position: absolute;
+      top: 34px;
+      bottom: 34px;
+      width: 1px;
+      background: rgba(243, 95, 69, .55);
+    }
+    .source-list::before { right: -9px; }
+    .output-list::before { left: -9px; }
+    .source-capability {
+      position: relative;
+      min-height: 68px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 14px;
+      background: rgba(255, 253, 248, .76);
+      opacity: 0;
+      transform: translateX(-8px);
+      animation: sourceIn .52s cubic-bezier(.22, .75, .24, 1) forwards;
+    }
+    .source-capability::after, .output-card::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 9px;
+      height: 1px;
+      background: rgba(243, 95, 69, .55);
+    }
+    .source-capability::after { right: -9px; }
+    .output-card::before { left: -9px; }
+    .source-capability:nth-child(2) { animation-delay: .10s; }
+    .source-capability:nth-child(3) { animation-delay: .20s; }
+    @keyframes sourceIn { to { opacity: 1; transform: translateX(0); } }
     .device-icon {
       position: relative;
       width: 34px;
@@ -336,68 +381,87 @@
     .device-icon.app::before { content: ""; position: absolute; inset: 7px; border: 1.3px solid var(--ink); border-radius: 7px; box-shadow: inset 0 0 0 4px var(--surface); background: var(--signal); }
     .device-icon.speaker::before { content: ""; position: absolute; inset: 5px 9px; border: 1.3px solid var(--ink); border-radius: 7px; }
     .device-icon.speaker::after { content: ""; position: absolute; left: 14px; top: 10px; width: 6px; height: 6px; border: 1px solid var(--ink); border-radius: 50%; box-shadow: 0 10px 0 -1px var(--signal); }
-    .endpoint-copy { min-width: 0; }
-    .endpoint-copy small { display: block; color: var(--muted); font-size: 7px; letter-spacing: .11em; }
-    .endpoint-copy strong { display: block; margin-top: 3px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-    .endpoint-copy span { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-    .route-core {
-      min-width: 0;
-      display: grid;
-      grid-template-columns: auto minmax(34px, 1fr) auto minmax(34px, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      padding: 0 10px;
-    }
-    .protocol-chip, .route-state {
+    .capability-copy { min-width: 0; }
+    .capability-copy strong { display: block; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .capability-copy span { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+    .protocol-chip {
       position: relative;
       z-index: 3;
       padding: 5px 7px;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(243, 95, 69, .24);
       border-radius: 999px;
+      color: var(--signal-deep);
       background: var(--surface);
       white-space: nowrap;
       font-size: 7px;
       font-weight: 800;
     }
-    .protocol-chip { color: var(--signal-deep); }
-    .route-state { color: var(--healthy); border-color: rgba(47, 128, 100, .24); background: var(--healthy-soft); }
-    .fabric-stamp {
+    .fabric-core {
       position: relative;
-      z-index: 3;
-      padding: 8px 7px;
-      border: 1px solid rgba(32, 36, 33, .25);
-      border-radius: 9px;
-      background: var(--ink);
+      min-height: 228px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 18px 10px;
+      border: 1px solid rgba(32, 36, 33, .18);
+      border-radius: 58px;
       color: var(--surface);
-      font: 500 8px/1 var(--display);
-      letter-spacing: .02em;
-      white-space: nowrap;
+      background: var(--ink);
+      box-shadow: 0 18px 40px rgba(32, 36, 33, .16);
     }
-    .signal-line { position: relative; height: 2px; background: var(--line); }
-    .signal-line::after { content: ""; position: absolute; right: -1px; top: -3px; width: 7px; height: 7px; border-top: 1.4px solid var(--muted); border-right: 1.4px solid var(--muted); transform: rotate(45deg); }
-    .primary .signal-line { height: 3px; background: linear-gradient(90deg, var(--signal), #f6a36e); }
-    .primary .signal-line::after { border-color: var(--signal-deep); }
-    .signal-pulse {
+    .fabric-core::before, .fabric-core::after {
+      content: "";
       position: absolute;
-      left: -4px;
       top: 50%;
+      width: 17px;
+      height: 2px;
+      background: var(--signal);
+    }
+    .fabric-core::before { left: -17px; }
+    .fabric-core::after { right: -17px; }
+    .fabric-core small { color: rgba(255, 253, 248, .55); font-size: 7px; letter-spacing: .10em; text-align: center; }
+    .fabric-core strong { font: 500 15px/1 var(--display); }
+    .fabric-core span { color: #f7a087; font-size: 7px; font-weight: 750; text-align: center; }
+    .fabric-pulse {
+      position: absolute;
+      top: 50%;
+      left: -21px;
       width: 8px;
       height: 8px;
       margin-top: -4px;
       border-radius: 50%;
       background: var(--signal);
       box-shadow: 0 0 0 5px rgba(243, 95, 69, .13);
-      animation: signalMove 2.4s cubic-bezier(.4, 0, .2, 1) infinite;
+      animation: fabricPulse 2.7s ease-in-out infinite;
     }
-    .signal-line:nth-of-type(2) .signal-pulse { animation-delay: 1.1s; }
-    @keyframes signalMove { 0% { left: -3px; opacity: 0; } 15% { opacity: 1; } 78% { opacity: 1; } 100% { left: calc(100% - 4px); opacity: 0; } }
+    @keyframes fabricPulse {
+      0%, 14% { transform: translateX(0); opacity: 0; }
+      25%, 72% { opacity: 1; }
+      86%, 100% { transform: translateX(158px); opacity: 0; }
+    }
+    .output-card {
+      position: relative;
+      min-height: 105px;
+      padding: 12px 13px;
+      border: 1px solid rgba(47, 128, 100, .22);
+      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(223, 237, 231, .72), rgba(255, 253, 248, .78));
+    }
+    .output-card.optional { border-color: rgba(169, 111, 32, .22); background: linear-gradient(135deg, rgba(246, 234, 215, .78), rgba(255, 253, 248, .78)); }
+    .output-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--healthy); font-size: 7px; font-weight: 800; letter-spacing: .08em; }
+    .output-card.optional .output-card-head { color: var(--warning); }
+    .output-card strong { display: block; margin-top: 9px; font: 500 15px/1 var(--display); }
+    .output-card p { margin: 7px 0 0; color: var(--muted); font-size: 8px; line-height: 1.45; }
+    .output-card code { display: block; margin-top: 6px; color: var(--faint); font: 600 7px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
     .route-foot {
       position: relative;
       z-index: 2;
-      min-height: 54px;
-      display: flex;
+      min-height: 64px;
+      display: grid;
+      grid-template-columns: 1fr auto;
       align-items: center;
-      justify-content: space-between;
       gap: 18px;
       padding: 0 21px;
       border-top: 1px solid var(--line-soft);
@@ -407,7 +471,7 @@
     .route-summary { display: flex; flex-wrap: wrap; gap: 14px; }
     .route-summary span { display: inline-flex; align-items: center; gap: 6px; }
     .route-summary i { width: 5px; height: 5px; border-radius: 50%; background: var(--healthy); }
-    .route-note { font-style: normal; }
+    .extension-note { padding: 7px 10px; border: 1px dashed rgba(55, 57, 52, .28); border-radius: 10px; font-style: normal; }
 
     .section { padding: clamp(84px, 10vw, 142px) 0; }
     .section-label { margin: 0 0 15px; color: var(--signal-deep); font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
@@ -518,15 +582,17 @@
       h1 { font-size: clamp(48px, 14vw, 70px); }
       .hero-lead { font-size: 15px; }
       .hero-actions .button { flex: 1 1 auto; }
-      .quick-command { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .registry-note { grid-template-columns: auto minmax(0, 1fr) auto; }
       .route-figure { border-radius: 22px; }
-      .route-stack { padding: 12px; }
-      .route-row { grid-template-columns: 1fr; min-height: 0; }
-      .route-endpoint { min-height: 72px; }
-      .source-endpoint { border-right: 0; border-bottom: 1px solid var(--line-soft); }
-      .output-endpoint { border-left: 0; border-top: 1px solid var(--line-soft); }
-      .route-core { min-height: 66px; padding: 0 14px; grid-template-columns: auto minmax(28px, 1fr) auto minmax(28px, 1fr) auto; }
-      .route-foot { align-items: flex-start; flex-direction: column; padding-block: 14px; }
+      .capability-map { grid-template-columns: 1fr; gap: 14px; padding: 12px; }
+      .source-list::before, .output-list::before, .source-capability::after, .output-card::before { display: none; }
+      .fabric-core { min-height: 84px; border-radius: 20px; }
+      .fabric-core::before, .fabric-core::after { left: 50%; width: 2px; height: 14px; margin-left: -1px; }
+      .fabric-core::before { top: -14px; }
+      .fabric-core::after { top: auto; right: auto; bottom: -14px; }
+      .fabric-pulse { display: none; }
+      .route-foot { grid-template-columns: 1fr; padding-block: 14px; }
+      .extension-note { width: fit-content; }
       .proof-grid { grid-template-columns: repeat(2, 1fr); }
       .proof-item:nth-child(2) { border-right: 0; }
       .proof-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
@@ -550,13 +616,12 @@
       .signal-word::after { height: 5px; }
       .value-pills { gap: 6px; }
       .value-pill { font-size: 9px; }
-      .quick-command { padding-left: 11px; }
-      .quick-command code { font-size: 9px; }
+      .registry-note { padding-left: 11px; }
+      .registry-copy code { font-size: 8px; }
+      .registry-arch { display: none; }
       .route-head { padding-inline: 15px; }
       .route-head-copy strong { font-size: 15px; }
-      .route-core { gap: 5px; padding-inline: 7px; }
-      .fabric-stamp { font-size: 7px; padding-inline: 5px; }
-      .protocol-chip, .route-state { font-size: 6px; padding-inline: 5px; }
+      .protocol-chip { font-size: 6px; padding-inline: 5px; }
       .proof-item { min-height: 132px; padding-inline: 15px; }
       .proof-item strong { font-size: 22px; }
       .section { padding-block: 82px; }
@@ -568,8 +633,8 @@
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
-      .signal-pulse { display: none; }
-      .route-row { opacity: 1; transform: none; }
+      .fabric-pulse { display: none; }
+      .source-capability { opacity: 1; transform: none; }
     }
   </style>
 </head>
@@ -596,50 +661,51 @@
     <section class="hero">
       <div class="shell hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow" data-copy="eyebrow">为家庭服务器而生的本地音频投放层</p>
+          <p class="eyebrow" data-copy="eyebrow">跑在 NAS / Home Server 上的本地音频投放服务</p>
           <h1><span data-copy="heroLineOne">不挑协议，</span><br><span class="signal-word" data-copy="heroLineTwo">投了就播。</span></h1>
-          <p class="hero-lead" data-copy="heroLead">把 DLNA、AirPlay 与妙播编织成一条本地声音路径。无需云端账号，也无需更换家中支持 DLNA 的音响。</p>
+          <p class="hero-lead" data-copy="heroLead">接收手机和电脑投来的 DLNA、AirPlay 与妙播，再送到支持标准 DLNA 的音响；没有原生 DLNA 的旧小米音箱，可按需启用 MiNA 兼容输出。</p>
           <div class="value-pills" aria-label="Product traits">
-            <span class="value-pill"><i></i><span data-copy="pillLocal">完全运行在局域网</span></span>
-            <span class="value-pill"><i></i><span data-copy="pillAccount">标准声路无需账号</span></span>
-            <span class="value-pill"><i></i><span data-copy="pillDocker">Docker 快速部署</span></span>
+            <span class="value-pill"><i></i><span data-copy="pillLocal">核心链路仅在局域网</span></span>
+            <span class="value-pill"><i></i><span data-copy="pillAccount">每台音响独立入口</span></span>
+            <span class="value-pill"><i></i><span data-copy="pillDocker">amd64 · arm64</span></span>
           </div>
           <div class="hero-actions">
-            <a class="button button-primary" href="#deploy"><span data-copy="primaryCta">Docker 快速部署</span><span class="button-arrow">↘</span></a>
+            <a class="button button-primary" href="#deploy"><span data-copy="primaryCta">用 Docker 部署</span><span class="button-arrow">↘</span></a>
             <a class="button button-secondary" href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer"><span data-copy="secondaryCta">在 GitHub 查看</span><span>↗</span></a>
           </div>
-          <div class="quick-command" aria-label="Quick Docker command">
+          <a class="registry-note" href="https://github.com/wangerzi/CastFabric/pkgs/container/castfabric" target="_blank" rel="noreferrer" aria-label="CastFabric GitHub Container Registry">
             <i class="terminal-dot"></i>
-            <code>docker compose up -d</code>
-            <button class="copy-button" type="button" data-copy-command="docker compose up -d"><span data-copy="copy">复制</span></button>
-          </div>
+            <span class="registry-copy"><small data-copy="publicImage">PUBLIC GHCR IMAGE · 公开镜像</small><code>ghcr.io/wangerzi/castfabric:latest</code></span>
+            <span class="registry-arch">amd64 · arm64 ↗</span>
+          </a>
         </div>
 
         <figure class="route-figure" aria-labelledby="routeTitle">
           <div class="route-head">
-            <div class="route-head-copy"><small data-copy="routeEyebrow">ROUTE PREVIEW · 协议路径示意</small><strong id="routeTitle" data-copy="routeTitle">每台音响，都有自己的接收入口</strong></div>
-            <span class="local-badge"><i></i><span data-copy="localOnly">LOCAL ONLY</span></span>
+            <div class="route-head-copy"><small data-copy="routeEyebrow">CURRENT SUPPORT · 当前支持</small><strong id="routeTitle" data-copy="routeTitle">从什么投，投到什么，一屏看清</strong></div>
+            <span class="local-badge"><i></i><span data-copy="implementedNow">均已实现</span></span>
           </div>
-          <div class="route-stack">
-            <article class="route-row primary">
-              <div class="route-endpoint source-endpoint"><i class="device-icon phone"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong data-copy="androidPhone">Android 手机</strong><span data-copy="usualApp">来自常用音乐 App</span></span></div>
-              <div class="route-core"><span class="protocol-chip">MiPlay</span><i class="signal-line"><i class="signal-pulse"></i></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"><i class="signal-pulse"></i></i><span class="route-state" data-copy="ready">就绪</span></div>
-              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="livingSpeaker">客厅音响</strong><span>DLNA MediaRenderer</span></span></div>
-            </article>
-            <article class="route-row">
-              <div class="route-endpoint source-endpoint"><i class="device-icon computer"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong>iPhone / Mac</strong><span data-copy="systemOutput">系统音频输出</span></span></div>
-              <div class="route-core"><span class="protocol-chip">AirPlay</span><i class="signal-line"></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"></i><span class="route-state" data-copy="ready">就绪</span></div>
-              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="bedroomSpeaker">卧室音响</strong><span>DLNA MediaRenderer</span></span></div>
-            </article>
-            <article class="route-row">
-              <div class="route-endpoint source-endpoint"><i class="device-icon app"></i><span class="endpoint-copy"><small data-copy="sourceLabel">发送设备</small><strong data-copy="dlnaController">DLNA 控制端</strong><span data-copy="mediaUrl">原始媒体地址</span></span></div>
-              <div class="route-core"><span class="protocol-chip">DLNA</span><i class="signal-line"></i><span class="fabric-stamp">CastFabric</span><i class="signal-line"></i><span class="route-state" data-copy="direct">直通</span></div>
-              <div class="route-endpoint output-endpoint"><i class="device-icon speaker"></i><span class="endpoint-copy"><small data-copy="outputLabel">输出音响</small><strong data-copy="studySpeaker">书房音响</strong><span>DLNA MediaRenderer</span></span></div>
-            </article>
+          <div class="capability-map">
+            <section class="map-column ingress-map" aria-label="Supported senders and receiver protocols">
+              <p class="map-kicker"><span data-copy="ingressTitle">1 · 发送设备 / 接收协议</span><span class="implemented-label" data-copy="availableNow">现在可用</span></p>
+              <div class="source-list">
+                <article class="source-capability"><i class="device-icon phone"></i><span class="capability-copy"><strong data-copy="androidSender">支持妙播的 Android</strong><span data-copy="systemCast">系统投放入口</span></span><span class="protocol-chip">MiPlay</span></article>
+                <article class="source-capability"><i class="device-icon computer"></i><span class="capability-copy"><strong>iPhone / Mac</strong><span data-copy="systemCast">系统投放入口</span></span><span class="protocol-chip">AirPlay</span></article>
+                <article class="source-capability"><i class="device-icon app"></i><span class="capability-copy"><strong data-copy="dlnaSender">DLNA App / 控制端</strong><span data-copy="standardCast">标准投放</span></span><span class="protocol-chip">DLNA</span></article>
+              </div>
+            </section>
+            <div class="fabric-core" aria-label="CastFabric receiver suite per speaker"><i class="fabric-pulse"></i><small data-copy="perSpeakerCore">每台音响独立</small><strong>CastFabric</strong><span>RECEIVER SUITE</span></div>
+            <section class="map-column output-map" aria-label="Supported output adapters">
+              <p class="map-kicker"><span data-copy="outputTitle">2 · 输出协议 / 设备</span><span class="implemented-label" data-copy="availableNow">现在可用</span></p>
+              <div class="output-list">
+                <article class="output-card"><div class="output-card-head"><span data-copy="coreOutput">核心输出 · 本地</span><span>NO ACCOUNT</span></div><strong>DLNA MediaRenderer</strong><p data-copy="dlnaOutputDevices">兼容的智能音箱、网络播放器、功放</p><code>AVTransport · RenderingControl</code></article>
+                <article class="output-card optional"><div class="output-card-head"><span data-copy="optionalOutput">可选兼容 · 云端</span><span data-copy="accountRequired">需小米账号</span></div><strong>Xiaomi MiNA</strong><p data-copy="minaOutputDevices">没有原生 DLNA 的旧小米音箱；默认关闭</p><code>LEGACY MIAIR COMPATIBILITY</code></article>
+              </div>
+            </section>
           </div>
           <figcaption class="route-foot">
-            <span class="route-summary"><span><i></i><span data-copy="threeProtocols">3 种接收协议</span></span><span><i></i><span data-copy="independentSuites">每台音响独立启停</span></span><span><i></i><span data-copy="verifiedOutput">实体拉流可验证</span></span></span>
-            <em class="route-note" data-copy="previewNote">示意图，不读取你的设备</em>
+            <span class="route-summary"><span><i></i><span data-copy="threeProtocols">3 种接收协议</span></span><span><i></i><span data-copy="twoOutputs">2 个已实现输出适配器</span></span><span><i></i><span data-copy="independentSuites">每台音响独立启停</span></span></span>
+            <em class="extension-note" data-copy="extensionBoundary">项目方向：通过 PlaybackTarget 接入更多本地输出；未实现不列入支持</em>
           </figcaption>
         </figure>
       </div>
@@ -647,18 +713,18 @@
 
     <section class="proof-section" id="capabilities">
       <div class="shell proof-grid">
-        <article class="proof-item"><small data-copy="proofIngress">RECEIVER INPUTS</small><strong>DLNA · AirPlay · MiPlay</strong><p data-copy="proofIngressText">继续使用手机和电脑里熟悉的投放入口。</p></article>
-        <article class="proof-item"><small data-copy="proofModel">OUTPUT MODEL</small><strong data-copy="perSpeaker">每音响一套入口</strong><p data-copy="proofModelText">不是全局单选；多台音响彼此独立。</p></article>
-        <article class="proof-item"><small data-copy="proofCloud">CLOUD DEPENDENCY</small><strong data-copy="noAccount">无需厂商账号</strong><p data-copy="proofCloudText">标准 DLNA 发现、控制与播放完全本地化。</p></article>
-        <article class="proof-item"><small>CONTAINER IMAGES</small><strong>amd64 · arm64</strong><p data-copy="proofContainerText">适配常见 NAS、迷你主机与树莓派环境。</p></article>
+        <article class="proof-item"><small data-copy="proofIngress">RECEIVER INPUTS · 已实现</small><strong>DLNA · AirPlay · MiPlay</strong><p data-copy="proofIngressText">手机和电脑继续使用原有投放入口。</p></article>
+        <article class="proof-item"><small data-copy="proofOutput">CORE OUTPUT · 已实现</small><strong>Standard DLNA</strong><p data-copy="proofOutputText">驱动实现 AVTransport 与 RenderingControl 的设备。</p></article>
+        <article class="proof-item"><small data-copy="proofXiaomi">OPTIONAL OUTPUT · 已实现</small><strong>Xiaomi MiNA</strong><p data-copy="proofXiaomiText">旧 MiAir 兼容路径；默认关闭并需要小米账号。</p></article>
+        <article class="proof-item"><small data-copy="proofFuture">EXTENSION BOUNDARY · 未承诺协议</small><strong>PlaybackTarget</strong><p data-copy="proofFutureText">为后续输出适配器留出接口，不把规划写成支持。</p></article>
       </div>
     </section>
 
     <section class="section" aria-labelledby="consoleTitle">
       <div class="shell">
         <p class="section-label" data-copy="productProof">PRODUCT PROOF · 真实产品</p>
-        <h2 class="section-heading" id="consoleTitle" data-copy="consoleTitle">声音路径看得见，<br>系统状态也说得清。</h2>
-        <p class="section-lead" data-copy="consoleLead">控制台只展示能被系统确认的事实：哪些音响可投、当前协议、最终输出和失败原因。配置与诊断留在二级页面，不打扰日常使用。</p>
+        <h2 class="section-heading" id="consoleTitle" data-copy="consoleTitle">当前走哪条声路，<br>一眼就能确认。</h2>
+        <p class="section-lead" data-copy="consoleLead">控制台只展示能被系统确认的信息：发送设备、接收协议、输出音响、会话状态与失败原因；不猜来源 App，也不推测曲目。</p>
         <div class="product-grid">
           <div class="console-frame">
             <div class="browser-bar"><i></i><i></i><i></i><span>192.168.1.10:8300</span><span class="browser-language" data-copy="screenshotLanguage">截图为中文界面 · 控制台支持 English</span></div>
@@ -676,8 +742,8 @@
 
     <section class="section how-section" id="how" aria-labelledby="howTitle">
       <div class="shell">
-        <p class="section-label" data-copy="howEyebrow">HOW IT WORKS · 三步接通</p>
-        <h2 class="section-heading" id="howTitle" data-copy="howTitle">协议很复杂，<br>使用不应该复杂。</h2>
+        <p class="section-label" data-copy="howEyebrow">HOW IT WORKS · 三个实际步骤</p>
+        <h2 class="section-heading" id="howTitle" data-copy="howTitle">发现音响，发布入口，<br>确认实体设备拉到声音。</h2>
         <div class="steps">
           <article class="step"><span class="step-index">01</span><h3 data-copy="stepDiscover">发现局域网音响</h3><p data-copy="stepDiscoverText">扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。</p><code class="step-code">SSDP → device description → services</code></article>
           <article class="step"><span class="step-index">02</span><h3 data-copy="stepPublish">发布独立接收入口</h3><p data-copy="stepPublishText">每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。</p><code class="step-code">Receiver Suite × output speaker</code></article>
@@ -689,22 +755,22 @@
     <section class="section" id="deploy" aria-labelledby="deployTitle">
       <div class="shell deploy-card">
         <div class="deploy-copy">
-          <p class="section-label" data-copy="deployEyebrow">SELF-HOST IN MINUTES</p>
-          <h2 id="deployTitle" data-copy="deployTitle">让 Home Server<br>接住家里的声音。</h2>
-          <p data-copy="deployLead">推荐 Linux host network，以便 SSDP 和 mDNS 在局域网正常工作。配置保存在本地目录，更新容器不会删除音响设置。</p>
+          <p class="section-label" data-copy="deployEyebrow">RUN FROM GHCR · LINUX HOME SERVER</p>
+          <h2 id="deployTitle" data-copy="deployTitle">一条命令启动<br>CastFabric。</h2>
+          <p data-copy="deployLead">镜像公开托管在 GitHub Container Registry，提供 amd64 与 arm64。使用 host network，让 SSDP 和 mDNS 正常访问局域网；配置保存在宿主机目录。</p>
           <a class="deploy-link" href="https://github.com/wangerzi/CastFabric#docker-%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2" target="_blank" rel="noreferrer" data-copy="fullGuide">查看完整部署与网络说明 ↗</a>
         </div>
         <div class="terminal">
-          <div class="terminal-head"><span>HOME-SERVER / CASTFABRIC</span><button type="button" data-copy-command="git clone https://github.com/wangerzi/CastFabric.git&#10;cd CastFabric&#10;docker compose pull&#10;docker compose up -d"><span data-copy="copyAll">复制全部</span></button></div>
-          <pre><span class="comment"># 1 · clone</span>
-<span class="prompt">$</span> git clone https://github.com/wangerzi/CastFabric.git
-<span class="prompt">$</span> cd CastFabric
+          <div class="terminal-head"><span>HOME-SERVER / CASTFABRIC</span><button type="button" data-copy-command="docker run -d --name castfabric --restart unless-stopped --network host -v &quot;$PWD/castfabric-conf:/app/conf&quot; ghcr.io/wangerzi/castfabric:latest"><span data-copy="copyAll">复制命令</span></button></div>
+          <pre><span class="comment"># pull and start from public GHCR</span>
+<span class="prompt">$</span> docker run -d \
+    --name castfabric \
+    --restart unless-stopped \
+    --network host \
+    -v "$PWD/castfabric-conf:/app/conf" \
+    ghcr.io/wangerzi/castfabric:latest
 
-<span class="comment"># 2 · pull &amp; start</span>
-<span class="prompt">$</span> docker compose pull
-<span class="prompt">$</span> docker compose up -d
-
-<span class="comment"># 3 · open the console</span>
+<span class="comment"># open the console</span>
 <span class="prompt">→</span> http://HOME_SERVER_IP:8300</pre>
         </div>
       </div>
@@ -713,7 +779,7 @@
     <section class="section" aria-labelledby="boundaryTitle">
       <div class="shell boundary">
         <span class="boundary-icon">i</span>
-        <div><strong id="boundaryTitle" data-copy="boundaryTitle">关于实时桥接延迟，我们选择说清楚。</strong><p data-copy="boundaryText">原生 DLNA 是最低延迟路径；AirPlay 与妙播经实时 PCM / DLNA 桥接时，在当前测试音箱约有 4 秒听感延迟，不承诺视频口型同步。</p></div>
+        <div><strong id="boundaryTitle" data-copy="boundaryTitle">两条声路，两种延迟</strong><p data-copy="boundaryText">原生 DLNA 直投在当前测试音箱通常低于 1 秒；AirPlay 与妙播经过实时 PCM / DLNA 桥接约有 4 秒延迟，不适合需要音画同步的视频。不同音箱的缓冲策略不同，实际结果以设备为准。</p></div>
         <a href="https://github.com/wangerzi/CastFabric/blob/main/docs/architecture/live-bridge-latency.md" target="_blank" rel="noreferrer" data-copy="readEvidence">查看测试证据 ↗</a>
       </div>
     </section>
@@ -728,15 +794,15 @@
 
   <script>
     const copy = {
-      navCapabilities: ['核心能力', 'Capabilities'], navHow: ['工作原理', 'How it works'], navDeploy: ['快速部署', 'Deploy'], viewSource: ['查看源码', 'View source'],
-      eyebrow: ['为家庭服务器而生的本地音频投放层', 'A LOCAL AUDIO FABRIC FOR YOUR HOME SERVER'], heroLineOne: ['不挑协议，', 'Cast freely.'], heroLineTwo: ['投了就播。', 'It just plays.'], heroLead: ['把 DLNA、AirPlay 与妙播编织成一条本地声音路径。无需云端账号，也无需更换家中支持 DLNA 的音响。', 'Weave DLNA, AirPlay and MiPlay into one local path. No cloud account, and no need to replace the DLNA speakers you already own.'],
-      pillLocal: ['完全运行在局域网', 'Runs entirely on your LAN'], pillAccount: ['标准声路无需账号', 'No account on the standard path'], pillDocker: ['Docker 快速部署', 'Docker-first deployment'], primaryCta: ['Docker 快速部署', 'Deploy with Docker'], secondaryCta: ['在 GitHub 查看', 'View on GitHub'], copy: ['复制', 'Copy'], copied: ['已复制', 'Copied'], copyFailed: ['请手动复制', 'Select and copy'],
-      routeEyebrow: ['ROUTE PREVIEW · 协议路径示意', 'ROUTE PREVIEW · NOT LIVE DATA'], routeTitle: ['每台音响，都有自己的接收入口', 'Every speaker gets its own receiver suite'], localOnly: ['仅限本地', 'LOCAL ONLY'], sourceLabel: ['发送设备', 'SOURCE'], outputLabel: ['输出音响', 'OUTPUT'], androidPhone: ['Android 手机', 'Android phone'], usualApp: ['来自常用音乐 App', 'From your usual music app'], systemOutput: ['系统音频输出', 'System audio output'], dlnaController: ['DLNA 控制端', 'DLNA controller'], mediaUrl: ['原始媒体地址', 'Original media URL'], livingSpeaker: ['客厅音响', 'Living room'], bedroomSpeaker: ['卧室音响', 'Bedroom'], studySpeaker: ['书房音响', 'Study'], ready: ['就绪', 'READY'], direct: ['直通', 'DIRECT'], threeProtocols: ['3 种接收协议', '3 receiver protocols'], independentSuites: ['每台音响独立启停', 'Independent per speaker'], verifiedOutput: ['实体拉流可验证', 'Verified physical pull'], previewNote: ['示意图，不读取你的设备', 'Illustration only — no device data'],
-      proofIngress: ['RECEIVER INPUTS', 'RECEIVER INPUTS'], proofIngressText: ['继续使用手机和电脑里熟悉的投放入口。', 'Keep the casting controls already built into your phone and computer.'], proofModel: ['OUTPUT MODEL', 'OUTPUT MODEL'], perSpeaker: ['每音响一套入口', 'One suite per speaker'], proofModelText: ['不是全局单选；多台音响彼此独立。', 'No global selection. Every speaker stays independent.'], proofCloud: ['CLOUD DEPENDENCY', 'CLOUD DEPENDENCY'], noAccount: ['无需厂商账号', 'No vendor account'], proofCloudText: ['标准 DLNA 发现、控制与播放完全本地化。', 'Standard discovery, control and playback remain local.'], proofContainerText: ['适配常见 NAS、迷你主机与树莓派环境。', 'Built for common NAS, mini-PC and Raspberry Pi setups.'],
-      productProof: ['PRODUCT PROOF · 真实产品', 'PRODUCT PROOF · THE REAL CONSOLE'], screenshotLanguage: ['截图为中文界面 · 控制台支持 English', 'Screenshot shown in Chinese · English UI available'], consoleTitle: ['声音路径看得见，\n系统状态也说得清。', 'See the sound path.\nUnderstand the system.'], consoleLead: ['控制台只展示能被系统确认的事实：哪些音响可投、当前协议、最终输出和失败原因。配置与诊断留在二级页面，不打扰日常使用。', 'The console shows only what CastFabric can verify: available speakers, active protocol, physical output and typed failures. Configuration and diagnostics stay one level down.'], noteOverview: ['一眼看懂全屋声路', 'One view of every active route'], noteOverviewText: ['最多展开三条活跃路径，其余聚合，不让音响数量破坏首页。', 'Up to three active routes stay visible while additional speakers are summarized.'], noteManage: ['每台音响独立管理', 'Manage every speaker independently'], noteManageText: ['启停只影响当前音响的 Receiver Suite，不存在全局默认输出。', 'A switch affects one receiver suite only. There is no global default output.'], noteTruth: ['成功必须真的拉到声音', 'Success requires a real audio pull'], noteTruthText: ['实体音响没有拉取 HTTP 音频时，不把控制命令成功冒充播放成功。', 'A successful control command is not reported as playback until the physical renderer pulls audio.'],
-      howEyebrow: ['HOW IT WORKS · 三步接通', 'HOW IT WORKS · THREE LOCAL STEPS'], howTitle: ['协议很复杂，\n使用不应该复杂。', 'Complex protocols.\nA simple result.'], stepDiscover: ['发现局域网音响', 'Discover LAN speakers'], stepDiscoverText: ['扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。', 'Discover standard UPnP/DLNA MediaRenderers without signing in to Xiaomi or another vendor.'], stepPublish: ['发布独立接收入口', 'Publish independent receivers'], stepPublishText: ['每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。', 'Every enabled speaker gets its own DLNA, AirPlay and MiPlay identity, so multiple rooms can coexist.'], stepVerify: ['把声音送到实体输出', 'Verify the physical output'], stepVerifyText: ['CastFabric 不止发送控制命令，还确认实体 DMR 真正打开并拉取音频流。', 'CastFabric goes beyond control acknowledgements and confirms that the physical DMR opens the audio stream.'],
-      deployEyebrow: ['几分钟完成自托管', 'SELF-HOST IN MINUTES'], deployTitle: ['让 Home Server\n接住家里的声音。', 'Let your Home Server\ncarry the sound.'], deployLead: ['推荐 Linux host network，以便 SSDP 和 mDNS 在局域网正常工作。配置保存在本地目录，更新容器不会删除音响设置。', 'Linux host networking is recommended so SSDP and mDNS work across your LAN. Configuration stays in a local directory and survives container updates.'], fullGuide: ['查看完整部署与网络说明 ↗', 'Read the complete deployment guide ↗'], copyAll: ['复制全部', 'Copy all'],
-      boundaryTitle: ['关于实时桥接延迟，我们选择说清楚。', 'We are explicit about live-bridge latency.'], boundaryText: ['原生 DLNA 是最低延迟路径；AirPlay 与妙播经实时 PCM / DLNA 桥接时，在当前测试音箱约有 4 秒听感延迟，不承诺视频口型同步。', 'Native DLNA is the lowest-latency route. AirPlay and MiPlay live bridging has about four seconds of audible delay on the current test speaker and does not promise video lip sync.'], readEvidence: ['查看测试证据 ↗', 'Read the evidence ↗'], footerCopy: ['开源、本地优先的家庭音频投放层 · MIT License', 'Open-source, local-first home audio casting · MIT License'], backTop: ['回到顶部 ↑', 'Back to top ↑']
+      navCapabilities: ['核心能力', 'Capabilities'], navHow: ['工作原理', 'How it works'], navDeploy: ['Docker 部署', 'Docker'], viewSource: ['查看源码', 'View source'],
+      eyebrow: ['跑在 NAS / Home Server 上的本地音频投放服务', 'LOCAL AUDIO CASTING FOR NAS AND HOME SERVERS'], heroLineOne: ['不挑协议，', 'Cast freely.'], heroLineTwo: ['投了就播。', 'It just plays.'], heroLead: ['接收手机和电脑投来的 DLNA、AirPlay 与妙播，再送到支持标准 DLNA 的音响；没有原生 DLNA 的旧小米音箱，可按需启用 MiNA 兼容输出。', 'Receive DLNA, AirPlay and MiPlay from phones and computers, then route audio to standard DLNA speakers. Legacy Xiaomi speakers without native DLNA can use the optional MiNA output.'],
+      pillLocal: ['核心链路仅在局域网', 'Core path stays on your LAN'], pillAccount: ['每台音响独立入口', 'Independent suite per speaker'], pillDocker: ['amd64 · arm64', 'amd64 · arm64'], primaryCta: ['用 Docker 部署', 'Deploy with Docker'], secondaryCta: ['在 GitHub 查看', 'View on GitHub'], publicImage: ['PUBLIC GHCR IMAGE · 公开镜像', 'PUBLIC GHCR IMAGE'], copy: ['复制', 'Copy'], copied: ['已复制', 'Copied'], copyFailed: ['请手动复制', 'Select and copy'],
+      routeEyebrow: ['CURRENT SUPPORT · 当前支持', 'CURRENT SUPPORT · IMPLEMENTED TODAY'], routeTitle: ['从什么投，投到什么，一屏看清', 'See what sends in and what plays out'], implementedNow: ['均已实现', 'IMPLEMENTED'], availableNow: ['现在可用', 'AVAILABLE NOW'], ingressTitle: ['1 · 发送设备 / 接收协议', '1 · SENDERS / RECEIVER INPUTS'], outputTitle: ['2 · 输出协议 / 设备', '2 · OUTPUT PROTOCOLS / DEVICES'], androidSender: ['支持妙播的 Android', 'MiPlay-capable Android'], systemCast: ['系统投放入口', 'Built-in casting control'], dlnaSender: ['DLNA App / 控制端', 'DLNA app / controller'], standardCast: ['标准投放', 'Standard casting'], perSpeakerCore: ['每台音响独立', 'ONE PER SPEAKER'], coreOutput: ['核心输出 · 本地', 'CORE OUTPUT · LOCAL'], dlnaOutputDevices: ['兼容的智能音箱、网络播放器、功放', 'Compatible speakers, network players and receivers'], optionalOutput: ['可选兼容 · 云端', 'OPTIONAL COMPATIBILITY · CLOUD'], accountRequired: ['需小米账号', 'XIAOMI ACCOUNT'], minaOutputDevices: ['没有原生 DLNA 的旧小米音箱；默认关闭', 'Legacy Xiaomi speakers without native DLNA; off by default'], threeProtocols: ['3 种接收协议', '3 receiver protocols'], twoOutputs: ['2 个已实现输出适配器', '2 implemented output adapters'], independentSuites: ['每台音响独立启停', 'Independent per speaker'], extensionBoundary: ['项目方向：通过 PlaybackTarget 接入更多本地输出；未实现不列入支持', 'Direction: add more local outputs through PlaybackTarget; unimplemented protocols are not listed as supported'],
+      proofIngress: ['RECEIVER INPUTS · 已实现', 'RECEIVER INPUTS · IMPLEMENTED'], proofIngressText: ['手机和电脑继续使用原有投放入口。', 'Phones and computers keep their existing casting controls.'], proofOutput: ['CORE OUTPUT · 已实现', 'CORE OUTPUT · IMPLEMENTED'], proofOutputText: ['驱动实现 AVTransport 与 RenderingControl 的设备。', 'Controls devices implementing AVTransport and RenderingControl.'], proofXiaomi: ['OPTIONAL OUTPUT · 已实现', 'OPTIONAL OUTPUT · IMPLEMENTED'], proofXiaomiText: ['旧 MiAir 兼容路径；默认关闭并需要小米账号。', 'Legacy MiAir compatibility; off by default and requires a Xiaomi account.'], proofFuture: ['EXTENSION BOUNDARY · 未承诺协议', 'EXTENSION BOUNDARY · NO PROTOCOL PROMISE'], proofFutureText: ['为后续输出适配器留出接口，不把规划写成支持。', 'An interface for future adapters, without presenting plans as support.'],
+      productProof: ['PRODUCT PROOF · 真实产品', 'PRODUCT PROOF · THE REAL CONSOLE'], screenshotLanguage: ['截图为中文界面 · 控制台支持 English', 'Screenshot shown in Chinese · English UI available'], consoleTitle: ['当前走哪条声路，\n一眼就能确认。', 'See the active path\nat a glance.'], consoleLead: ['控制台只展示能被系统确认的信息：发送设备、接收协议、输出音响、会话状态与失败原因；不猜来源 App，也不推测曲目。', 'The console shows only verifiable information: sender, receiver protocol, output speaker, session state and failure reason. It does not guess the source app or track.'], noteOverview: ['一眼看懂全屋声路', 'One view of every active route'], noteOverviewText: ['最多展开三条活跃路径，其余聚合，不让音响数量破坏首页。', 'Up to three active routes stay visible while additional speakers are summarized.'], noteManage: ['每台音响独立管理', 'Manage every speaker independently'], noteManageText: ['启停只影响当前音响的 Receiver Suite，不存在全局默认输出。', 'A switch affects one receiver suite only. There is no global default output.'], noteTruth: ['成功必须真的拉到声音', 'Success requires a real audio pull'], noteTruthText: ['实体音响没有拉取 HTTP 音频时，不把控制命令成功冒充播放成功。', 'A successful control command is not reported as playback until the physical renderer pulls audio.'],
+      howEyebrow: ['HOW IT WORKS · 三个实际步骤', 'HOW IT WORKS · THREE CONCRETE STEPS'], howTitle: ['发现音响，发布入口，\n确认实体设备拉到声音。', 'Discover, publish receivers,\nthen verify the physical pull.'], stepDiscover: ['发现局域网音响', 'Discover LAN speakers'], stepDiscoverText: ['扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。', 'Discover standard UPnP/DLNA MediaRenderers without signing in to Xiaomi or another vendor.'], stepPublish: ['发布独立接收入口', 'Publish independent receivers'], stepPublishText: ['每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。', 'Every enabled speaker gets its own DLNA, AirPlay and MiPlay identity, so multiple rooms can coexist.'], stepVerify: ['确认实体设备拉流', 'Verify the physical output'], stepVerifyText: ['CastFabric 不止发送控制命令，还确认实体 DMR 真正打开并拉取音频流。', 'CastFabric goes beyond control acknowledgements and confirms that the physical DMR opens the audio stream.'],
+      deployEyebrow: ['RUN FROM GHCR · LINUX HOME SERVER', 'RUN FROM GHCR · LINUX HOME SERVER'], deployTitle: ['一条命令启动\nCastFabric。', 'Start CastFabric\nwith one command.'], deployLead: ['镜像公开托管在 GitHub Container Registry，提供 amd64 与 arm64。使用 host network，让 SSDP 和 mDNS 正常访问局域网；配置保存在宿主机目录。', 'The public GitHub Container Registry image supports amd64 and arm64. Host networking gives SSDP and mDNS access to your LAN, while configuration stays on the host.'], fullGuide: ['查看完整部署与网络说明 ↗', 'Read the complete deployment guide ↗'], copyAll: ['复制命令', 'Copy command'],
+      boundaryTitle: ['两条声路，两种延迟', 'Two paths, two latency profiles'], boundaryText: ['原生 DLNA 直投在当前测试音箱通常低于 1 秒；AirPlay 与妙播经过实时 PCM / DLNA 桥接约有 4 秒延迟，不适合需要音画同步的视频。不同音箱的缓冲策略不同，实际结果以设备为准。', 'Native DLNA casting normally starts in under one second on the current test speaker. AirPlay and MiPlay live bridging takes about four seconds and is not suited to video that needs lip sync. Actual results depend on each speaker’s buffering.'], readEvidence: ['查看测试证据 ↗', 'Read the evidence ↗'], footerCopy: ['开源、本地优先的家庭音频投放服务 · MIT License', 'Open-source, local-first home audio casting · MIT License'], backTop: ['回到顶部 ↑', 'Back to top ↑']
     };
 
     const storageKey = 'castfabric-landing-language-v1';
