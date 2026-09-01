@@ -8,7 +8,7 @@ AI Agent。
 
 交付由三部分构成：
 
-1. CastFabric 内的薄 MCP 适配层；
+1. CastFabric 现有进程与端口内的 `/mcp` Streamable HTTP 适配层；
 2. 帮助 Agent 处理本地文件、FFmpeg、实时输入和播放列表的 CastFabric Skill；
 3. 控制台内只读的 AI 接入向导。
 
@@ -73,7 +73,7 @@ AI Agent。
 
 ```text
 UrlSource       = { type: "url", url }
-FileSource      = { type: "file", filename, mime_type, data_base64 }
+FileSource      = { type: "file", filename, mime_type, size_bytes, upload_id }
 PcmStreamSource = { type: "pcm_stream", sample_format, sample_rate, channels }
 ```
 
@@ -149,12 +149,14 @@ MCP 播放继续使用现有 `MediaSessionCoordinator`，而不是引入 Operati
   "target_id": "uuid:...",
   "filename": "notice.mp3",
   "mime_type": "audio/mpeg",
-  "data_base64": "..."
+  "size_bytes": 1234567
 }
 ```
 
-数据只写入临时播放文件，并通过不可枚举的临时 HTTP 路径交给现有 `play_url()`。
-会话结束、失败、超时或服务关闭后删除。文件大小采用实现常量限制，不增加产品配置项。
+工具返回同一 CastFabric origin 下的一次性 `upload_url`、`upload_id` 和过期时间。Skill
+把原始文件字节上传成功后，CastFabric 才开始播放，并通过不可枚举的临时 HTTP 路径把
+媒体交给现有 `play_url()`。上传只能使用一次；会话结束、失败、超时或服务关闭后删除。
+文件大小采用实现常量限制，不增加产品配置项，也不通过 MCP JSON-RPC 传 Base64。
 
 #### `open_pcm_stream`
 
@@ -290,7 +292,8 @@ runner，避免 stopped 被解释为自然播完。
 - `skill install card`：Skill 作用、安装入口和 FFmpeg 条件；
 - `verification callout`：安装后只调用 `list_outputs`，不自动出声。
 
-页面不是设置表单，不提供 MCP 端口、TTS、播放策略或权限配置。
+页面不是设置表单，不提供 MCP 端口、TTS、播放策略或权限配置。MCP endpoint 固定为
+当前 CastFabric origin 下的 `/mcp`。
 
 ### 状态与交互
 
@@ -332,7 +335,7 @@ tabpanel 语义。桌面为两栏接入信息，移动端改为单列并允许�
 ### Skill 测试
 
 - Node helper 能列出和扫描输出；
-- 文件字节经 Base64 完整抵达临时媒体端点；
+- MCP 创建一次性上传事务，文件原始字节完整抵达临时媒体端点且令牌不可重放；
 - FFmpeg 固定输出 s16le/48 kHz/2ch；
 - stdin、文件和 URL 三类实时输入均可停止且无孤儿 FFmpeg；
 - 播放列表保持顺序，`--loop` 循环，SIGINT 不启动下一项；
@@ -340,8 +343,8 @@ tabpanel 语义。桌面为两栏接入信息，移动端改为单列并允许�
 
 ### 集成与真机
 
-1. MCP Inspector 验证工具 Schema 和返回；
-2. Codex 与 Claude Code 分别安装并调用 `list_outputs`；
+1. MCP Inspector 直接连接 `http://<home-server>:9988/mcp` 验证工具 Schema 和返回；
+2. Codex 与 Claude Code 分别直连该 Streamable HTTP endpoint 并调用 `list_outputs`；
 3. Agent 主动扫描、选择 `target_id`、启用已发现音响；
 4. 真机验证 URL、MP3 文件、FFmpeg 文件实时 PCM 和 stdin PCM；
 5. 验证状态、暂停、停止和音量；
@@ -351,7 +354,7 @@ tabpanel 语义。桌面为两栏接入信息，移动端改为单列并允许�
 
 1. 补齐 `OutputTarget.configured` 与 MCP session protocol 数据契约；
 2. 提取供 HTTP API 与 MCP 共用的应用命令入口；
-3. 实现管理与控制工具；
+3. 将官方 SDK 的 Streamable HTTP 应用挂到现有 aiohttp `/mcp` 路由，实现管理与控制工具；
 4. 实现 URL、临时文件与 PCM WebSocket 三种播放路径；
 5. 创建并验证 CastFabric Skill 与 Node helper；
 6. 设计、实现并验证 AI 接入页面；
