@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
@@ -94,3 +95,30 @@ def test_invalid_file_metadata_is_rejected_before_creating_a_transaction(tmp_pat
     with pytest.raises(FilePlaybackError) as error:
         store.resolve_media("unknown")
     assert error.value.code == "MEDIA_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_ephemeral_media_expires_without_waiting_for_another_request(tmp_path):
+    playback = SimpleNamespace(
+        controller_for=lambda _target_id: object(),
+        play_url=AsyncMock(return_value={"ok": True}),
+    )
+    store = EphemeralMediaStore(
+        playback,
+        directory=tmp_path,
+        media_ttl=0.01,
+        id_factory=iter(["upload-token", "media-token"]).__next__,
+    )
+    transaction = store.create_upload("uuid:living", "clip.wav", "audio/wav", 3)
+    await store.accept_upload(
+        transaction["upload_id"],
+        _chunks(b"abc"),
+        origin="http://castfabric.test",
+    )
+
+    await asyncio.sleep(0.03)
+
+    with pytest.raises(FilePlaybackError) as expired:
+        store.resolve_media("media-token")
+    assert expired.value.code == "MEDIA_NOT_FOUND"
+    assert not list(tmp_path.iterdir())

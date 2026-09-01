@@ -112,12 +112,21 @@ class PcmStreamRegistry:
     async def write(self, stream: PcmStream, data: bytes) -> None:
         await stream.sink.write(bytes(data))
 
-    async def close(self, stream_id: str, *, failed: bool = False) -> None:
+    async def close(
+        self,
+        stream_id: str,
+        *,
+        failed: bool = False,
+        stop_output: bool = True,
+    ) -> None:
         stream = self._streams.pop(stream_id, None)
         if stream is None:
             return
         try:
-            await stream.sink.stop()
+            if stop_output:
+                await stream.sink.stop()
+            else:
+                await stream.sink.stop(stop_output=False)
         finally:
             await self.playback_service.session_coordinator.end(
                 stream.session_id,
@@ -127,7 +136,7 @@ class PcmStreamRegistry:
             if suite is not None and suite.current_session_id == stream.session_id:
                 suite.current_session_id = None
 
-    async def stop_target(self, target_id: str) -> None:
+    async def stop_target(self, target_id: str, *, stop_output: bool = True) -> None:
         normalized = normalize_target_id(target_id)
         stream_ids = [
             stream_id
@@ -135,7 +144,7 @@ class PcmStreamRegistry:
             if stream.target_id == normalized
         ]
         for stream_id in stream_ids:
-            await self.close(stream_id)
+            await self.close(stream_id, stop_output=stop_output)
 
     async def close_all(self) -> None:
         for stream_id in list(self._streams):

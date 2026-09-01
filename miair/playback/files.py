@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 import tempfile
 import time
@@ -45,12 +46,14 @@ class EphemeralMediaStore:
         directory: str | Path | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
         upload_ttl: float = 300.0,
+        media_ttl: float = 6 * 60 * 60,
         clock: Callable[[], float] = time.monotonic,
         id_factory: Callable[[], str] = lambda: secrets.token_urlsafe(24),
     ):
         self.playback_service = playback_service
         self.max_bytes = int(max_bytes)
         self.upload_ttl = float(upload_ttl)
+        self.media_ttl = float(media_ttl)
         self.clock = clock
         self.id_factory = id_factory
         self._temporary_directory = (
@@ -64,6 +67,13 @@ class EphemeralMediaStore:
         self.directory.mkdir(parents=True, exist_ok=True)
         self._uploads: dict[str, PendingUpload] = {}
         self._media: dict[str, MediaFile] = {}
+        self._media_expiry: dict[str, asyncio.TimerHandle] = {}
+
+    def _expire_media_token(self, token: str) -> None:
+        self._media_expiry.pop(token, None)
+        media = self._media.pop(token, None)
+        if media is not None:
+            media.path.unlink(missing_ok=True)
 
     @staticmethod
     def _safe_filename(value: str) -> str:
@@ -149,12 +159,23 @@ class EphemeralMediaStore:
                 origin.rstrip("/")
                 + f"/api/v1/playback/media/{media_token}"
             )
-            return await self.playback_service.play_url(
+            result = await self.playback_service.play_url(
                 upload.target_id,
                 media_url,
                 media_format=upload.content_type,
             )
+            self._media_expiry[media_token] = (
+                asyncio.get_running_loop().call_later(
+                    self.media_ttl,
+                    self._expire_media_token,
+                    media_token,
+                )
+            )
+            return result
         except Exception:
+            handle = self._media_expiry.pop(media_token, None)
+            if handle is not None:
+                handle.cancel()
             self._media.pop(media_token, None)
             path.unlink(missing_ok=True)
             raise
@@ -170,13 +191,22 @@ class EphemeralMediaStore:
             token for token, media in self._media.items() if media.target_id == target_id
         ]
         for token in tokens:
+            handle = self._media_expiry.pop(token, None)
+            if handle is not None:
+                handle.cancel()
             media = self._media.pop(token)
             media.path.unlink(missing_ok=True)
 
-    async def close(self) -> None:
+    async def cleanup_all(self) -> None:
         self._uploads.clear()
+        for handle in self._media_expiry.values():
+            handle.cancel()
+        self._media_expiry.clear()
         for media in self._media.values():
             media.path.unlink(missing_ok=True)
         self._media.clear()
+
+    async def close(self) -> None:
+        await self.cleanup_all()
         if self._temporary_directory is not None:
             self._temporary_directory.cleanup()

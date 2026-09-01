@@ -18,12 +18,17 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install project and test dependencies
         run: python -m pip install --upgrade pip && python -m pip install -e '.[test]'
       - name: Run unit and integration tests
         run: python -m pytest -q
+      - name: Run Agent Skill tests
+        run: node --test skills/castfabric/tests/*.test.mjs
       - name: Run offline MiPlay wire self-test
         run: python -m miair.miplay.probe self-test --duration 0.35
 
@@ -61,5 +66,11 @@ jobs:
             | EXPECTED_VERSION="$expected_version" python -c "import json,os,sys; d=json.load(sys.stdin); assert d['version']==os.environ['EXPECTED_VERSION']; assert d['xiaomi_extension_enabled'] is False"
           curl --fail --silent http://127.0.0.1:18300/api/v1/system \
             | python -c "import json,sys; d=json.load(sys.stdin); assert d['product']=='CastFabric'; assert d['health']=='idle'; assert d['targets']['count']==0"
+          curl --fail --silent --show-error \
+            -H 'Accept: application/json, text/event-stream' \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"container-smoke","version":"1"}}}' \
+            http://127.0.0.1:18300/mcp \
+            | python -c "import json,sys; d=json.load(sys.stdin); assert d['result']['serverInfo']['name']=='CastFabric'"
           curl --fail --silent http://127.0.0.1:18300/ \
             | grep -q 'console.js'

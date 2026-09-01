@@ -14,6 +14,7 @@ from miair.app import CastFabric
 from miair.config import Config
 from miair.dlna.client import DiscoveredDLNATarget
 from miair.runtime.models import EventOutcome, IngressProtocol, IngressState
+from miair.playback import PlaybackServiceError
 from miair.targets import OutputTargetConfig
 from miair.web.api import create_web_app
 
@@ -272,6 +273,8 @@ async def test_target_patch_rolls_back_fields_when_suite_transition_fails(tmp_pa
 async def test_playback_url_and_controls_use_the_shared_application_service(tmp_path):
     config, app = _build_app(tmp_path)
     controller = app.suite_registry.get("uuid:living").controller
+    app.pcm_streams.stop_target = AsyncMock()
+    app.media_store.cleanup_target = AsyncMock()
     client = await _client(config, app)
     try:
         played = await client.post(
@@ -310,6 +313,10 @@ async def test_playback_url_and_controls_use_the_shared_application_service(tmp_
     controller.play_url.assert_awaited_once_with(
         "https://media.example.test/notice.mp3?token=secret", play_type=2
     )
+    app.pcm_streams.stop_target.assert_awaited_once_with(
+        "uuid:living", stop_output=False
+    )
+    app.media_store.cleanup_target.assert_awaited_once_with("uuid:living")
 
 
 @pytest.mark.asyncio
@@ -338,6 +345,24 @@ async def test_playback_routes_reject_invalid_input_with_stable_safe_errors(tmp_
     assert bad_volume.status == 400
     assert bad_volume_payload["error"]["code"] == "INVALID_VOLUME"
     assert "private" not in json.dumps(bad_volume_payload).lower()
+
+
+@pytest.mark.asyncio
+async def test_agent_stop_releases_local_resources_even_when_output_rejects_stop(tmp_path):
+    _config, app = _build_app(tmp_path)
+    app.playback_service.stop = AsyncMock(
+        side_effect=PlaybackServiceError("TARGET_COMMAND_FAILED", "uuid:living")
+    )
+    app.pcm_streams.stop_target = AsyncMock()
+    app.media_store.cleanup_target = AsyncMock()
+
+    with pytest.raises(PlaybackServiceError):
+        await app.stop_agent_playback("uuid:living")
+
+    app.pcm_streams.stop_target.assert_awaited_once_with(
+        "uuid:living", stop_output=False
+    )
+    app.media_store.cleanup_target.assert_awaited_once_with("uuid:living")
 
 
 @pytest.mark.asyncio

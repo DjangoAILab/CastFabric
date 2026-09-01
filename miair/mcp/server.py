@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -20,6 +21,10 @@ class EmbeddedMcpEndpoint:
     def __init__(self, app, config):
         self.app = app
         self.config = config
+        self._request_origin: ContextVar[str | None] = ContextVar(
+            "castfabric_mcp_request_origin",
+            default=None,
+        )
         self.server = MCPServer(
             name="CastFabric",
             version="1",
@@ -39,7 +44,9 @@ class EmbeddedMcpEndpoint:
         )
 
     def _public_origin(self) -> str:
-        return f"http://{self.config.hostname}:{self.config.web_port}"
+        return self._request_origin.get() or (
+            f"http://{self.config.hostname}:{self.config.web_port}"
+        )
 
     @staticmethod
     def _tool_error(exc: Exception) -> ToolError:
@@ -230,9 +237,7 @@ class EmbeddedMcpEndpoint:
         )
         async def stop(target_id: str) -> dict[str, Any]:
             try:
-                await self.app.pcm_streams.stop_target(target_id)
-                await self.app.media_store.cleanup_target(target_id)
-                return await self.app.playback_service.stop(target_id)
+                return await self.app.stop_agent_playback(target_id)
             except PlaybackServiceError as exc:
                 raise self._tool_error(exc) from exc
 
@@ -303,7 +308,11 @@ class EmbeddedMcpEndpoint:
             "server": (host, int(port_text) if port_text.isdigit() else None),
             "client": request.transport.get_extra_info("peername") if request.transport else None,
         }
-        await self.asgi_app(scope, receive, send)
+        token = self._request_origin.set(f"{request.scheme}://{request.host}")
+        try:
+            await self.asgi_app(scope, receive, send)
+        finally:
+            self._request_origin.reset(token)
         headers = {
             key.decode("latin-1"): value.decode("latin-1")
             for key, value in started.get("headers", [])

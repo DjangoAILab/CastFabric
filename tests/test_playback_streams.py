@@ -106,3 +106,16 @@ async def test_invalid_format_and_unknown_stream_have_stable_errors():
     with pytest.raises(PcmStreamError) as missing:
         registry.claim_writer("unknown")
     assert missing.value.code == "STREAM_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_external_stop_closes_pcm_server_without_stopping_output_twice():
+    registry, _suite, sessions, sinks = _registry()
+    await registry.create(
+        "uuid:living", sample_format="s16le", sample_rate=48000, channels=2
+    )
+
+    await registry.stop_target("uuid:living", stop_output=False)
+
+    sinks[0].stop.assert_awaited_once_with(stop_output=False)
+    assert sessions.current("uuid:living") is None

@@ -43,6 +43,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
     config, app = _build_app(tmp_path)
     server = TestServer(create_web_app(config, app))
     await server.start_server()
+    public_origin = str(server.make_url("/")).rstrip("/")
     try:
         async with streamable_http_client(str(server.make_url("/mcp"))) as streams:
             async with ClientSession(streams[0], streams[1]) as session:
@@ -79,7 +80,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
     assert result.structured_content["items"][0]["id"] == "uuid:living"
     assert file_result.is_error is False
     assert file_result.structured_content["upload_url"].startswith(
-        "http://127.0.0.1:9988/api/v1/playback/files/"
+        public_origin + "/api/v1/playback/files/"
     )
     schemas = {tool.name: tool.input_schema for tool in listed.tools}
     for name in {

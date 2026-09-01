@@ -145,7 +145,7 @@ class CastFabricLiveAudioSink:
         self._pcm_bytes += len(payload)
         self.stream_server.write_pcm(payload)
 
-    async def stop(self) -> None:
+    async def stop(self, *, stop_output: bool = True) -> None:
         server = self.stream_server
         self._active = False
         if server is not None:
@@ -154,10 +154,11 @@ class CastFabricLiveAudioSink:
             self.stream_server = None
         if self._play_started:
             self._play_started = False
-            try:
-                await self.controller.stop()
-            except Exception as exc:
-                log.debug("停止 MiPlay 音箱播放失败: %s", exc)
+            if stop_output:
+                try:
+                    await self.controller.stop()
+                except Exception as exc:
+                    log.debug("停止 MiPlay 音箱播放失败: %s", exc)
         self._pull_confirmed = False
         await self._emit_lifecycle("output_stopped")
 

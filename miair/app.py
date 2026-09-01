@@ -101,6 +101,23 @@ class CastFabric:
             for controller in self.speaker_manager.controllers.values()
         )
 
+    async def stop_agent_playback(self, target_id: str) -> dict:
+        """Stop one Agent route and release every associated local resource."""
+        try:
+            return await self.playback_service.stop(target_id)
+        finally:
+            cleanup_results = await asyncio.gather(
+                self.pcm_streams.stop_target(target_id, stop_output=False),
+                self.media_store.cleanup_target(target_id),
+                return_exceptions=True,
+            )
+            for cleanup_error in cleanup_results:
+                if isinstance(cleanup_error, Exception):
+                    log.warning(
+                        "Agent 播放资源清理失败: %s",
+                        type(cleanup_error).__name__,
+                    )
+
     async def _discover_output_targets(self):
         observed = await LocalDLNAClient.discover(self.config.hostname)
         virtual_ids = {f"uuid:{renderer.udn}" for renderer in self.renderers.values()}
@@ -774,10 +791,10 @@ class CastFabric:
         if self.airplay_manager:
             await self.airplay_manager.stop()
             self.airplay_manager = None
+        await self.pcm_streams.close_all()
+        await self.media_store.cleanup_all()
         # 先停止现有服务
         await self._stop_dlna_services()
-        await self.pcm_streams.close_all()
-        await self.media_store.close()
         # 关闭并重新初始化 auth，确保账号切换生效
         await self.auth.close()
         self.auth = AuthManager(self.config)
@@ -824,6 +841,8 @@ class CastFabric:
             self._auth_retry_task.cancel()
             self._auth_retry_task = None
 
+        await self.pcm_streams.close_all()
+        await self.media_store.close()
         await self._stop_dlna_services()
         if self.airplay_manager:
             await self.airplay_manager.stop()

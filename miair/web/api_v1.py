@@ -440,7 +440,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
 
     async def stop_playback(request):
         try:
-            result = await app.playback_service.stop(request.match_info["target_id"])
+            result = await app.stop_agent_playback(request.match_info["target_id"])
         except PlaybackServiceError as exc:
             return playback_error(exc)
         return web.json_response(result)

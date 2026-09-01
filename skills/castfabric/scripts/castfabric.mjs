@@ -107,15 +107,23 @@ export async function streamInput(server, targetId, input, stdin = false) {
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  for await (const chunk of ffmpeg.stdout) {
-    while (socket.bufferedAmount > 512 * 1024) {
-      await new Promise((accept) => setTimeout(accept, 10));
+  try {
+    for await (const chunk of ffmpeg.stdout) {
+      while (socket.bufferedAmount > 512 * 1024) {
+        await new Promise((accept) => setTimeout(accept, 10));
+      }
+      socket.send(chunk);
     }
-    socket.send(chunk);
+    const code = await new Promise((accept) => ffmpeg.once("close", accept));
+    if (!stopping && code !== 0) throw new Error(`FFMPEG_EXIT_${code}`);
+  } catch (error) {
+    await stop();
+    throw error;
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
+    socket.close();
   }
-  const code = await new Promise((accept) => ffmpeg.once("close", accept));
-  socket.close();
-  if (!stopping && code !== 0) throw new Error(`FFMPEG_EXIT_${code}`);
 }
 
 function parse(argv) {
@@ -133,10 +141,11 @@ function option(args, name) {
   return args[index + 1];
 }
 
-async function waitUntilStopped(server, target) {
+async function waitUntilStopped(server, target, stopRequested = () => false) {
   for (;;) {
+    if (stopRequested()) return false;
     const status = await mcpCall(server, "get_playback_status", { target_id: target });
-    if (["stopped", "failed"].includes(status.state)) return;
+    if (["stopped", "failed"].includes(status.state)) return true;
     await new Promise((accept) => setTimeout(accept, 1000));
   }
 }
@@ -164,14 +173,27 @@ async function runCli(argv) {
     const playlistPath = resolve(targetValue);
     const playlist = JSON.parse(await readFile(playlistPath, "utf8"));
     if (playlist.version !== 1 || !Array.isArray(playlist.items) || !playlist.items.length) throw new Error("INVALID_PLAYLIST");
-    do {
-      for (const item of playlist.items) {
-        if (item.type === "file") await playLocalFile(server, target, resolve(dirname(playlistPath), item.path));
-        else if (item.type === "url") await mcpCall(server, "play_url", { target_id: target, url: item.url });
-        else throw new Error("INVALID_PLAYLIST_ITEM");
-        await waitUntilStopped(server, target);
-      }
-    } while (args.includes("--loop"));
+    let interrupted = false;
+    const stopPlaylist = () => {
+      interrupted = true;
+      void mcpCall(server, "stop", { target_id: target }).catch(() => {});
+    };
+    process.once("SIGINT", stopPlaylist);
+    process.once("SIGTERM", stopPlaylist);
+    try {
+      do {
+        for (const item of playlist.items) {
+          if (interrupted) break;
+          if (item.type === "file") await playLocalFile(server, target, resolve(dirname(playlistPath), item.path));
+          else if (item.type === "url") await mcpCall(server, "play_url", { target_id: target, url: item.url });
+          else throw new Error("INVALID_PLAYLIST_ITEM");
+          await waitUntilStopped(server, target, () => interrupted);
+        }
+      } while (!interrupted && args.includes("--loop"));
+    } finally {
+      process.off("SIGINT", stopPlaylist);
+      process.off("SIGTERM", stopPlaylist);
+    }
     return;
   } else {
     throw new Error("Unknown command");
