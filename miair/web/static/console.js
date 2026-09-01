@@ -115,6 +115,10 @@
       'activity.miplay_pcm_forwarded': ['音频已送入实体输出', 'Audio reached the physical output'],
       'activity.miplay_output_failed': ['实体输出未建立', 'Physical output was not established'],
       'activity.miplay_output_stopped': ['实体输出已停止', 'Physical output stopped'],
+      'activity.agent_output_started': ['实体音响已开始拉取音频', 'Speaker started pulling Agent audio'],
+      'activity.agent_pcm_forwarded': ['实时音频已送入实体输出', 'Live Agent audio reached the physical output'],
+      'activity.agent_output_failed': ['Agent 实体输出未建立', 'Agent physical output was not established'],
+      'activity.agent_output_stopped': ['Agent 实体输出已停止', 'Agent physical output stopped'],
     };
     const pair = labels[event.summary_key];
     return pair ? pair[language === 'zh' ? 0 : 1] : event.type.replaceAll('.', ' · ');

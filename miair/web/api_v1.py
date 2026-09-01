@@ -510,9 +510,22 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
 
     async def get_playback_media(request):
         try:
-            media = app.media_store.resolve_media(request.match_info["media_token"])
+            media, first_pull = app.media_store.confirm_pull(
+                request.match_info["media_token"]
+            )
         except FilePlaybackError as exc:
             return _error(exc.code, f"error.{exc.code.lower()}", status=404)
+        if first_pull:
+            session = app.session_coordinator.current(media.target_id)
+            app.activity_journal.append(
+                target_id=media.target_id,
+                session_id=session.id if session else None,
+                protocol=IngressProtocol.MCP,
+                type="agent.output_started",
+                outcome=EventOutcome.SUCCESS,
+                summary_key="activity.agent_output_started",
+                details={"media_format": media.content_type},
+            )
         response = web.FileResponse(media.path)
         response.content_type = media.content_type
         return response

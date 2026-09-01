@@ -389,6 +389,13 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
         media_url = controller.play_url.await_args.args[0]
         fetched = await client.get(urlsplit(media_url).path)
         fetched_body = await fetched.read()
+        fetched_again = await client.get(urlsplit(media_url).path)
+        fetched_again_body = await fetched_again.read()
+        output_events = [
+            event
+            for event in app.activity_journal.query(target_id="uuid:living")
+            if event.type == "agent.output_started"
+        ]
     finally:
         await client.close()
         await app.media_store.close()
@@ -401,6 +408,12 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
     assert fetched.status == 200
     assert fetched.content_type == "audio/mpeg"
     assert fetched_body == b"abcdef"
+    assert fetched_again.status == 200
+    assert fetched_again_body == b"abcdef"
+    assert len(output_events) == 1
+    assert output_events[0].protocol is IngressProtocol.MCP
+    assert output_events[0].outcome is EventOutcome.SUCCESS
+    assert output_events[0].details == {"media_format": "audio/mpeg"}
     assert "notice.mp3" not in media_url
 
 

@@ -15,9 +15,10 @@ class FakeSink:
         self.start = AsyncMock()
         self.write = AsyncMock()
         self.stop = AsyncMock()
+        self.lifecycle_callback = None
 
 
-def _registry():
+def _registry(*, lifecycle_callback=None):
     controller = SimpleNamespace()
     target = OutputTargetConfig(id="uuid:living", name="Living")
     suites = ReceiverSuiteRegistry(device_name_prefix="CastFabric")
@@ -39,6 +40,7 @@ def _registry():
         playback,
         hostname="127.0.0.1",
         sink_factory=make_sink,
+        lifecycle_callback=lifecycle_callback,
         id_factory=lambda: "stream-token",
     )
     return registry, suite, sessions, sinks
@@ -64,6 +66,23 @@ async def test_fixed_pcm_stream_starts_sink_and_mcp_session():
         "sample_rate": 48000,
         "channels": 2,
     }
+
+
+@pytest.mark.asyncio
+async def test_pcm_sink_lifecycle_is_attributed_to_normalized_target():
+    lifecycle = AsyncMock()
+    registry, _suite, _sessions, sinks = _registry(
+        lifecycle_callback=lifecycle
+    )
+
+    await registry.create(
+        " UUID:LIVING ", sample_format="s16le", sample_rate=48000, channels=2
+    )
+    await sinks[0].lifecycle_callback("output_started", {"media_format": "wav"})
+
+    lifecycle.assert_awaited_once_with(
+        "uuid:living", "output_started", {"media_format": "wav"}
+    )
 
 
 @pytest.mark.asyncio

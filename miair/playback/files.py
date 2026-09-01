@@ -68,10 +68,12 @@ class EphemeralMediaStore:
         self._uploads: dict[str, PendingUpload] = {}
         self._media: dict[str, MediaFile] = {}
         self._media_expiry: dict[str, asyncio.TimerHandle] = {}
+        self._pulled_media: set[str] = set()
 
     def _expire_media_token(self, token: str) -> None:
         self._media_expiry.pop(token, None)
         media = self._media.pop(token, None)
+        self._pulled_media.discard(token)
         if media is not None:
             media.path.unlink(missing_ok=True)
 
@@ -186,6 +188,12 @@ class EphemeralMediaStore:
             raise FilePlaybackError("MEDIA_NOT_FOUND")
         return media
 
+    def confirm_pull(self, token: str) -> tuple[MediaFile, bool]:
+        media = self.resolve_media(token)
+        first_pull = token not in self._pulled_media
+        self._pulled_media.add(token)
+        return media, first_pull
+
     async def cleanup_target(self, target_id: str) -> None:
         tokens = [
             token for token, media in self._media.items() if media.target_id == target_id
@@ -194,6 +202,7 @@ class EphemeralMediaStore:
             handle = self._media_expiry.pop(token, None)
             if handle is not None:
                 handle.cancel()
+            self._pulled_media.discard(token)
             media = self._media.pop(token)
             media.path.unlink(missing_ok=True)
 
@@ -202,6 +211,7 @@ class EphemeralMediaStore:
         for handle in self._media_expiry.values():
             handle.cancel()
         self._media_expiry.clear()
+        self._pulled_media.clear()
         for media in self._media.values():
             media.path.unlink(missing_ok=True)
         self._media.clear()

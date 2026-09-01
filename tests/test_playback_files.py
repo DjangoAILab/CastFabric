@@ -49,6 +49,12 @@ async def test_one_time_upload_uses_opaque_paths_and_starts_existing_playback(tm
     media = store.resolve_media("media-secret-token")
     assert media.path.read_bytes() == b"abcdef"
     assert media.filename == "notice.mp3"
+    pulled, first_pull = store.confirm_pull("media-secret-token")
+    pulled_again, second_pull = store.confirm_pull("media-secret-token")
+    assert pulled is media
+    assert pulled_again is media
+    assert first_pull is True
+    assert second_pull is False
 
     with pytest.raises(FilePlaybackError) as replayed:
         await store.accept_upload(

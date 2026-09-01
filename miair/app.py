@@ -78,6 +78,7 @@ class CastFabric:
         self.pcm_streams = PcmStreamRegistry(
             self.playback_service,
             hostname=self.config.hostname,
+            lifecycle_callback=self._handle_agent_output_lifecycle,
         )
 
     @property
@@ -737,6 +738,36 @@ class CastFabric:
             type=f"miplay.{event}",
             outcome=outcome,
             summary_key=f"activity.miplay_{event}",
+            reason_code=details.get("reason") if failed else None,
+            details=details,
+        )
+
+    async def _handle_agent_output_lifecycle(
+        self,
+        target_id: str,
+        event: str,
+        details: dict,
+    ) -> None:
+        """Record verified output facts for live Agent PCM sessions."""
+        suite = self.suite_registry.get(target_id)
+        if suite is None:
+            return
+        suite.last_activity_at = datetime.now(timezone.utc)
+        failed = event == "output_failed"
+        outcome = (
+            EventOutcome.FAILED
+            if failed
+            else EventOutcome.SUCCESS
+            if event in {"output_started", "pcm_forwarded"}
+            else EventOutcome.INFO
+        )
+        self.activity_journal.append(
+            target_id=target_id,
+            session_id=suite.current_session_id,
+            protocol=IngressProtocol.MCP,
+            type=f"agent.{event}",
+            outcome=outcome,
+            summary_key=f"activity.agent_{event}",
             reason_code=details.get("reason") if failed else None,
             details=details,
         )

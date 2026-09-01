@@ -38,11 +38,13 @@ class PcmStreamRegistry:
         *,
         hostname: str,
         sink_factory: Callable = CastFabricLiveAudioSink,
+        lifecycle_callback: Callable | None = None,
         id_factory: Callable[[], str] = lambda: secrets.token_urlsafe(24),
     ):
         self.playback_service = playback_service
         self.hostname = hostname
         self.sink_factory = sink_factory
+        self.lifecycle_callback = lifecycle_callback
         self.id_factory = id_factory
         self._streams: dict[str, PcmStream] = {}
 
@@ -71,6 +73,12 @@ class PcmStreamRegistry:
         suite = self.playback_service.suite_registry.get(normalized)
         suite.current_session_id = session.id
         sink = self.sink_factory(self.hostname, controller)
+        if self.lifecycle_callback is not None and hasattr(sink, "lifecycle_callback"):
+            sink.lifecycle_callback = (
+                lambda event, details: self.lifecycle_callback(
+                    normalized, event, details
+                )
+            )
         stream_id = self.id_factory()
         stream = PcmStream(stream_id, normalized, session.id, sink)
         self._streams[stream_id] = stream
