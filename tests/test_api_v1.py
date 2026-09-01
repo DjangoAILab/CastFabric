@@ -100,6 +100,7 @@ async def test_system_targets_and_suites_match_safe_collection_contract(tmp_path
     assert "device.xml" not in payload
     assert targets["items"][0]["online"] is None
     assert all(item["configured"] is True for item in targets["items"])
+    assert set(system["suites"]["protocol_health"]) == {"dlna", "airplay", "miplay"}
 
 
 @pytest.mark.asyncio

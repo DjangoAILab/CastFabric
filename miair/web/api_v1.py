@@ -14,7 +14,12 @@ from miair.const import VERSION
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
 from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
-from miair.runtime.models import EventOutcome, IngressProtocol, SessionState
+from miair.runtime.models import (
+    EventOutcome,
+    IngressProtocol,
+    RECEIVER_PROTOCOLS,
+    SessionState,
+)
 from miair.runtime.redaction import project_location_host, redact_network_addresses
 from miair.targets import OutputTargetConfig, normalize_target_id
 
@@ -119,7 +124,7 @@ def _system_payload(config, app) -> dict[str, Any]:
     enabled = [suite for suite in suites if suite.target.enabled]
     attention = [suite for suite in enabled if suite.health != "healthy"]
     protocol_health = {}
-    for protocol in IngressProtocol:
+    for protocol in RECEIVER_PROTOCOLS:
         states = [
             ingress.state.value
             for suite in enabled

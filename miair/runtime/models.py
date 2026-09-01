@@ -20,6 +20,13 @@ class IngressProtocol(_ValueEnum):
     MCP = "mcp"
 
 
+RECEIVER_PROTOCOLS = (
+    IngressProtocol.DLNA,
+    IngressProtocol.AIRPLAY,
+    IngressProtocol.MIPLAY,
+)
+
+
 class IngressState(_ValueEnum):
     STOPPED = "stopped"
     STARTING = "starting"

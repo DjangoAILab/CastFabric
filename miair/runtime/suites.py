@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable
 
 from miair.runtime.models import (
     IngressProtocol,
+    RECEIVER_PROTOCOLS,
     IngressSnapshot,
     IngressState,
     OutputTargetSnapshot,
@@ -138,7 +139,7 @@ class ReceiverSuite:
         )
         ingress = tuple(
             self.ingress[protocol].snapshot()
-            for protocol in IngressProtocol
+            for protocol in RECEIVER_PROTOCOLS
             if protocol in self.ingress
         )
         return ReceiverSuiteSnapshot(
