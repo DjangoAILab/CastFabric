@@ -1,0 +1,4 @@
+interface:
+  display_name: "CastFabric"
+  short_description: "Play local and streamed audio on CastFabric speakers"
+  default_prompt: "Use $castfabric to list my speakers and play audio on the target I choose."
