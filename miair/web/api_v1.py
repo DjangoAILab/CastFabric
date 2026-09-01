@@ -12,7 +12,7 @@ from aiohttp import web
 
 from miair.const import VERSION
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
-from miair.playback import FilePlaybackError, PlaybackServiceError
+from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
 from miair.runtime.models import EventOutcome, IngressProtocol, SessionState
 from miair.runtime.redaction import project_location_host, redact_network_addresses
@@ -512,6 +512,69 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         response.content_type = media.content_type
         return response
 
+    async def create_pcm_stream(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if set(payload) != {
+            "target_id",
+            "sample_format",
+            "sample_rate",
+            "channels",
+        }:
+            return _error(
+                "UNSUPPORTED_PCM_FORMAT",
+                "error.unsupported_pcm_format",
+                status=400,
+            )
+        try:
+            result = await app.pcm_streams.create(
+                payload["target_id"],
+                sample_format=payload["sample_format"],
+                sample_rate=payload["sample_rate"],
+                channels=payload["channels"],
+            )
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        except PcmStreamError as exc:
+            return _error(exc.code, f"error.{exc.code.lower()}", status=400)
+        scheme = "wss" if request.scheme == "https" else "ws"
+        result["stream_url"] = (
+            f"{scheme}://{request.host}{result['stream_path']}"
+        )
+        return web.json_response(result, status=201)
+
+    async def write_pcm_stream(request):
+        stream_id = request.match_info["stream_id"]
+        try:
+            stream = app.pcm_streams.claim_writer(stream_id)
+        except PcmStreamError as exc:
+            status = 404 if exc.code == "STREAM_NOT_FOUND" else 409
+            return _error(exc.code, f"error.{exc.code.lower()}", status=status)
+        websocket = web.WebSocketResponse()
+        await websocket.prepare(request)
+        failed = False
+        try:
+            async for message in websocket:
+                if message.type is web.WSMsgType.BINARY:
+                    await app.pcm_streams.write(stream, message.data)
+                elif message.type is web.WSMsgType.TEXT:
+                    failed = True
+                    await websocket.close(
+                        code=web.WSCloseCode.UNSUPPORTED_DATA,
+                        message=b"binary PCM frames required",
+                    )
+                    break
+                elif message.type is web.WSMsgType.ERROR:
+                    failed = True
+                    break
+        except Exception:
+            failed = True
+            await websocket.close(code=web.WSCloseCode.INTERNAL_ERROR)
+        finally:
+            await app.pcm_streams.close(stream_id, failed=failed)
+        return websocket
+
     async def get_sessions(request):
         include_recent = request.query.get("include_recent", "false").lower() == "true"
         try:
@@ -767,6 +830,10 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     )
     web_app.router.add_get(
         "/api/v1/playback/media/{media_token}", get_playback_media
+    )
+    web_app.router.add_post("/api/v1/playback/streams", create_pcm_stream)
+    web_app.router.add_get(
+        "/api/v1/playback/streams/{stream_id}", write_pcm_stream
     )
     web_app.router.add_get("/api/v1/sessions", get_sessions)
     web_app.router.add_get("/api/v1/events", get_events)

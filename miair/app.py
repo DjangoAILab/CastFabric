@@ -32,7 +32,7 @@ from miair.runtime.models import (
 )
 from miair.runtime.sessions import MediaSessionCoordinator
 from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
-from miair.playback import EphemeralMediaStore, PlaybackService
+from miair.playback import EphemeralMediaStore, PcmStreamRegistry, PlaybackService
 
 log = logging.getLogger("miair")
 
@@ -75,6 +75,10 @@ class CastFabric:
             self.session_coordinator,
         )
         self.media_store = EphemeralMediaStore(self.playback_service)
+        self.pcm_streams = PcmStreamRegistry(
+            self.playback_service,
+            hostname=self.config.hostname,
+        )
 
     @property
     def miplay_receiver(self) -> MiPlayReceiver | None:
@@ -772,6 +776,7 @@ class CastFabric:
             self.airplay_manager = None
         # 先停止现有服务
         await self._stop_dlna_services()
+        await self.pcm_streams.close_all()
         await self.media_store.close()
         # 关闭并重新初始化 auth，确保账号切换生效
         await self.auth.close()

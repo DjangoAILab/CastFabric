@@ -379,6 +379,55 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
 
 
 @pytest.mark.asyncio
+async def test_pcm_websocket_forwards_binary_frames_and_closes_session(tmp_path):
+    config, app = _build_app(tmp_path)
+    stream = SimpleNamespace(id="stream-test")
+    app.pcm_streams = SimpleNamespace(
+        create=AsyncMock(
+            return_value={
+                "ok": True,
+                "target_id": "uuid:living",
+                "session_id": "session-test",
+                "stream_id": "stream-test",
+                "stream_path": "/api/v1/playback/streams/stream-test",
+                "format": {
+                    "sample_format": "s16le",
+                    "sample_rate": 48000,
+                    "channels": 2,
+                },
+            }
+        ),
+        claim_writer=lambda _stream_id: stream,
+        write=AsyncMock(),
+        close=AsyncMock(),
+    )
+    client = await _client(config, app)
+    try:
+        created = await client.post(
+            "/api/v1/playback/streams",
+            json={
+                "target_id": "uuid:living",
+                "sample_format": "s16le",
+                "sample_rate": 48000,
+                "channels": 2,
+            },
+        )
+        created_payload = await created.json()
+        websocket = await client.ws_connect(created_payload["stream_path"])
+        await websocket.send_bytes(b"\x01\x02\x03\x04")
+        await websocket.close()
+    finally:
+        await client.close()
+
+    assert created.status == 201
+    assert created_payload["stream_url"].startswith("ws://")
+    app.pcm_streams.write.assert_awaited_once_with(
+        stream, b"\x01\x02\x03\x04"
+    )
+    app.pcm_streams.close.assert_awaited_once_with("stream-test", failed=False)
+
+
+@pytest.mark.asyncio
 async def test_settings_never_return_credentials_and_reject_unknown_fields(tmp_path):
     config, app = _build_app(tmp_path)
     client = await _client(config, app)
