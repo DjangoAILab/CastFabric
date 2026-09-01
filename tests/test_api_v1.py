@@ -44,7 +44,15 @@ def _build_app(tmp_path):
     )
     app = CastFabric(config)
     for target_id, target in targets.items():
-        controller = SimpleNamespace(target_id=target_id, local_dlna=None)
+        controller = SimpleNamespace(
+            target_id=target_id,
+            local_dlna=None,
+            play_url=AsyncMock(return_value=True),
+            pause=AsyncMock(return_value=True),
+            stop=AsyncMock(return_value=True),
+            set_volume=AsyncMock(return_value=True),
+            get_status=AsyncMock(return_value={"status": 1, "volume": 20}),
+        )
         app.suite_registry.register(target, target_id, controller)
         app.suite_registry.set_ingress(
             target_id,
@@ -257,6 +265,78 @@ async def test_target_patch_rolls_back_fields_when_suite_transition_fails(tmp_pa
     target = config.get_target("uuid:living")
     assert target.name == "Living"
     assert target.enabled is True
+
+
+@pytest.mark.asyncio
+async def test_playback_url_and_controls_use_the_shared_application_service(tmp_path):
+    config, app = _build_app(tmp_path)
+    controller = app.suite_registry.get("uuid:living").controller
+    client = await _client(config, app)
+    try:
+        played = await client.post(
+            "/api/v1/playback/url",
+            json={
+                "target_id": "UUID:Living",
+                "url": "https://media.example.test/notice.mp3?token=secret",
+                "media_format": "audio/mpeg",
+            },
+        )
+        status = await client.get("/api/v1/playback/uuid:living")
+        paused = await client.post("/api/v1/playback/uuid:living/pause")
+        volume = await client.post(
+            "/api/v1/playback/uuid:living/volume", json={"volume": 38}
+        )
+        stopped = await client.post("/api/v1/playback/uuid:living/stop")
+        played_payload = await played.json()
+        status_payload = await status.json()
+        paused_payload = await paused.json()
+        volume_payload = await volume.json()
+        stopped_payload = await stopped.json()
+    finally:
+        await client.close()
+
+    assert played.status == 200
+    assert played_payload["state"] == "playing"
+    assert status_payload == {
+        "ok": True,
+        "target_id": "uuid:living",
+        "state": "playing",
+        "volume": 20,
+    }
+    assert paused_payload["state"] == "paused"
+    assert volume_payload["volume"] == 38
+    assert stopped_payload["state"] == "stopped"
+    controller.play_url.assert_awaited_once_with(
+        "https://media.example.test/notice.mp3?token=secret", play_type=2
+    )
+
+
+@pytest.mark.asyncio
+async def test_playback_routes_reject_invalid_input_with_stable_safe_errors(tmp_path):
+    config, app = _build_app(tmp_path)
+    client = await _client(config, app)
+    try:
+        bad_url = await client.post(
+            "/api/v1/playback/url",
+            json={"target_id": "uuid:living", "url": "file:///private/audio.mp3"},
+        )
+        missing = await client.get("/api/v1/playback/uuid:missing")
+        bad_volume = await client.post(
+            "/api/v1/playback/uuid:living/volume", json={"volume": "loud"}
+        )
+        bad_url_payload = await bad_url.json()
+        missing_payload = await missing.json()
+        bad_volume_payload = await bad_volume.json()
+    finally:
+        await client.close()
+
+    assert bad_url.status == 400
+    assert bad_url_payload["error"]["code"] == "INVALID_URL"
+    assert missing.status == 404
+    assert missing_payload["error"]["code"] == "TARGET_NOT_FOUND"
+    assert bad_volume.status == 400
+    assert bad_volume_payload["error"]["code"] == "INVALID_VOLUME"
+    assert "private" not in json.dumps(bad_volume_payload).lower()
 
 
 @pytest.mark.asyncio

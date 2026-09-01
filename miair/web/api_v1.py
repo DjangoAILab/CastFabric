@@ -6,11 +6,13 @@ import io
 import json
 import zipfile
 from typing import Any
+from urllib.parse import urlsplit
 
 from aiohttp import web
 
 from miair.const import VERSION
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
+from miair.playback import PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
 from miair.runtime.models import EventOutcome, IngressProtocol, SessionState
 from miair.runtime.redaction import project_location_host, redact_network_addresses
@@ -225,6 +227,19 @@ async def _json_object(request: web.Request) -> dict[str, Any] | web.Response:
 
 
 def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
+    def playback_error(exc: PlaybackServiceError) -> web.Response:
+        status = {
+            "TARGET_NOT_FOUND": 404,
+            "TARGET_DISABLED": 409,
+            "TARGET_COMMAND_FAILED": 502,
+        }.get(exc.code, 500)
+        return _error(
+            exc.code,
+            f"error.{exc.code.lower()}",
+            status=status,
+            details={"target_id": exc.target_id},
+        )
+
     async def get_system(request):
         return web.json_response(_system_payload(config, app))
 
@@ -367,6 +382,89 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         return web.json_response(
             {"items": [suite.to_dict() for suite in app.suite_registry.snapshots()]}
         )
+
+    async def play_url(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        allowed = {"target_id", "url", "media_format"}
+        unknown = sorted(set(payload) - allowed)
+        if unknown:
+            return _error(
+                "FIELD_NOT_ALLOWED",
+                "error.field_not_allowed",
+                status=400,
+                details={"fields": unknown},
+            )
+        target_id = normalize_target_id(payload.get("target_id"))
+        url = payload.get("url")
+        if not target_id:
+            return _error("INVALID_TARGET_ID", "error.invalid_target_id", status=400)
+        if not isinstance(url, str):
+            return _error("INVALID_URL", "error.invalid_url", status=400)
+        parsed = urlsplit(url.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return _error("INVALID_URL", "error.invalid_url", status=400)
+        media_format = payload.get("media_format")
+        if media_format is not None and not isinstance(media_format, str):
+            return _error(
+                "INVALID_MEDIA_FORMAT",
+                "error.invalid_media_format",
+                status=400,
+            )
+        try:
+            result = await app.playback_service.play_url(
+                target_id,
+                url.strip(),
+                media_format=media_format.strip() if media_format else None,
+            )
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def playback_status(request):
+        try:
+            result = await app.playback_service.get_status(
+                request.match_info["target_id"]
+            )
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def pause_playback(request):
+        try:
+            result = await app.playback_service.pause(request.match_info["target_id"])
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def stop_playback(request):
+        try:
+            result = await app.playback_service.stop(request.match_info["target_id"])
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def set_playback_volume(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if set(payload) != {"volume"} or isinstance(payload.get("volume"), bool):
+            return _error("INVALID_VOLUME", "error.invalid_volume", status=400)
+        try:
+            volume = int(payload["volume"])
+        except (TypeError, ValueError):
+            return _error("INVALID_VOLUME", "error.invalid_volume", status=400)
+        if volume < 0 or volume > 100:
+            return _error("INVALID_VOLUME", "error.invalid_volume", status=400)
+        try:
+            result = await app.playback_service.set_volume(
+                request.match_info["target_id"],
+                volume,
+            )
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
 
     async def get_sessions(request):
         include_recent = request.query.get("include_recent", "false").lower() == "true"
@@ -606,6 +704,17 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     web_app.router.add_post("/api/v1/targets/scan", scan_targets)
     web_app.router.add_patch("/api/v1/targets/{target_id:.+}", patch_target)
     web_app.router.add_get("/api/v1/suites", get_suites)
+    web_app.router.add_post("/api/v1/playback/url", play_url)
+    web_app.router.add_get("/api/v1/playback/{target_id:.+}", playback_status)
+    web_app.router.add_post(
+        "/api/v1/playback/{target_id:.+}/pause", pause_playback
+    )
+    web_app.router.add_post(
+        "/api/v1/playback/{target_id:.+}/stop", stop_playback
+    )
+    web_app.router.add_post(
+        "/api/v1/playback/{target_id:.+}/volume", set_playback_volume
+    )
     web_app.router.add_get("/api/v1/sessions", get_sessions)
     web_app.router.add_get("/api/v1/events", get_events)
     web_app.router.add_get("/api/v1/events/{event_id}", get_event)
