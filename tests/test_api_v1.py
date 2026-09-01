@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
@@ -337,6 +338,44 @@ async def test_playback_routes_reject_invalid_input_with_stable_safe_errors(tmp_
     assert bad_volume.status == 400
     assert bad_volume_payload["error"]["code"] == "INVALID_VOLUME"
     assert "private" not in json.dumps(bad_volume_payload).lower()
+
+
+@pytest.mark.asyncio
+async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_path):
+    config, app = _build_app(tmp_path)
+    controller = app.suite_registry.get("uuid:living").controller
+    client = await _client(config, app)
+    try:
+        created = await client.post(
+            "/api/v1/playback/files",
+            json={
+                "target_id": "uuid:living",
+                "filename": "../notice.mp3",
+                "content_type": "audio/mpeg",
+                "size_bytes": 6,
+            },
+        )
+        transaction = await created.json()
+        uploaded = await client.put(transaction["upload_path"], data=b"abcdef")
+        uploaded_payload = await uploaded.json()
+        replayed = await client.put(transaction["upload_path"], data=b"abcdef")
+        replayed_payload = await replayed.json()
+        media_url = controller.play_url.await_args.args[0]
+        fetched = await client.get(urlsplit(media_url).path)
+        fetched_body = await fetched.read()
+    finally:
+        await client.close()
+        await app.media_store.close()
+
+    assert created.status == 201
+    assert uploaded.status == 200
+    assert uploaded_payload["state"] == "playing"
+    assert replayed.status == 404
+    assert replayed_payload["error"]["code"] == "UPLOAD_NOT_FOUND"
+    assert fetched.status == 200
+    assert fetched.content_type == "audio/mpeg"
+    assert fetched_body == b"abcdef"
+    assert "notice.mp3" not in media_url
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ from aiohttp import web
 
 from miair.const import VERSION
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
-from miair.playback import PlaybackServiceError
+from miair.playback import FilePlaybackError, PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
 from miair.runtime.models import EventOutcome, IngressProtocol, SessionState
 from miair.runtime.redaction import project_location_host, redact_network_addresses
@@ -466,6 +466,52 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             return playback_error(exc)
         return web.json_response(result)
 
+    async def create_file_upload(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if set(payload) != {"target_id", "filename", "content_type", "size_bytes"}:
+            return _error("INVALID_FILE", "error.invalid_file", status=400)
+        try:
+            transaction = app.media_store.create_upload(
+                payload["target_id"],
+                payload["filename"],
+                payload["content_type"],
+                payload["size_bytes"],
+            )
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        except FilePlaybackError as exc:
+            return _error(exc.code, f"error.{exc.code.lower()}", status=400)
+        transaction["upload_url"] = (
+            f"{request.scheme}://{request.host}{transaction['upload_path']}"
+        )
+        return web.json_response(transaction, status=201)
+
+    async def upload_file(request):
+        upload_id = request.match_info["upload_id"]
+        try:
+            result = await app.media_store.accept_upload(
+                upload_id,
+                request.content.iter_chunked(64 * 1024),
+                origin=f"{request.scheme}://{request.host}",
+            )
+        except FilePlaybackError as exc:
+            status = 404 if exc.code in {"UPLOAD_NOT_FOUND", "MEDIA_NOT_FOUND"} else 400
+            return _error(exc.code, f"error.{exc.code.lower()}", status=status)
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def get_playback_media(request):
+        try:
+            media = app.media_store.resolve_media(request.match_info["media_token"])
+        except FilePlaybackError as exc:
+            return _error(exc.code, f"error.{exc.code.lower()}", status=404)
+        response = web.FileResponse(media.path)
+        response.content_type = media.content_type
+        return response
+
     async def get_sessions(request):
         include_recent = request.query.get("include_recent", "false").lower() == "true"
         try:
@@ -714,6 +760,13 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     )
     web_app.router.add_post(
         "/api/v1/playback/{target_id:.+}/volume", set_playback_volume
+    )
+    web_app.router.add_post("/api/v1/playback/files", create_file_upload)
+    web_app.router.add_put(
+        "/api/v1/playback/files/{upload_id}", upload_file
+    )
+    web_app.router.add_get(
+        "/api/v1/playback/media/{media_token}", get_playback_media
     )
     web_app.router.add_get("/api/v1/sessions", get_sessions)
     web_app.router.add_get("/api/v1/events", get_events)
