@@ -17,6 +17,7 @@ class IngressProtocol(_ValueEnum):
     DLNA = "dlna"
     AIRPLAY = "airplay"
     MIPLAY = "miplay"
+    MCP = "mcp"
 
 
 class IngressState(_ValueEnum):

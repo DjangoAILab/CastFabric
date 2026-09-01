@@ -32,6 +32,7 @@ from miair.runtime.models import (
 )
 from miair.runtime.sessions import MediaSessionCoordinator
 from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
+from miair.playback import PlaybackService
 
 log = logging.getLogger("miair")
 
@@ -68,6 +69,10 @@ class CastFabric:
         )
         self.discovery_registry = TargetDiscoveryRegistry(
             self._discover_output_targets
+        )
+        self.playback_service = PlaybackService(
+            self.suite_registry,
+            self.session_coordinator,
         )
 
     @property
