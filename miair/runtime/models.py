@@ -53,6 +53,7 @@ class OutputTargetSnapshot:
     name: str
     receiver_alias: str
     location_host: str
+    configured: bool
     enabled: bool
     online: bool | None = None
     observed_at: datetime | None = None
@@ -65,6 +66,7 @@ class OutputTargetSnapshot:
             "name": self.name,
             "receiver_alias": self.receiver_alias,
             "location_host": self.location_host,
+            "configured": self.configured,
             "enabled": self.enabled,
             "online": self.online,
             "observed_at": _iso(self.observed_at),

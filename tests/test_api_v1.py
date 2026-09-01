@@ -89,6 +89,37 @@ async def test_system_targets_and_suites_match_safe_collection_contract(tmp_path
     assert "private-" not in payload
     assert "device.xml" not in payload
     assert targets["items"][0]["online"] is None
+    assert all(item["configured"] is True for item in targets["items"])
+
+
+@pytest.mark.asyncio
+async def test_discovered_only_target_is_explicitly_unconfigured(tmp_path):
+    config, app = _build_app(tmp_path)
+
+    async def discover():
+        return [
+            DiscoveredDLNATarget(
+                id="uuid:unconfigured",
+                name="New speaker",
+                location="http://192.168.133.99/device.xml",
+                services={"urn:avtransport": "/control"},
+            )
+        ]
+
+    app.discovery_registry._discover = discover
+    await app.discovery_registry.scan()
+    client = await _client(config, app)
+    try:
+        payload = await (await client.get("/api/v1/targets")).json()
+    finally:
+        await client.close()
+
+    item = next(
+        item for item in payload["items"] if item["id"] == "uuid:unconfigured"
+    )
+    assert item["configured"] is False
+    assert item["enabled"] is False
+    assert item["online"] is True
 
 
 @pytest.mark.asyncio

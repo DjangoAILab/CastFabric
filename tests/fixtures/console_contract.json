@@ -5,7 +5,7 @@
     "observability", "extensions"
   ],
   "target": [
-    "id", "kind", "name", "receiver_alias", "location_host",
+    "id", "kind", "name", "receiver_alias", "location_host", "configured",
     "enabled", "online", "observed_at", "capabilities", "suite_health"
   ],
   "suite": [

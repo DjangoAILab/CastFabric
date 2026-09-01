@@ -130,6 +130,7 @@ class ReceiverSuite:
             name=self.target.name,
             receiver_alias=self.target.get_receiver_alias(self.device_name_prefix),
             location_host=project_location_host(self.target.location),
+            configured=True,
             enabled=self.target.enabled,
             online=self.online,
             observed_at=self.observed_at,

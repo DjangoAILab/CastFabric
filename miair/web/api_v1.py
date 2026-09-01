@@ -95,6 +95,7 @@ def _target_item(config, app, target_id: str) -> dict[str, Any] | None:
         "name": name,
         "receiver_alias": alias,
         "location_host": project_location_host(location),
+        "configured": target is not None,
         "enabled": enabled,
         "online": online,
         "observed_at": observed_at.isoformat() if observed_at else None,
