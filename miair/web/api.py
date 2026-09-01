@@ -720,6 +720,12 @@ def create_web_app(config: Config, app_instance) -> web.Application:
     web_app.router.add_get("/api/miplay/status", handle_miplay_status)
     web_app.router.add_post("/api/update", handle_execute_update)
     setup_api_v1_routes(web_app, config, app_instance)
+    from miair.mcp import EmbeddedMcpEndpoint
+
+    mcp_endpoint = EmbeddedMcpEndpoint(app_instance, config)
+    app_instance.mcp_endpoint = mcp_endpoint
+    web_app.cleanup_ctx.append(mcp_endpoint.lifecycle)
+    web_app.router.add_route("*", "/mcp", mcp_endpoint.handle)
 
     # 静态文件
     import os
