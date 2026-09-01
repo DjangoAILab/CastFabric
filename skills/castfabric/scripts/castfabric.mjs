@@ -145,13 +145,14 @@ async function runCli(argv) {
   const { server, args } = parse(argv);
   const command = args[0];
   const target = args.includes("--target") ? option(args, "--target") : null;
+  const targetValue = target ? args[args.indexOf("--target") + 2] : null;
   let result;
   if (command === "outputs") {
     result = await mcpCall(server, args[1] === "scan" ? "scan_outputs" : "list_outputs");
   } else if (command === "play-url") {
-    result = await mcpCall(server, "play_url", { target_id: target, url: args.at(-1) });
+    result = await mcpCall(server, "play_url", { target_id: target, url: targetValue });
   } else if (command === "play-file") {
-    result = await playLocalFile(server, target, args.at(-1));
+    result = await playLocalFile(server, target, targetValue);
   } else if (command === "stream") {
     await streamInput(server, target, args.includes("--stdin") ? null : option(args, "--input"), args.includes("--stdin"));
     return;
@@ -160,7 +161,7 @@ async function runCli(argv) {
   } else if (command === "volume") {
     result = await mcpCall(server, "set_volume", { target_id: target, volume: Number(args.at(-1)) });
   } else if (command === "playlist") {
-    const playlistPath = resolve(args.at(-1));
+    const playlistPath = resolve(targetValue);
     const playlist = JSON.parse(await readFile(playlistPath, "utf8"));
     if (playlist.version !== 1 || !Array.isArray(playlist.items) || !playlist.items.length) throw new Error("INVALID_PLAYLIST");
     do {
