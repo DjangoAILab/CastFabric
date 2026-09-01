@@ -332,9 +332,89 @@
   }
 
   function renderAll() {
-    renderNumbers(); renderHome(); renderSpeakers(); renderEvents(); renderSettings();
+    renderNumbers(); renderHome(); renderSpeakers(); renderEvents(); renderSettings(); renderAI();
     if (state.selectedTargetId) renderSpeakerDrawer();
   }
+
+  const aiState = {client: 'codex'};
+
+  function aiEndpoint() {
+    const origin = window.location.origin;
+    if (!/^https?:\/\//.test(origin)) return '';
+    return `${origin.replace(/\/$/, '')}/mcp`;
+  }
+
+  function aiCommand(client = aiState.client) {
+    const endpoint = aiEndpoint();
+    if (!endpoint) return language === 'zh' ? '请通过 CastFabric 的 HTTP 地址打开控制台' : 'Open the console from the CastFabric HTTP origin';
+    if (client === 'claude') return `claude mcp add --transport http castfabric ${endpoint}`;
+    if (client === 'generic') return JSON.stringify({
+      mcpServers: {castfabric: {type: 'http', url: endpoint}}
+    }, null, 2);
+    return `codex mcp add castfabric --url ${endpoint}`;
+  }
+
+  function aiVerifyPrompt() {
+    return language === 'zh'
+      ? '连接 CastFabric MCP，先调用 list_outputs 列出所有可输出音响，但不要播放声音。若尚未安装 CastFabric Agent Skill，请从当前仓库的 skills/castfabric 安装；本地文件、实时 PCM 或播放列表优先按 Skill 的说明调用。'
+      : 'Connect to the CastFabric MCP and call list_outputs to list every output speaker without playing audio. If the CastFabric Agent Skill is not installed, install it from skills/castfabric in this repository; follow the Skill for local files, live PCM, and playlists.';
+  }
+
+  function renderAI() {
+    const page = document.getElementById('page-ai');
+    if (!page) return;
+    const endpoint = aiEndpoint();
+    page.querySelector('[data-ai-endpoint]').textContent = endpoint || '—';
+    page.querySelector('[data-ai-command]').textContent = aiCommand();
+    const label = page.querySelector('[data-ai-command-label]');
+    label.textContent = t(aiState.client === 'generic' ? 'configSnippet' : 'runCommand');
+    const status = page.querySelector('[data-ai-endpoint-state]');
+    const statusKey = state.loading ? 'aiLoading' : state.error || !endpoint ? 'aiUnavailable' : 'aiReady';
+    status.textContent = t(statusKey);
+    status.classList.toggle('off', statusKey === 'aiUnavailable');
+    page.querySelectorAll('[data-copy-target="endpoint"],[data-copy-target="command"]').forEach(button => {
+      button.disabled = !endpoint;
+    });
+  }
+
+  async function copyAIText(kind) {
+    const value = kind === 'endpoint' ? aiEndpoint() : kind === 'verify' ? aiVerifyPrompt() : aiCommand();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(value);
+      copied = true;
+    } catch (_error) {
+      const input = document.createElement('textarea');
+      input.value = value; input.setAttribute('readonly', '');
+      input.style.position = 'fixed'; input.style.opacity = '0';
+      document.body.appendChild(input); input.select();
+      copied = document.execCommand('copy'); input.remove();
+    }
+    const region = document.querySelector('[data-ai-copy-status]');
+    region.textContent = t(copied ? 'copied' : 'copyFailed');
+    toast(copied ? 'copied' : 'copyFailed');
+  }
+
+  document.querySelectorAll('[data-ai-client]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      aiState.client = tab.dataset.aiClient;
+      document.querySelectorAll('[data-ai-client]').forEach(item => {
+        item.setAttribute('aria-selected', String(item === tab));
+        item.tabIndex = item === tab ? 0 : -1;
+      });
+      renderAI();
+    });
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = [...document.querySelectorAll('[data-ai-client]')];
+      const destination = event.key === 'Home' ? tabs[0]
+        : event.key === 'End' ? tabs[tabs.length - 1]
+        : tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      destination.focus();
+    });
+  });
+  document.querySelectorAll('[data-copy-target]').forEach(button => button.addEventListener('click', () => copyAIText(button.dataset.copyTarget)));
 
   async function loadAll({quiet = false} = {}) {
     if (!quiet) {
@@ -464,6 +544,7 @@
   translations.networkInterface = translations.addressOnly;
   translations.networkInterfaceHelp = ['CastFabric 发布和扫描使用的局域网地址', 'LAN address used for CastFabric advertising and discovery'];
   translations.restartNote = ['部分配置需要重启 CastFabric 后才会生效；重启会中断当前声路。', 'Some settings require a CastFabric restart, which interrupts active routes.'];
+  renderAI();
   translate();
   localStorage.getItem('castfabric.language') === 'en' && applyLanguage('en');
   document.getElementById('languageButton').addEventListener('click', () => localStorage.setItem('castfabric.language', language));

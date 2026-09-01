@@ -62,3 +62,35 @@ def test_console_has_language_persistence_and_mobile_overflow_rules():
     assert "@media(max-width:980px)" in HTML
     assert "overflow-y:auto" in HTML
     assert "prefers-reduced-motion:reduce" in HTML
+
+
+def test_ai_access_is_a_bilingual_fourth_page_with_one_origin_mcp_setup():
+    assert 'data-page-target="ai"' in HTML
+    assert 'id="page-ai"' in HTML
+    assert "aiAccess:['AI 接入','AI Access']" in HTML
+    assert "samePortTitle:['控制台与 MCP 共用端口','Console and MCP share one port']" in HTML
+    assert "`${origin.replace(/\\/$/, '')}/mcp`" in JS
+    assert "codex mcp add castfabric --url ${endpoint}" in JS
+    assert "claude mcp add --transport http castfabric ${endpoint}" in JS
+    assert "MCP 端口" not in HTML
+    assert "MCP port" not in HTML
+
+
+def test_ai_access_exposes_only_implemented_capabilities_and_safe_onboarding():
+    for capability in ("list_outputs", "本地文件", "实时 PCM", "播放列表"):
+        assert capability in JS
+    assert "支持 URL、本地文件与实时 PCM" in HTML
+    assert "查询状态、暂停、停止并调整音量" in HTML
+    assert "不要播放声音" in JS
+    assert "不应把 MCP 地址直接暴露到公网" in HTML
+    assert "TTS" not in HTML
+
+
+def test_ai_access_has_keyboard_tabs_copy_feedback_and_responsive_layout():
+    assert 'role="tablist"' in HTML
+    assert 'role="tabpanel"' in HTML
+    assert "['ArrowLeft', 'ArrowRight', 'Home', 'End']" in JS
+    assert "navigator.clipboard.writeText" in JS
+    assert 'aria-live="polite"' in HTML
+    assert ".ai-layout{height:calc(100% - 94px)" in CSS
+    assert "@media(max-width:980px){.ai-page{overflow:auto}" in CSS

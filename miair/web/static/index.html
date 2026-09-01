@@ -90,6 +90,7 @@
         <button class="active" data-page-target="home" data-action="navigate.page" data-i18n="overview">总览</button>
         <button data-page-target="speakers" data-action="navigate.page" data-i18n="speakers">音响</button>
         <button data-page-target="activity" data-action="navigate.page" data-i18n="activity">活动</button>
+        <button data-page-target="ai" data-action="navigate.page" data-i18n="aiAccess">AI 接入</button>
       </nav>
       <div class="header-actions"><button class="language-button" id="languageButton" aria-label="切换语言" data-i18n-aria="switchLanguage">EN</button><button class="connection-button" data-open-settings="discovery" data-i18n="connections">连接配置</button></div>
     </header>
@@ -135,6 +136,41 @@
         <div class="state-panel state-loading"><div><div class="skeleton-line"></div><div style="height:12px"></div><div class="skeleton-line"></div><p data-i18n="loadingActivity">正在读取最近活动。</p></div></div>
         <div class="state-panel state-error"><div><strong data-i18n="activityUnavailableTitle">活动记录暂时不可用</strong><p data-i18n="activityUnavailableBody">音频接收不受影响；可以导出脱敏诊断继续排查。</p><button class="secondary-button" data-action="diagnostics.export" data-i18n="exportDiagnostics">导出诊断</button></div></div>
       </section>
+
+      <section class="page workspace-page ai-page" id="page-ai">
+        <div class="page-head ai-page-head"><div><p class="eyebrow">AGENT AUDIO BRIDGE</p><h1 data-i18n="aiAccessTitle">让 AI 开口播放</h1><p data-i18n="aiAccessIntro">复用 CastFabric 已有声路，把发现、播放与控制能力直接交给局域网内的 Agent。</p></div><span class="status-chip ai-endpoint-state" data-ai-endpoint-state data-i18n="aiReady">MCP 已就绪</span></div>
+        <div class="ai-layout">
+          <section class="ai-overview-card" aria-labelledby="aiCapabilityTitle">
+            <div class="ai-card-heading"><span class="ai-orbit" aria-hidden="true"><i></i></span><div><span data-i18n="sameService">同一个服务</span><strong id="aiCapabilityTitle" data-i18n="samePortTitle">控制台与 MCP 共用端口</strong></div></div>
+            <p data-i18n="samePortBody">不增加容器、进程或运维端口。Agent 连接当前 CastFabric 地址下的 /mcp 即可。</p>
+            <div class="ai-endpoint-row"><span data-i18n="endpoint">接入地址</span><code data-ai-endpoint>http://localhost/mcp</code><button class="copy-icon" type="button" data-copy-target="endpoint" data-i18n-aria="copyEndpoint" aria-label="复制接入地址">⧉</button></div>
+            <div class="ai-capability-list">
+              <article><span class="capability-mark">01</span><div><strong data-i18n="manageOutputs">发现与管理音响</strong><p data-i18n="manageOutputsBody">列出、扫描并启停每台实体输出。</p></div></article>
+              <article><span class="capability-mark">02</span><div><strong data-i18n="playAudio">播放三类音频</strong><p data-i18n="playAudioBody">支持 URL、本地文件与实时 PCM。</p></div></article>
+              <article><span class="capability-mark">03</span><div><strong data-i18n="controlPlayback">控制当前播放</strong><p data-i18n="controlPlaybackBody">查询状态、暂停、停止并调整音量。</p></div></article>
+            </div>
+          </section>
+
+          <section class="ai-setup-card" aria-labelledby="aiSetupTitle">
+            <div class="ai-card-title"><div><span data-i18n="connectAgent">连接 Agent</span><h2 id="aiSetupTitle" data-i18n="chooseClient">选择你正在使用的客户端</h2></div><span class="ai-local-badge" data-i18n="trustedLan">可信局域网</span></div>
+            <div class="ai-tabs" role="tablist" aria-label="Agent 客户端" data-i18n-aria="agentClients">
+              <button type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="ai-command-panel" data-ai-client="codex">Codex</button>
+              <button type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="ai-command-panel" data-ai-client="claude">Claude Code</button>
+              <button type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="ai-command-panel" data-ai-client="generic" data-i18n="genericClient">通用配置</button>
+            </div>
+            <div class="ai-command-panel" id="ai-command-panel" role="tabpanel" tabindex="0">
+              <div class="code-meta"><span data-ai-command-label data-i18n="runCommand">在终端运行</span><button type="button" data-copy-target="command" data-i18n="copyCommand">复制命令</button></div>
+              <pre><code data-ai-command></code></pre>
+            </div>
+            <p class="ai-security-note"><span aria-hidden="true">●</span><span data-i18n="lanSecurityNote">当前版本面向可信局域网，不应把 MCP 地址直接暴露到公网。</span></p>
+            <div class="ai-skill-card">
+              <div><span data-i18n="agentSkill">CASTFABRIC AGENT SKILL</span><strong data-i18n="skillTitle">让文件、PCM 与播放列表更容易调用</strong><p data-i18n="skillBody">MCP 保持轻量；Skill 负责本地文件处理、实时转码和顺序或循环播放。</p></div>
+              <button class="secondary-button" type="button" data-copy-target="verify" data-i18n="copyVerifyPrompt">复制验证提示词</button>
+            </div>
+          </section>
+        </div>
+        <div class="ai-live-region" role="status" aria-live="polite" data-ai-copy-status></div>
+      </section>
     </main>
   </div>
 
@@ -163,6 +199,9 @@
       discovery:['局域网发现','LAN discovery'],receiverIdentity:['接收入口','Receiver identity'],playbackDefaults:['播放默认值','Playback defaults'],networkPorts:['网络与端口','Network and ports'],extensions:['可选扩展','Optional extensions'],system:['系统','System'],localOnly:['仅在局域网内管理','Managed on the local network only'],discoveryIntro:['扫描标准 DLNA MediaRenderer。扫描期间保留现有音响，不会让投放入口闪空。','Scan for standard DLNA MediaRenderers. Existing speakers remain available during the scan.'],scanStatus:['扫描状态','Scan status'],networkInterface:['局域网接口','LAN interface'],networkInterfaceHelp:['CastFabric 发布和扫描使用的接口','Interface used for advertising and discovery'],lastScan:['最近扫描','Last scan'],justNow:['刚刚 · 发现 7 台','Just now · 7 found'],discoveryHealth:['发现服务','Discovery service'],running:['运行中','Running'],scanResults:['本次扫描','Latest scan'],configured:['已配置','Configured'],configuredAddress:['— · 已配置','— · Configured'],newAddress:['— · 新发现','— · Newly found'],enable:['启用','Enable'],scanAgain:['重新扫描','Scan again'],identityIntro:['所有协议共享同一名称规则；每台音响仍拥有独立入口。','All protocols share one naming rule; every speaker still has independent receivers.'],defaultPrefix:['默认名称前缀','Default name prefix'],defaultPrefixHelp:['与音响名称组合后出现在投放列表','Combined with the speaker name in casting lists'],namePreview:['名称预览','Name preview'],protocolHealth:['接收协议健康','Receiver protocol health'],perSpeakerEdit:['单台音响的入口名称在音响详情中编辑。','Edit a speaker-specific receiver name from its details.'],playbackIntro:['这些默认值作用于新会话，不会改变手机 App 自己的播放内容。','These defaults apply to new sessions and do not change content in the sender app.'],followVolume:['跟随音响当前音量','Follow current speaker volume'],followVolumeHelp:['连接时读取实体音响音量','Read physical speaker volume on connect'],defaultVolume:['默认音量','Default volume'],defaultVolumeHelp:['仅在不跟随设备时使用','Used only when device volume is not followed'],autoResume:['被语音打断后尝试续播','Try to resume after voice interruption'],experimental:['实验性能力','Experimental'],resumeDelay:['续播等待时间','Resume delay'],networkIntro:['仅在端口冲突或多实例部署时修改。保存后需要重启服务。','Change only for port conflicts or multi-instance deployments. Saving requires a restart.'],webPort:['Web 管理端口','Web management port'],dlnaPort:['DLNA HTTP 端口','DLNA HTTP port'],miplayPort:['MiPlay 控制端口','MiPlay control port'],extensionsIntro:['厂商扩展不是标准 DLNA 核心的依赖。认证失效不会移除已配置的本地音响。','Vendor extensions are not core DLNA dependencies. Authentication failure never removes configured local speakers.'],xiaomiExtension:['小米云兼容扩展','Xiaomi cloud compatibility extension'],xiaomiExtensionHelp:['仅用于缺少本地控制能力的旧型号','Only for older models without local control'],authState:['认证状态','Authentication state'],notEnabled:['未启用','Not enabled'],systemIntro:['查看版本、语言与诊断。诊断包会在服务端移除凭据和敏感地址。','View version, language, and diagnostics. The server removes credentials and sensitive addresses from exports.'],language:['界面语言','Interface language'],simplifiedChinese:['简体中文','Chinese (Simplified)'],logLevel:['日志级别','Log level'],logLevelHelp:['调试模式会产生更多本地日志','Debug mode produces more local logs'],version:['当前版本','Current version'],checkUpdates:['检查更新','Check for updates'],restartNote:['部分配置保存后会重启 CastFabric；当前声路将中断。','Some changes restart CastFabric and interrupt active routes.'],saveSettings:['保存配置','Save settings'],
       scenario:['场景','Scenario'],normal:['正常','Normal'],empty:['空状态','Empty'],loading:['加载中','Loading'],degraded:['部分异常','Degraded'],error:['错误','Error'],reviewView:['评审视图','Review states']
     };
+    Object.assign(translations,{
+      aiAccess:['AI 接入','AI Access'],aiAccessTitle:['让 AI 开口播放','Give your AI a voice'],aiAccessIntro:['复用 CastFabric 已有声路，把发现、播放与控制能力直接交给局域网内的 Agent。','Reuse CastFabric routes and give LAN agents direct discovery, playback, and control.'],aiReady:['MCP 已就绪','MCP ready'],aiLoading:['正在确认 MCP','Checking MCP'],aiUnavailable:['MCP 状态未知','MCP status unknown'],sameService:['同一个服务','One service'],samePortTitle:['控制台与 MCP 共用端口','Console and MCP share one port'],samePortBody:['不增加容器、进程或运维端口。Agent 连接当前 CastFabric 地址下的 /mcp 即可。','No extra container, process, or managed port. Agents connect to /mcp on this CastFabric origin.'],endpoint:['接入地址','Endpoint'],copyEndpoint:['复制接入地址','Copy endpoint'],manageOutputs:['发现与管理音响','Discover and manage speakers'],manageOutputsBody:['列出、扫描并启停每台实体输出。','List, scan, and enable or disable each physical output.'],playAudio:['播放三类音频','Play three audio sources'],playAudioBody:['支持 URL、本地文件与实时 PCM。','Use URLs, local files, or live PCM.'],controlPlayback:['控制当前播放','Control playback'],controlPlaybackBody:['查询状态、暂停、停止并调整音量。','Inspect status, pause, stop, and set volume.'],connectAgent:['连接 Agent','Connect an agent'],chooseClient:['选择你正在使用的客户端','Choose your client'],trustedLan:['可信局域网','Trusted LAN'],agentClients:['Agent 客户端','Agent clients'],genericClient:['通用配置','Generic config'],runCommand:['在终端运行','Run in a terminal'],configSnippet:['复制到客户端配置','Add to client configuration'],copyCommand:['复制命令','Copy command'],lanSecurityNote:['当前版本面向可信局域网，不应把 MCP 地址直接暴露到公网。','This release is for trusted LANs. Do not expose the MCP endpoint directly to the internet.'],agentSkill:['CASTFABRIC AGENT SKILL','CASTFABRIC AGENT SKILL'],skillTitle:['让文件、PCM 与播放列表更容易调用','Make files, PCM, and playlists easier for agents'],skillBody:['MCP 保持轻量；Skill 负责本地文件处理、实时转码和顺序或循环播放。','MCP stays thin; the Skill handles local files, live transcoding, and sequential or looped playlists.'],copyVerifyPrompt:['复制验证提示词','Copy verification prompt'],copied:['已复制','Copied'],copyFailed:['无法自动复制，请手动选择文本','Could not copy automatically; select the text manually']
+    });
     let language='zh',activeOverlay=null,lastFocus=null;
     const t=key=>translations[key]?.[language==='zh'?0:1]||key;
     function translate(){const index=language==='zh'?0:1;document.documentElement.lang=language==='zh'?'zh-CN':'en';document.getElementById('languageButton').textContent=language==='zh'?'EN':'ZH';document.querySelectorAll('[data-i18n]').forEach(n=>{const p=translations[n.dataset.i18n];if(p)n.textContent=p[index]});document.querySelectorAll('[data-i18n-aria]').forEach(n=>{const p=translations[n.dataset.i18nAria];if(p)n.setAttribute('aria-label',p[index])});document.querySelectorAll('.speaker-row .suite-toggle').forEach(n=>n.setAttribute('aria-label',t('toggleReceiver')))}
@@ -185,7 +224,7 @@
     function applyLanguage(next){language=next;languageSelect.selectedIndex=language==='zh'?0:1;translate();filterEvents();const toastNode=document.getElementById('toast');if(toastNode.dataset.messageKey)toastNode.textContent=t(toastNode.dataset.messageKey);if(activeOverlay?.id==='settingsOverlay'){const active=document.querySelector('[data-settings-section].active');if(active)activateSettings(active.dataset.settingsSection)}}
     document.getElementById('languageButton').addEventListener('click',()=>applyLanguage(language==='zh'?'en':'zh'));
     languageSelect.addEventListener('change',()=>applyLanguage(languageSelect.selectedIndex===0?'zh':'en'));
-    const initial=location.hash.replace('#','');if(['speakers','activity'].includes(initial))showPage(initial);translate();
+    const initial=location.hash.replace('#','');if(['speakers','activity','ai'].includes(initial))showPage(initial);translate();
   </script>
   <script src="/static/console.js" defer></script>
 </body>
