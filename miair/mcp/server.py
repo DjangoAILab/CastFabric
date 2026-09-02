@@ -13,6 +13,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
 from miair.targets import OutputTargetConfig, normalize_target_id
+from miair.web.origin import request_public_origin
 
 
 class EmbeddedMcpEndpoint:
@@ -308,7 +309,7 @@ class EmbeddedMcpEndpoint:
             "server": (host, int(port_text) if port_text.isdigit() else None),
             "client": request.transport.get_extra_info("peername") if request.transport else None,
         }
-        token = self._request_origin.set(f"{request.scheme}://{request.host}")
+        token = self._request_origin.set(request_public_origin(request))
         try:
             await self.asgi_app(scope, receive, send)
         finally:

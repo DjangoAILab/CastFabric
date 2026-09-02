@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
 from miair.app import CastFabric
 from miair.config import Config
@@ -114,3 +114,62 @@ async def test_mcp_reuses_web_listener_and_rejects_cross_origin_requests(tmp_pat
 
     assert rejected.status == 403
     assert no_sse.status == 405
+
+
+@pytest.mark.asyncio
+async def test_mcp_uses_forwarded_https_origin_for_agent_data_channels(tmp_path):
+    config, app = _build_app(tmp_path)
+    app.pcm_streams = SimpleNamespace(
+        create=AsyncMock(
+            return_value={
+                "ok": True,
+                "target_id": "uuid:living",
+                "session_id": "session-test",
+                "stream_id": "stream-test",
+                "stream_path": "/api/v1/playback/streams/stream-test",
+                "format": {
+                    "sample_format": "s16le",
+                    "sample_rate": 48000,
+                    "channels": 2,
+                },
+            }
+        ),
+        close_all=AsyncMock(),
+    )
+    client = TestClient(TestServer(create_web_app(config, app)))
+    await client.start_server()
+    try:
+        http_client = create_mcp_http_client(
+            headers={
+                "Host": "mi-air.internal.wj2015.com",
+                "X-Forwarded-Proto": "https",
+            }
+        )
+        async with http_client, streamable_http_client(
+            str(client.make_url("/mcp")), http_client=http_client
+        ) as streams:
+            async with ClientSession(streams[0], streams[1]) as session:
+                await session.initialize()
+                file_result = await session.call_tool(
+                    "play_file",
+                    {
+                        "target_id": "uuid:living",
+                        "filename": "notice.wav",
+                        "content_type": "audio/wav",
+                        "size_bytes": 12,
+                    },
+                )
+                pcm_result = await session.call_tool(
+                    "open_pcm_stream",
+                    {"target_id": "uuid:living"},
+                )
+    finally:
+        await client.close()
+        await app.media_store.close()
+
+    assert file_result.structured_content["upload_url"].startswith(
+        "https://mi-air.internal.wj2015.com/api/v1/playback/files/"
+    )
+    assert pcm_result.structured_content["stream_url"].startswith(
+        "wss://mi-air.internal.wj2015.com/api/v1/playback/streams/"
+    )

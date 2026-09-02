@@ -22,6 +22,7 @@ from miair.runtime.models import (
 )
 from miair.runtime.redaction import project_location_host, redact_network_addresses
 from miair.targets import OutputTargetConfig, normalize_target_id
+from miair.web.origin import request_public_origin, speaker_media_origin
 
 
 def _redact_diagnostic(value):
@@ -489,7 +490,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         except FilePlaybackError as exc:
             return _error(exc.code, f"error.{exc.code.lower()}", status=400)
         transaction["upload_url"] = (
-            f"{request.scheme}://{request.host}{transaction['upload_path']}"
+            request_public_origin(request) + transaction["upload_path"]
         )
         return web.json_response(transaction, status=201)
 
@@ -499,7 +500,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             result = await app.media_store.accept_upload(
                 upload_id,
                 request.content.iter_chunked(64 * 1024),
-                origin=f"{request.scheme}://{request.host}",
+                origin=speaker_media_origin(config),
             )
         except FilePlaybackError as exc:
             status = 404 if exc.code in {"UPLOAD_NOT_FOUND", "MEDIA_NOT_FOUND"} else 400
@@ -556,9 +557,9 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             return playback_error(exc)
         except PcmStreamError as exc:
             return _error(exc.code, f"error.{exc.code.lower()}", status=400)
-        scheme = "wss" if request.scheme == "https" else "ws"
+        public_origin = request_public_origin(request)
         result["stream_url"] = (
-            f"{scheme}://{request.host}{result['stream_path']}"
+            "ws" + public_origin[4:] + result["stream_path"]
         )
         return web.json_response(result, status=201)
 

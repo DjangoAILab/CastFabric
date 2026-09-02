@@ -418,6 +418,93 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
 
 
 @pytest.mark.asyncio
+async def test_proxy_upload_keeps_agent_https_but_renderer_uses_direct_lan_http(tmp_path):
+    config, app = _build_app(tmp_path)
+    controller = app.suite_registry.get("uuid:living").controller
+    client = await _client(config, app)
+    proxy_headers = {
+        "Host": "mi-air.internal.wj2015.com",
+        "X-Forwarded-Proto": "https",
+    }
+    try:
+        created = await client.post(
+            "/api/v1/playback/files",
+            headers=proxy_headers,
+            json={
+                "target_id": "uuid:living",
+                "filename": "notice.wav",
+                "content_type": "audio/wav",
+                "size_bytes": 4,
+            },
+        )
+        transaction = await created.json()
+        uploaded = await client.put(
+            transaction["upload_path"],
+            headers=proxy_headers,
+            data=b"wave",
+        )
+        renderer_url = controller.play_url.await_args.args[0]
+    finally:
+        await client.close()
+        await app.media_store.close()
+
+    assert created.status == 201
+    assert transaction["upload_url"].startswith(
+        "https://mi-air.internal.wj2015.com/api/v1/playback/files/"
+    )
+    assert uploaded.status == 200
+    assert renderer_url.startswith(
+        "http://127.0.0.1:8300/api/v1/playback/media/"
+    )
+
+
+@pytest.mark.asyncio
+async def test_proxy_pcm_stream_url_uses_forwarded_wss_origin(tmp_path):
+    config, app = _build_app(tmp_path)
+    app.pcm_streams = SimpleNamespace(
+        create=AsyncMock(
+            return_value={
+                "ok": True,
+                "target_id": "uuid:living",
+                "session_id": "session-test",
+                "stream_id": "stream-test",
+                "stream_path": "/api/v1/playback/streams/stream-test",
+                "format": {
+                    "sample_format": "s16le",
+                    "sample_rate": 48000,
+                    "channels": 2,
+                },
+            }
+        ),
+        close_all=AsyncMock(),
+    )
+    client = await _client(config, app)
+    try:
+        created = await client.post(
+            "/api/v1/playback/streams",
+            headers={
+                "Host": "mi-air.internal.wj2015.com",
+                "X-Forwarded-Proto": "https",
+            },
+            json={
+                "target_id": "uuid:living",
+                "sample_format": "s16le",
+                "sample_rate": 48000,
+                "channels": 2,
+            },
+        )
+        payload = await created.json()
+    finally:
+        await client.close()
+        await app.pcm_streams.close_all()
+
+    assert created.status == 201
+    assert payload["stream_url"].startswith(
+        "wss://mi-air.internal.wj2015.com/api/v1/playback/streams/"
+    )
+
+
+@pytest.mark.asyncio
 async def test_pcm_websocket_forwards_binary_frames_and_closes_session(tmp_path):
     config, app = _build_app(tmp_path)
     stream = SimpleNamespace(id="stream-test")

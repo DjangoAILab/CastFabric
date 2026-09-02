@@ -2,13 +2,15 @@
 
 Latest verification: 2026-09-02
 
+Published baseline: `v0.11.0-alpha.2`
+
 Network: `192.168.133.0/24`
 
-Deployment commit: `e6a48fd`
+Deployment baseline: `v0.11.0-alpha.2`
 
-Candidate image: `castfabric:agent-audio-e6a48fd` (`linux/amd64`)
+Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
-Immediate rollback container: `castfabric-rollback-agent-b815966`
+Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
 ## Agent audio gates
 
@@ -28,6 +30,27 @@ Immediate rollback container: `castfabric-rollback-agent-b815966`
   volume (`14`).
 - [x] After file and PCM tests, playback is stopped, active/playing session counts are zero, and
   DLNA, AirPlay, and MiPlay receiver health remains `1/1`.
+
+## OpenClaw MCP regression
+
+- [x] OpenClaw `2026.6.33` loads CastFabric as a native Streamable HTTP MCP server through
+  `https://mi-air.internal.wj2015.com/mcp` with TLS verification enabled.
+- [x] MCP discovery exposes all 11 tools plus the declared resources and prompts.
+- [x] Management and read-only playback coverage passes: system status, output listing, output scan,
+  playback status, and a no-op output update.
+- [x] URL playback and transport controls pass, and the test restores playback to stopped.
+- [x] File playback returns an HTTPS one-time upload URL; the upload succeeds without redirects and
+  the physical renderer performs the direct LAN media pull.
+- [x] PCM playback returns a WSS stream URL; an unmodified client sends 20 frames / 192,000 bytes and
+  closes normally with WebSocket code `1000`.
+- [x] Physical-output events confirm `agent.output_started`, `agent.pcm_forwarded`, and
+  `agent.output_stopped` with no `agent.output_failed`.
+- [x] Final volume is restored to `14` and playback is stopped.
+
+The proxy regression deliberately separates the two address planes: Agent-facing transaction URLs
+retain the ingress HTTPS/WSS origin, while renderer-facing media URLs use direct LAN HTTP. This keeps
+the MCP client on the internal domain without asking the DLNA speaker to resolve that domain or
+follow the reverse proxy.
 
 ## Automated gates
 
@@ -78,7 +101,6 @@ from the simulator or mDNS browse.
 
 ## Rollback
 
-The immediately preceding Agent candidate is retained as
-`castfabric-rollback-agent-b815966`; the last published release is retained as
-`castfabric-rollback-pre-agent-0df999b`. Earlier CastFabric rollback containers remain stopped.
-Restore only one service at a time because the ingress protocols bind host-network ports.
+The pre-fix published service is retained as
+`castfabric-rollback-0.11.0a1-pre-proxy-origin`. Restore only one service at a time because the
+ingress protocols bind host-network ports.
