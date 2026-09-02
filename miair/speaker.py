@@ -88,6 +88,9 @@ class SpeakerController:
     async def set_volume(self, volume: int) -> bool:
         return await self.output.set_volume(volume)
 
+    async def seek(self, position_seconds: int) -> bool:
+        return await self.output.seek(position_seconds)
+
     async def get_volume(self) -> int:
         return await self.output.get_volume()
 

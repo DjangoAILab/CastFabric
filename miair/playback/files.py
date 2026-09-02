@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import AsyncIterable, Callable
 
+from miair.playback.service import normalize_position_seconds
+
 
 class FilePlaybackError(RuntimeError):
     def __init__(self, code: str):
@@ -25,6 +27,7 @@ class PendingUpload:
     content_type: str
     size_bytes: int
     expires_at: float
+    start_position_seconds: int = 0
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,7 @@ class EphemeralMediaStore:
         filename: str,
         content_type: str,
         size_bytes: int,
+        start_position_seconds: int = 0,
     ) -> dict:
         self._expire_uploads()
         self.playback_service.controller_for(target_id)
@@ -115,6 +119,7 @@ class EphemeralMediaStore:
             content_type=str(content_type or "application/octet-stream")[:120],
             size_bytes=size,
             expires_at=self.clock() + self.upload_ttl,
+            start_position_seconds=normalize_position_seconds(start_position_seconds),
         )
         self._uploads[upload_id] = upload
         return {
@@ -165,6 +170,7 @@ class EphemeralMediaStore:
                 upload.target_id,
                 media_url,
                 media_format=upload.content_type,
+                start_position_seconds=upload.start_position_seconds,
             )
             self._media_expiry[media_token] = (
                 asyncio.get_running_loop().call_later(

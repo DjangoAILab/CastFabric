@@ -29,6 +29,8 @@ class PlaybackTarget(Protocol):
 
     async def set_volume(self, volume: int) -> bool: ...
 
+    async def seek(self, position_seconds: int) -> bool: ...
+
     async def get_volume(self) -> int: ...
 
     async def get_status(self) -> dict: ...
@@ -50,6 +52,10 @@ class UnavailablePlaybackTarget:
         return False
 
     async def set_volume(self, volume: int) -> bool:
+        return False
+
+    async def seek(self, position_seconds: int) -> bool:
+        del position_seconds
         return False
 
     async def get_volume(self) -> int:
@@ -118,6 +124,9 @@ class FallbackPlaybackTarget:
 
     async def set_volume(self, volume: int) -> bool:
         return await self._command("set_volume", max(0, min(100, volume)))
+
+    async def seek(self, position_seconds: int) -> bool:
+        return await self._command("seek", position_seconds)
 
     async def get_volume(self) -> int:
         return int(await self._query("get_volume"))

@@ -238,6 +238,9 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             "TARGET_NOT_FOUND": 404,
             "TARGET_DISABLED": 409,
             "TARGET_COMMAND_FAILED": 502,
+            "INVALID_POSITION": 400,
+            "SESSION_CHANGED": 409,
+            "SEEK_UNSUPPORTED": 409,
         }.get(exc.code, 500)
         return _error(
             exc.code,
@@ -393,7 +396,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         payload = await _json_object(request)
         if isinstance(payload, web.Response):
             return payload
-        allowed = {"target_id", "url", "media_format"}
+        allowed = {"target_id", "url", "media_format", "start_position_seconds"}
         unknown = sorted(set(payload) - allowed)
         if unknown:
             return _error(
@@ -423,6 +426,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
                 target_id,
                 url.strip(),
                 media_format=media_format.strip() if media_format else None,
+                start_position_seconds=payload.get("start_position_seconds", 0),
             )
         except PlaybackServiceError as exc:
             return playback_error(exc)
@@ -447,6 +451,23 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     async def stop_playback(request):
         try:
             result = await app.stop_agent_playback(request.match_info["target_id"])
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def seek_playback(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        allowed = {"position_seconds", "if_session_id"}
+        if set(payload) - allowed or "position_seconds" not in payload:
+            return _error("INVALID_POSITION", "error.invalid_position", status=400)
+        try:
+            result = await app.playback_service.seek(
+                request.match_info["target_id"],
+                payload["position_seconds"],
+                if_session_id=payload.get("if_session_id"),
+            )
         except PlaybackServiceError as exc:
             return playback_error(exc)
         return web.json_response(result)
@@ -476,7 +497,9 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         payload = await _json_object(request)
         if isinstance(payload, web.Response):
             return payload
-        if set(payload) != {"target_id", "filename", "content_type", "size_bytes"}:
+        required = {"target_id", "filename", "content_type", "size_bytes"}
+        allowed = required | {"start_position_seconds"}
+        if not required <= set(payload) or set(payload) - allowed:
             return _error("INVALID_FILE", "error.invalid_file", status=400)
         try:
             transaction = app.media_store.create_upload(
@@ -484,6 +507,7 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
                 payload["filename"],
                 payload["content_type"],
                 payload["size_bytes"],
+                start_position_seconds=payload.get("start_position_seconds", 0),
             )
         except PlaybackServiceError as exc:
             return playback_error(exc)
@@ -839,6 +863,9 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     )
     web_app.router.add_post(
         "/api/v1/playback/{target_id:.+}/stop", stop_playback
+    )
+    web_app.router.add_post(
+        "/api/v1/playback/{target_id:.+}/seek", seek_playback
     )
     web_app.router.add_post(
         "/api/v1/playback/{target_id:.+}/volume", set_playback_volume

@@ -12,11 +12,29 @@ Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
+## MiPlay field incident (2026-09-02)
+
+- A real Android MiPlay session connected and forwarded volume successfully but produced no audible
+  playback while the Home Server retained the earlier experimental output combination
+  `l16 + range + play_type=0`.
+- Runtime evidence isolated the failure downstream of the phone: CastFabric received MPEG-TS,
+  FFmpeg emitted non-silent PCM, and the physical renderer performed an initial HTTP pull. The
+  renderer then repeatedly requested a range near the end of the synthetic 2 GiB L16 resource and
+  disconnected instead of consuming the live stream.
+- Restored the supported/default physical-renderer combination
+  `wav + close + audio/wav + play_type=2` and restarted the published
+  `v0.11.0-alpha.2` container. The service returned healthy with DLNA, AirPlay and MiPlay all `1/1`
+  ready.
+- [x] Post-fix MiPlay simulation made the physical renderer pull `stream.wav`, decoded non-silent
+  PCM in 4 ms, forwarded the first PCM in 123 ms, and completed with `output_started`,
+  `pcm_forwarded`, `output_stopped` and no failure event.
+- [ ] Repeat audible playback from the user's Android sender after the configuration repair.
+
 ## Agent audio gates
 
 - [x] Streamable HTTP MCP initializes at `/mcp` on the existing `8300` listener; no second port,
   process, or container is required.
-- [x] MCP exposes all 11 approved management, playback, and control tools.
+- [x] MCP exposes all 11 approved management, playback, and control tools on the published baseline.
 - [x] `list_outputs` returns the configured and online physical renderer without Xiaomi credentials.
 - [x] The packaged Agent Skill uploads a local WAV through the one-time file transaction and returns
   a playing MCP session.
@@ -35,7 +53,18 @@ Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
 - [x] OpenClaw `2026.6.33` loads CastFabric as a native Streamable HTTP MCP server through
   `https://mi-air.internal.wj2015.com/mcp` with TLS verification enabled.
-- [x] MCP discovery exposes all 11 tools plus the declared resources and prompts.
+- [x] MCP discovery exposes all 11 baseline tools plus the declared resources and prompts.
+
+## Positioned playback candidate (silent validation only)
+
+- [x] URL and one-time file playback accept `start_position_seconds` in application, HTTP, MCP and
+  Skill contracts without creating a media library or reusable asset ID.
+- [x] Current playback exposes absolute-second seek with optional `if_session_id` concurrency guard.
+- [x] Fake DMR and adapter tests confirm both flows reuse DLNA AVTransport `Seek` with `REL_TIME`.
+- [x] Failure tests confirm an output started for positioned playback is stopped if its initial Seek
+  is rejected, and the application session is marked failed.
+- [ ] After publishing and deployment, verify OpenClaw discovers all 12 tools. This gate is discovery
+  only: do not call play, seek, pause, stop, or volume on the physical renderer during this release.
 - [x] Management and read-only playback coverage passes: system status, output listing, output scan,
   playback status, and a no-op output update.
 - [x] URL playback and transport controls pass, and the test restores playback to stopped.

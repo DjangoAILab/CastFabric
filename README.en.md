@@ -60,16 +60,17 @@ CastFabric `0.11` serves Streamable HTTP MCP from the existing Web listener. If 
 `http://192.168.1.10:8300`, the MCP endpoint is `http://192.168.1.10:8300/mcp`. It reuses the same
 `target_id`, playback state, and output adapters rather than introducing a second playback service.
 
-Eleven atomic tools are available:
+Twelve atomic tools are available:
 
 - management: system status, list and scan speakers, enable/disable or rename an output;
 - playback: HTTP(S) URL, agent-local file, and live `s16le / 48 kHz / stereo` PCM;
-- control: status, pause, stop, and volume.
+- control: status, pause, stop, absolute-second seek, and volume.
 
 The bundled [CastFabric Agent Skill](skills/castfabric/SKILL.md) adds local-file upload, FFmpeg live
-conversion, and client-side sequential or looping playlists. MCP stays thin: CastFabric **does not
-embed TTS, a media library, or a server-side queue**. The agent creates or selects audio; CastFabric
-delivers it to the chosen speaker.
+conversion, positioned URL/file playback, current-session seek, and client-side sequential or
+looping playlists. A session ID is only an optional concurrency guard, never a reusable media ID.
+MCP stays thin: CastFabric **does not embed TTS, a media library, or a server-side queue**. The agent
+creates or selects audio; CastFabric delivers it to the chosen speaker.
 
 > MCP currently targets trusted LANs and has no public-internet authentication. Do not expose
 > `/mcp` directly to the internet.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from miair.runtime.models import IngressProtocol, SessionState
@@ -15,6 +16,14 @@ class PlaybackServiceError(RuntimeError):
         super().__init__(code)
         self.code = code
         self.target_id = target_id
+
+
+def normalize_position_seconds(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PlaybackServiceError("INVALID_POSITION", "")
+    if not math.isfinite(value) or value < 0 or int(value) != value:
+        raise PlaybackServiceError("INVALID_POSITION", "")
+    return int(value)
 
 
 class PlaybackService:
@@ -51,7 +60,9 @@ class PlaybackService:
         url: str,
         *,
         media_format: str | None = None,
+        start_position_seconds: int = 0,
     ) -> dict[str, Any]:
+        position = normalize_position_seconds(start_position_seconds)
         normalized, suite = self._suite_for(target_id)
         session = await self.session_coordinator.begin(
             normalized,
@@ -59,22 +70,62 @@ class PlaybackService:
             media_format=media_format,
         )
         suite.current_session_id = session.id
+        output_started = False
         try:
             accepted = await suite.controller.play_url(url, play_type=2)
             if not accepted:
                 raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized)
+            output_started = True
+            if position and not await suite.controller.seek(position):
+                raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
         except Exception as exc:
+            if output_started:
+                try:
+                    await suite.controller.stop()
+                except Exception:
+                    pass
             await self.session_coordinator.end(session.id, failed=True)
             suite.current_session_id = None
             if isinstance(exc, PlaybackServiceError):
                 raise
             raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
         await self.session_coordinator.transition(session.id, SessionState.PLAYING)
-        return {
+        result = {
             "ok": True,
             "target_id": normalized,
             "session_id": session.id,
             "state": SessionState.PLAYING.value,
+        }
+        if position:
+            result["position_seconds"] = position
+        return result
+
+    async def seek(
+        self,
+        target_id: str,
+        position_seconds: int,
+        *,
+        if_session_id: str | None = None,
+    ) -> dict[str, Any]:
+        position = normalize_position_seconds(position_seconds)
+        normalized, suite = self._suite_for(target_id)
+        session = self.session_coordinator.current(normalized)
+        if if_session_id is not None and (
+            session is None or session.id != if_session_id
+        ):
+            raise PlaybackServiceError("SESSION_CHANGED", normalized)
+        try:
+            accepted = await suite.controller.seek(position)
+        except Exception as exc:
+            raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
+        if not accepted:
+            raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
+        return {
+            "ok": True,
+            "target_id": normalized,
+            "session_id": session.id if session else None,
+            "position_seconds": position,
+            "state": session.state.value if session else "unknown",
         }
 
     async def pause(self, target_id: str) -> dict[str, Any]:

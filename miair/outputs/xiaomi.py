@@ -130,6 +130,10 @@ class XiaomiOutputAdapter:
             await self._retry_login()
             return await self._set_volume_once(volume)
 
+    async def seek(self, position_seconds: int) -> bool:
+        del position_seconds
+        return False
+
     async def _get_volume_once(self) -> int:
         await self.auth.ensure_login()
         status = await self.auth.mina_service.player_get_status(self.device_id)
@@ -171,4 +175,3 @@ class XiaomiOutputAdapter:
                 raise
             await self._retry_login()
             return await self._get_status_once()
-

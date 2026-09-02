@@ -29,6 +29,7 @@ def _build_app(tmp_path):
     app = CastFabric(config)
     controller = SimpleNamespace(
         play_url=AsyncMock(return_value=True),
+        seek=AsyncMock(return_value=True),
         pause=AsyncMock(return_value=True),
         stop=AsyncMock(return_value=True),
         set_volume=AsyncMock(return_value=True),
@@ -50,6 +51,21 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
                 await session.initialize()
                 listed = await session.list_tools()
                 result = await session.call_tool("list_outputs", {})
+                play_result = await session.call_tool(
+                    "play_url",
+                    {
+                        "target_id": "uuid:living",
+                        "url": "https://media.example.test/notice.mp3",
+                        "start_position_seconds": 30,
+                    },
+                )
+                seek_result = await session.call_tool(
+                    "seek_playback",
+                    {
+                        "target_id": "uuid:living",
+                        "position_seconds": 45,
+                    },
+                )
                 file_result = await session.call_tool(
                     "play_file",
                     {
@@ -70,6 +86,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
         "update_output",
         "play_url",
         "play_file",
+        "seek_playback",
         "open_pcm_stream",
         "get_playback_status",
         "pause",
@@ -78,6 +95,8 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
     }
     assert result.is_error is False
     assert result.structured_content["items"][0]["id"] == "uuid:living"
+    assert play_result.structured_content["position_seconds"] == 30
+    assert seek_result.structured_content["position_seconds"] == 45
     assert file_result.is_error is False
     assert file_result.structured_content["upload_url"].startswith(
         public_origin + "/api/v1/playback/files/"
@@ -87,6 +106,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
         "update_output",
         "play_url",
         "play_file",
+        "seek_playback",
         "open_pcm_stream",
         "get_playback_status",
         "pause",

@@ -50,6 +50,7 @@ def _build_app(tmp_path):
             target_id=target_id,
             local_dlna=None,
             play_url=AsyncMock(return_value=True),
+            seek=AsyncMock(return_value=True),
             pause=AsyncMock(return_value=True),
             stop=AsyncMock(return_value=True),
             set_volume=AsyncMock(return_value=True),
@@ -321,6 +322,47 @@ async def test_playback_url_and_controls_use_the_shared_application_service(tmp_
 
 
 @pytest.mark.asyncio
+async def test_play_at_and_seek_current_session_share_http_contract(tmp_path):
+    config, app = _build_app(tmp_path)
+    controller = app.suite_registry.get("uuid:living").controller
+    client = await _client(config, app)
+    try:
+        played = await client.post(
+            "/api/v1/playback/url",
+            json={
+                "target_id": "uuid:living",
+                "url": "https://media.example.test/notice.mp3",
+                "start_position_seconds": 90,
+            },
+        )
+        played_payload = await played.json()
+        sought = await client.post(
+            "/api/v1/playback/uuid:living/seek",
+            json={
+                "position_seconds": 125,
+                "if_session_id": played_payload["session_id"],
+            },
+        )
+        sought_payload = await sought.json()
+        stale = await client.post(
+            "/api/v1/playback/uuid:living/seek",
+            json={"position_seconds": 5, "if_session_id": "stale-session"},
+        )
+        stale_payload = await stale.json()
+    finally:
+        await client.close()
+
+    assert played.status == 200
+    assert played_payload["position_seconds"] == 90
+    assert sought.status == 200
+    assert sought_payload["position_seconds"] == 125
+    assert sought_payload["session_id"] == played_payload["session_id"]
+    assert stale.status == 409
+    assert stale_payload["error"]["code"] == "SESSION_CHANGED"
+    assert [call.args for call in controller.seek.await_args_list] == [(90,), (125,)]
+
+
+@pytest.mark.asyncio
 async def test_playback_routes_reject_invalid_input_with_stable_safe_errors(tmp_path):
     config, app = _build_app(tmp_path)
     client = await _client(config, app)
@@ -379,6 +421,7 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
                 "filename": "../notice.mp3",
                 "content_type": "audio/mpeg",
                 "size_bytes": 6,
+                "start_position_seconds": 75,
             },
         )
         transaction = await created.json()
@@ -403,6 +446,7 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
     assert created.status == 201
     assert uploaded.status == 200
     assert uploaded_payload["state"] == "playing"
+    assert uploaded_payload["position_seconds"] == 75
     assert replayed.status == 404
     assert replayed_payload["error"]["code"] == "UPLOAD_NOT_FOUND"
     assert fetched.status == 200
@@ -415,6 +459,7 @@ async def test_file_playback_is_one_time_and_renderer_can_fetch_exact_bytes(tmp_
     assert output_events[0].outcome is EventOutcome.SUCCESS
     assert output_events[0].details == {"media_format": "audio/mpeg"}
     assert "notice.mp3" not in media_url
+    controller.seek.assert_awaited_once_with(75)
 
 
 @pytest.mark.asyncio

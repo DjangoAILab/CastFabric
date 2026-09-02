@@ -16,6 +16,7 @@ class FakeTarget:
         self.pause = AsyncMock(return_value=True)
         self.stop = AsyncMock(return_value=True)
         self.set_volume = AsyncMock(return_value=True)
+        self.seek = AsyncMock(return_value=True)
         self.get_volume = AsyncMock(return_value=25)
         self.get_status = AsyncMock(return_value={"status": 1, "volume": 25})
 
@@ -37,6 +38,16 @@ async def test_dlna_adapter_ignores_vendor_play_type():
     assert await target.play_url("http://gateway/audio.wav", play_type=0)
     client.play_url.assert_awaited_once_with("http://gateway/audio.wav")
     assert target.info.kind == "dlna"
+
+
+@pytest.mark.asyncio
+async def test_dlna_and_fallback_delegate_seek_seconds():
+    client = SimpleNamespace(seek=AsyncMock(return_value=True))
+    dlna = DLNAOutputAdapter("uuid:renderer", "Living Room", client)
+    fallback = FallbackPlaybackTarget([dlna])
+
+    assert await fallback.seek(92)
+    client.seek.assert_awaited_once_with(92)
 
 
 @pytest.mark.asyncio
@@ -63,4 +74,3 @@ async def test_query_raises_when_every_adapter_is_unavailable():
 
     with pytest.raises(RuntimeError, match="get_status failed"):
         await target.get_status()
-

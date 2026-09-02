@@ -20,8 +20,8 @@ AI Agent。
 - 列出已配置和扫描发现的输出音响；
 - 主动扫描局域网 DLNA 输出；
 - 加入、启用、停用和重命名输出音响；
-- 按 `target_id` 播放 URL、有限文件或实时 PCM；
-- 查询状态、暂停、停止和设置音量；
+- 按 `target_id` 播放 URL、有限文件或实时 PCM；URL 与文件可指定整秒起播位置；
+- 查询状态、定位当前会话、暂停、停止和设置音量；
 - Node.js helper 的文件、实时源、顺序播放和循环播放；
 - Codex、Claude Code 和通用 MCP 客户端的复制接入内容。
 
@@ -137,10 +137,11 @@ MCP 播放继续使用现有 `MediaSessionCoordinator`，而不是引入 Operati
 #### `play_url`
 
 ```json
-{"target_id": "uuid:...", "url": "https://example/audio.mp3"}
+{"target_id": "uuid:...", "url": "https://example/audio.mp3", "start_position_seconds": 125}
 ```
 
-直接调用目标的 `play_url()`；CastFabric 不代理、不下载、不转码 URL。
+直接调用目标的 `play_url()`；CastFabric 不代理、不下载、不转码 URL。可选的
+`start_position_seconds` 由应用服务在播放后通过同一输出适配器完成定位。
 
 #### `play_file`
 
@@ -157,6 +158,12 @@ MCP 播放继续使用现有 `MediaSessionCoordinator`，而不是引入 Operati
 把原始文件字节上传成功后，CastFabric 才开始播放，并通过不可枚举的临时 HTTP 路径把
 媒体交给现有 `play_url()`。上传只能使用一次；会话结束、失败、超时或服务关闭后删除。
 文件大小采用实现常量限制，不增加产品配置项，也不通过 MCP JSON-RPC 传 Base64。
+创建上传时可附带 `start_position_seconds`；它是一次性播放指令的一部分，不生成素材 ID。
+
+#### `seek_playback`
+
+参数为 `target_id`、绝对整秒 `position_seconds` 和可选 `if_session_id`。会话 ID 只用于
+防止延迟命令误控新的播放会话，不是素材标识。定位能力不适用于实时 PCM。
 
 #### `open_pcm_stream`
 

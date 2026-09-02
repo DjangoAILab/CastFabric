@@ -24,9 +24,11 @@ class DLNAOutputAdapter:
     async def set_volume(self, volume: int) -> bool:
         return bool(await self.client.set_volume(max(0, min(100, volume))))
 
+    async def seek(self, position_seconds: int) -> bool:
+        return bool(await self.client.seek(position_seconds))
+
     async def get_volume(self) -> int:
         return int(await self.client.get_volume())
 
     async def get_status(self) -> dict:
         return await self.client.get_status()
-

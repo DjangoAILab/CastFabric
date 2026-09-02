@@ -396,6 +396,21 @@ class LocalDLNAClient:
         await self._soap(AVTRANSPORT_URN, "Stop", {"InstanceID": 0})
         return True
 
+    async def seek(self, position_seconds: int) -> bool:
+        seconds = int(position_seconds)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        await self._soap(
+            AVTRANSPORT_URN,
+            "Seek",
+            {
+                "InstanceID": 0,
+                "Unit": "REL_TIME",
+                "Target": f"{hours:02d}:{minutes:02d}:{seconds:02d}",
+            },
+        )
+        return True
+
     async def set_volume(self, volume: int) -> bool:
         await self._soap(
             RENDERING_CONTROL_URN,

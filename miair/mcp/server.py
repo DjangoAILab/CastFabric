@@ -156,13 +156,17 @@ class EmbeddedMcpEndpoint:
             target_id: str,
             url: str,
             media_format: str | None = None,
+            start_position_seconds: int = 0,
         ) -> dict[str, Any]:
             parsed = urlsplit(url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ToolError("INVALID_URL")
             try:
                 return await self.app.playback_service.play_url(
-                    target_id, url, media_format=media_format
+                    target_id,
+                    url,
+                    media_format=media_format,
+                    start_position_seconds=start_position_seconds,
                 )
             except PlaybackServiceError as exc:
                 raise self._tool_error(exc) from exc
@@ -179,10 +183,15 @@ class EmbeddedMcpEndpoint:
             filename: str,
             content_type: str,
             size_bytes: int,
+            start_position_seconds: int = 0,
         ) -> dict[str, Any]:
             try:
                 result = self.app.media_store.create_upload(
-                    target_id, filename, content_type, size_bytes
+                    target_id,
+                    filename,
+                    content_type,
+                    size_bytes,
+                    start_position_seconds=start_position_seconds,
                 )
             except (FilePlaybackError, PlaybackServiceError) as exc:
                 raise self._tool_error(exc) from exc
@@ -229,6 +238,28 @@ class EmbeddedMcpEndpoint:
         async def pause(target_id: str) -> dict[str, Any]:
             try:
                 return await self.app.playback_service.pause(target_id)
+            except PlaybackServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(
+            description=(
+                "Seek the current playback on target_id to an absolute number "
+                "of seconds from the beginning. Pass if_session_id when known "
+                "to avoid controlling a newer session."
+            ),
+            structured_output=True,
+        )
+        async def seek_playback(
+            target_id: str,
+            position_seconds: int,
+            if_session_id: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                return await self.app.playback_service.seek(
+                    target_id,
+                    position_seconds,
+                    if_session_id=if_session_id,
+                )
             except PlaybackServiceError as exc:
                 raise self._tool_error(exc) from exc
 

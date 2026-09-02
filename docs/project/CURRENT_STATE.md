@@ -34,13 +34,14 @@ MCP URL / file / PCM inputs ───┘
 
 - Virtual DLNA, AirPlay/RAOP and MiPlay receivers for every enabled physical output.
 - Generic SSDP discovery and persistent management of multiple standard DLNA renderers.
-- Playback, pause/stop, seek where supported, volume and structured/redacted activity reporting.
+- Playback (including an optional whole-second start position), pause/stop, current-session seek
+  where supported, volume and structured/redacted activity reporting.
 - Chinese/English responsive console with Overview, Speakers, Activity and AI Access surfaces plus
   secondary connection configuration.
 - Embedded Streamable HTTP MCP at `/mcp` on the existing Web listener (`8300`); there is no MCP
   sidecar, extra container or extra listening port.
-- Eleven MCP tools covering system/output discovery and management, URL/file/real-time PCM playback,
-  status, pause, stop and volume.
+- Twelve MCP tools covering system/output discovery and management, URL/file/real-time PCM playback,
+  positioned playback, current-session seek, status, pause, stop and volume.
 - A packaged Agent Skill under `skills/castfabric/` that handles local file upload, FFmpeg PCM
   streaming, and client-side sequential/loop playlists. CastFabric itself intentionally does not add
   TTS, a media library or a server-side playlist engine.
@@ -61,6 +62,8 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
    media (`docs/adr/0007-*`).
 7. Cached DLNA endpoints are refreshed after renderer port drift (`docs/adr/0008-*`).
 8. AI support is a thin embedded MCP adapter over existing playback services (`docs/adr/0009-*`).
+9. Positioned playback and current-session seek share one output primitive without introducing a
+   media library or reusable asset IDs (`docs/adr/0010-*`).
 
 ## Verification and deployment baseline
 

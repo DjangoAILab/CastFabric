@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildFfmpegArgs, mcpEndpoint, playLocalFile } from "../scripts/castfabric.mjs";
+import { buildFfmpegArgs, mcpEndpoint, playLocalFile, positionSeconds, seekPlayback } from "../scripts/castfabric.mjs";
 
 test("normalizes the MCP endpoint", () => {
   assert.equal(mcpEndpoint("http://castfabric:9988"), "http://castfabric:9988/mcp");
@@ -19,11 +19,19 @@ test("builds fixed real-time PCM FFmpeg arguments", () => {
   assert.equal(buildFfmpegArgs(null, true).includes("-re"), false);
 });
 
+test("accepts only non-negative whole-second positions", () => {
+  assert.equal(positionSeconds("125"), 125);
+  assert.equal(positionSeconds(0), 0);
+  assert.throws(() => positionSeconds("1.5"), /INVALID_POSITION/);
+  assert.throws(() => positionSeconds(-1), /INVALID_POSITION/);
+});
+
 test("creates an MCP file transaction and uploads exact local bytes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "castfabric-skill-"));
   const path = join(directory, "notice.mp3");
   await writeFile(path, Buffer.from("abcdef"));
   let uploaded = null;
+  const toolCalls = [];
   const server = createServer(async (request, response) => {
     if (request.url === "/upload" && request.method === "PUT") {
       const chunks = [];
@@ -43,15 +51,35 @@ test("creates an MCP file transaction and uploads exact local bytes", async () =
     }
     const result = message.method === "initialize"
       ? { protocolVersion: "2025-11-25", capabilities: {}, serverInfo: { name: "fake", version: "1" } }
-      : { content: [], structuredContent: { upload_url: `http://127.0.0.1:${server.address().port}/upload` }, isError: false };
+      : (() => {
+          toolCalls.push({ name: message.params.name, arguments: message.params.arguments });
+          return { content: [], structuredContent: { upload_url: `http://127.0.0.1:${server.address().port}/upload` }, isError: false };
+        })();
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
   });
   await new Promise((accept) => server.listen(0, "127.0.0.1", accept));
   try {
-    const result = await playLocalFile(`http://127.0.0.1:${server.address().port}`, "uuid:living", path);
+    const result = await playLocalFile(`http://127.0.0.1:${server.address().port}`, "uuid:living", path, 75);
     assert.equal(result.state, "playing");
     assert.deepEqual(uploaded, await readFile(path));
+    assert.equal(toolCalls[0].name, "play_file");
+    assert.equal(toolCalls[0].arguments.start_position_seconds, 75);
+
+    await seekPlayback(
+      `http://127.0.0.1:${server.address().port}`,
+      "uuid:living",
+      125,
+      "session-current",
+    );
+    assert.deepEqual(toolCalls[1], {
+      name: "seek_playback",
+      arguments: {
+        target_id: "uuid:living",
+        position_seconds: 125,
+        if_session_id: "session-current",
+      },
+    });
   } finally {
     await new Promise((accept) => server.close(accept));
     await rm(directory, { recursive: true });

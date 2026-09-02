@@ -49,16 +49,48 @@ export async function mcpCall(server, name, args = {}, fetchImpl = fetch) {
   return result?.structuredContent ?? JSON.parse(result?.content?.[0]?.text || "null");
 }
 
-export async function playLocalFile(server, targetId, path, fetchImpl = fetch) {
+export function positionSeconds(value) {
+  const number = Number(value ?? 0);
+  if (!Number.isSafeInteger(number) || number < 0) throw new Error("INVALID_POSITION");
+  return number;
+}
+
+function withStartPosition(args, value) {
+  const position = positionSeconds(value);
+  return position > 0 ? { ...args, start_position_seconds: position } : args;
+}
+
+export async function playUrl(server, targetId, url, startPositionSeconds = 0, fetchImpl = fetch) {
+  return mcpCall(server, "play_url", withStartPosition({
+    target_id: targetId,
+    url,
+  }, startPositionSeconds), fetchImpl);
+}
+
+export async function seekPlayback(server, targetId, position, ifSessionId = null, fetchImpl = fetch) {
+  const args = {
+    target_id: targetId,
+    position_seconds: positionSeconds(position),
+  };
+  if (ifSessionId) args.if_session_id = ifSessionId;
+  return mcpCall(server, "seek_playback", args, fetchImpl);
+}
+
+export async function playLocalFile(server, targetId, path, startPositionSeconds = 0, fetchImpl = fetch) {
+  // Keep the original four-argument helper compatible for existing callers.
+  if (typeof startPositionSeconds === "function") {
+    fetchImpl = startPositionSeconds;
+    startPositionSeconds = 0;
+  }
   const absolute = resolve(path);
   const details = await stat(absolute);
   if (!details.isFile()) throw new Error("LOCAL_FILE_NOT_FOUND");
-  const transaction = await mcpCall(server, "play_file", {
+  const transaction = await mcpCall(server, "play_file", withStartPosition({
     target_id: targetId,
     filename: basename(absolute),
     content_type: contentType(absolute),
     size_bytes: details.size,
-  }, fetchImpl);
+  }, startPositionSeconds), fetchImpl);
   const response = await fetchImpl(transaction.upload_url, {
     method: "PUT",
     headers: { "content-type": "application/octet-stream" },
@@ -155,13 +187,23 @@ async function runCli(argv) {
   const command = args[0];
   const target = args.includes("--target") ? option(args, "--target") : null;
   const targetValue = target ? args[args.indexOf("--target") + 2] : null;
+  const startPosition = args.includes("--start-seconds")
+    ? positionSeconds(option(args, "--start-seconds"))
+    : 0;
   let result;
   if (command === "outputs") {
     result = await mcpCall(server, args[1] === "scan" ? "scan_outputs" : "list_outputs");
   } else if (command === "play-url") {
-    result = await mcpCall(server, "play_url", { target_id: target, url: targetValue });
+    result = await playUrl(server, target, targetValue, startPosition);
   } else if (command === "play-file") {
-    result = await playLocalFile(server, target, targetValue);
+    result = await playLocalFile(server, target, targetValue, startPosition);
+  } else if (command === "seek") {
+    result = await seekPlayback(
+      server,
+      target,
+      targetValue,
+      args.includes("--if-session") ? option(args, "--if-session") : null,
+    );
   } else if (command === "stream") {
     await streamInput(server, target, args.includes("--stdin") ? null : option(args, "--input"), args.includes("--stdin"));
     return;
@@ -184,8 +226,9 @@ async function runCli(argv) {
       do {
         for (const item of playlist.items) {
           if (interrupted) break;
-          if (item.type === "file") await playLocalFile(server, target, resolve(dirname(playlistPath), item.path));
-          else if (item.type === "url") await mcpCall(server, "play_url", { target_id: target, url: item.url });
+          const itemPosition = positionSeconds(item.start_seconds ?? 0);
+          if (item.type === "file") await playLocalFile(server, target, resolve(dirname(playlistPath), item.path), itemPosition);
+          else if (item.type === "url") await playUrl(server, target, item.url, itemPosition);
           else throw new Error("INVALID_PLAYLIST_ITEM");
           await waitUntilStopped(server, target, () => interrupted);
         }

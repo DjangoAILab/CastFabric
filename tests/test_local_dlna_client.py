@@ -51,6 +51,18 @@ class LocalDLNAClientTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await client.get_status(), {"status": 2, "volume": 16})
 
+    async def test_seek_uses_dlna_relative_time(self):
+        client = self.make_client()
+        client._soap = AsyncMock(return_value={})
+
+        self.assertTrue(await client.seek(125))
+
+        client._soap.assert_awaited_once_with(
+            AVTRANSPORT_URN,
+            "Seek",
+            {"InstanceID": 0, "Unit": "REL_TIME", "Target": "00:02:05"},
+        )
+
     async def test_soap_rediscovers_renderer_after_control_port_changes(self):
         client = LocalDLNAClient(
             "http://192.0.2.10:1269/",

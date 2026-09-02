@@ -6,7 +6,7 @@ Use a UTF-8 JSON document:
 {
   "version": 1,
   "items": [
-    {"type": "file", "path": "./01.mp3", "title": "Opening"},
+    {"type": "file", "path": "./01.mp3", "title": "Opening", "start_seconds": 30},
     {"type": "url", "url": "https://example.test/02.mp3", "title": "Closing"}
   ]
 }
@@ -18,5 +18,6 @@ Rules:
 - `items` must be a non-empty array processed in order.
 - `file.path` resolves relative to the playlist file, not the shell working directory.
 - `url.url` must be HTTP or HTTPS.
+- Optional `start_seconds` is a non-negative whole-second offset for that item.
 - `--loop` repeats only after the last item ends.
 - Stop the playlist runner before sending a target stop command; otherwise a stopped item could advance to the next item.

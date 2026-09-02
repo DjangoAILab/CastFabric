@@ -31,6 +31,7 @@ async def test_one_time_upload_uses_opaque_paths_and_starts_existing_playback(tm
         "../../private/notice.mp3",
         "audio/mpeg",
         6,
+        start_position_seconds=75,
     )
     result = await store.accept_upload(
         transaction["upload_id"],
@@ -45,6 +46,7 @@ async def test_one_time_upload_uses_opaque_paths_and_starts_existing_playback(tm
         "uuid:living",
         "http://castfabric.test:9988/api/v1/playback/media/media-secret-token",
         media_format="audio/mpeg",
+        start_position_seconds=75,
     )
     media = store.resolve_media("media-secret-token")
     assert media.path.read_bytes() == b"abcdef"
