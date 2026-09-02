@@ -67,16 +67,18 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 
 ## Verification and deployment baseline
 
-- Current release code commit: `70867edfe2220e59cf2a8c3de8f451d65d1e3ff4`. `main` also
-  contains later documentation-only handoff/migration commits.
-- Current published prerelease: `v0.11.0-alpha.2`.
+- Current release code commit: `3563c5bb549db67c4d4ad7b940db2e1babb660a7`.
+- Current published prerelease: `v0.11.0-alpha.3`.
 - Canonical repository: `https://github.com/DjangoAILab/CastFabric`.
-- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.2`, published for
+- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.3`, published for
   `linux/amd64` and `linux/arm64`.
 - Landing page: `https://djangoailab.github.io/CastFabric/`.
-- GitHub Actions publish run `33583543528` passed Python/integration tests, Agent Skill tests,
+- GitHub Actions publish run `33647910803` passed Python/integration tests, Agent Skill tests,
   offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
   prerelease creation.
+- The Home Server runs `v0.11.0-alpha.3`; OpenClaw `2026.6.33` has the released CastFabric Skill
+  installed and discovers all 12 MCP tools. This release was accepted silently through simulated
+  outputs, offline protocol tests, health checks and capability discovery only.
 - The repository was recreated after accidental remote deletion. Seven branches and nineteen tags
   were restored. The surviving GHCR package was reattached to the recreated repository with Actions
   `Write` access.
@@ -146,7 +148,7 @@ An archived experimental linked worktree remains at:
 The linked worktree shares Git metadata with the primary repository. If the primary directory is
 moved again, repair and verify the linked worktree's absolute `.git` pointer as part of the move.
 
-The 2026-09-02 directory migration was verified from the new path with 179 Python tests, all three
+The 2026-09-02 positioned-playback release was verified from the new path with 186 Python tests, all four
 Agent Skill tests, and the offline MiPlay end-to-end self-test passing. The local Python 3.12 virtual
 environment was recreated after the move so its launchers no longer reference the retired path.
 

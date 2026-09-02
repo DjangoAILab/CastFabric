@@ -2,15 +2,17 @@
 
 Latest verification: 2026-09-02
 
-Published baseline: `v0.11.0-alpha.2`
+Published baseline: `v0.11.0-alpha.3`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: `v0.11.0-alpha.2`
+Deployment baseline: `v0.11.0-alpha.3`
 
 Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
+
+Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
 
 ## MiPlay field incident (2026-09-02)
 
@@ -63,8 +65,12 @@ Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 - [x] Fake DMR and adapter tests confirm both flows reuse DLNA AVTransport `Seek` with `REL_TIME`.
 - [x] Failure tests confirm an output started for positioned playback is stopped if its initial Seek
   is rejected, and the application session is marked failed.
-- [ ] After publishing and deployment, verify OpenClaw discovers all 12 tools. This gate is discovery
+- [x] After publishing and deployment, OpenClaw discovers all 12 tools. This gate was discovery
   only: do not call play, seek, pause, stop, or volume on the physical renderer during this release.
+- [x] `v0.11.0-alpha.3` is healthy on the Home Server with DLNA, AirPlay and MiPlay all `1/1` ready,
+  and zero active or playing sessions after deployment.
+- [x] The released Skill is installed at OpenClaw's workspace Skill path, is visible to the model,
+  and passes `openclaw skills info/check` on OpenClaw `2026.6.33`.
 - [x] Management and read-only playback coverage passes: system status, output listing, output scan,
   playback status, and a no-op output update.
 - [x] URL playback and transport controls pass, and the test restores playback to stopped.
