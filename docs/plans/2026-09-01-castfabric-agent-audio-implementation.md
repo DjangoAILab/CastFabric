@@ -126,7 +126,8 @@ and returns its WebSocket address; the Skill helper owns producing and writing P
 After plan approval:
 
 1. Push the two accepted design commits on `main`.
-2. Create branch `feat/agent-audio-mcp` in the existing `/Users/wang/MiAir-codex` worktree.
+2. Create branch `feat/agent-audio-mcp` in the primary
+   `/Users/wang/Project/github/DjangoAILab/CastFabric` worktree.
 3. Do not alter or reuse `/Users/wang/MiAir-android-pcm`.
 4. Use TDD and commit after every independently passing task below.
 
