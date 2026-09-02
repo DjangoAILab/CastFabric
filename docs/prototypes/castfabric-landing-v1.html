@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="CastFabric 是面向局域网音响的开源多协议投放层。">
+  <meta name="description" content="CastFabric 让手机、电脑和 AI Agent 把音频投到局域网音响。">
   <meta name="theme-color" content="#f6f1e8">
   <meta property="og:type" content="website">
   <meta property="og:title" content="CastFabric · 不挑协议，投了就播">
-  <meta property="og:description" content="接收 DLNA、AirPlay 与妙播，输出到标准 DLNA 音响；旧小米音箱可按需启用 MiNA 兼容输出。">
-  <meta property="og:url" content="https://wangerzi.github.io/CastFabric/">
-  <meta property="og:image" content="https://wangerzi.github.io/CastFabric/assets/console-overview.png">
+  <meta property="og:description" content="接收 DLNA、AirPlay、妙播与 AI MCP 音频，输出到标准 DLNA 音响。">
+  <meta property="og:url" content="https://djangoailab.github.io/CastFabric/">
+  <meta property="og:image" content="https://djangoailab.github.io/CastFabric/assets/console-overview.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="canonical" href="https://wangerzi.github.io/CastFabric/">
+  <link rel="canonical" href="https://djangoailab.github.io/CastFabric/">
   <link rel="icon" href="../assets/castfabric-mark.svg" type="image/svg+xml">
   <title>CastFabric · 不挑协议，投了就播</title>
   <style>
@@ -373,6 +373,7 @@
     .output-card::before { left: -9px; }
     .source-capability:nth-child(2) { animation-delay: .10s; }
     .source-capability:nth-child(3) { animation-delay: .20s; }
+    .source-capability:nth-child(4) { animation-delay: .30s; }
     @keyframes sourceIn { to { opacity: 1; transform: translateX(0); } }
     .device-icon {
       position: relative;
@@ -388,6 +389,8 @@
     .device-icon.computer::before { content: ""; position: absolute; left: 6px; top: 7px; width: 20px; height: 14px; border: 1.3px solid var(--ink); border-radius: 3px; }
     .device-icon.computer::after { content: ""; position: absolute; left: 4px; bottom: 8px; width: 25px; height: 1px; background: var(--ink); }
     .device-icon.app::before { content: ""; position: absolute; inset: 7px; border: 1.3px solid var(--ink); border-radius: 7px; box-shadow: inset 0 0 0 4px var(--surface); background: var(--signal); }
+    .device-icon.agent::before { content: "AI"; position: absolute; inset: 6px; display: grid; place-items: center; border: 1.3px solid var(--ink); border-radius: 50%; color: var(--signal-deep); font: 800 8px/1 var(--body); }
+    .device-icon.agent::after { content: ""; position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border: 2px solid var(--canvas); border-radius: 50%; background: var(--healthy); }
     .device-icon.speaker::before { content: ""; position: absolute; inset: 5px 9px; border: 1.3px solid var(--ink); border-radius: 7px; }
     .device-icon.speaker::after { content: ""; position: absolute; left: 14px; top: 10px; width: 6px; height: 6px; border: 1px solid var(--ink); border-radius: 50%; box-shadow: 0 10px 0 -1px var(--signal); }
     .capability-copy { min-width: 0; }
@@ -661,7 +664,7 @@
       </nav>
       <div class="header-actions">
         <button class="round-action language-button" id="languageButton" type="button" aria-label="Switch to English">EN</button>
-        <a class="round-action github-action" href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer"><i class="github-dot"></i><span>GitHub</span><span data-copy="viewSource">查看源码</span></a>
+        <a class="round-action github-action" href="https://github.com/DjangoAILab/CastFabric" target="_blank" rel="noreferrer"><i class="github-dot"></i><span>GitHub</span><span data-copy="viewSource">查看源码</span></a>
       </div>
     </div>
   </header>
@@ -672,7 +675,7 @@
         <div class="hero-copy">
           <p class="eyebrow" data-copy="eyebrow">跑在 NAS / Home Server 上的本地音频投放服务</p>
           <h1><span data-copy="heroLineOne">不挑协议，</span><br><span class="signal-word" data-copy="heroLineTwo">投了就播。</span></h1>
-          <p class="hero-lead" data-copy="heroLead">接收手机和电脑投来的 DLNA、AirPlay 与妙播，再送到支持标准 DLNA 的音响；没有原生 DLNA 的旧小米音箱，可按需启用 MiNA 兼容输出。</p>
+          <p class="hero-lead" data-copy="heroLead">手机和电脑继续使用 DLNA、AirPlay 与妙播；AI Agent 通过 MCP 播放 URL、本地文件或实时 PCM。声音统一送到标准 DLNA 音响。</p>
           <div class="value-pills" aria-label="Product traits">
             <span class="value-pill"><i></i><span data-copy="pillLocal">核心链路仅在局域网</span></span>
             <span class="value-pill"><i></i><span data-copy="pillAccount">每台音响独立入口</span></span>
@@ -680,11 +683,11 @@
           </div>
           <div class="hero-actions">
             <a class="button button-primary" href="#deploy"><span data-copy="primaryCta">用 Docker 部署</span><span class="button-arrow">↘</span></a>
-            <a class="button button-secondary" href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer"><span data-copy="secondaryCta">在 GitHub 查看</span><span>↗</span></a>
+            <a class="button button-secondary" href="https://github.com/DjangoAILab/CastFabric" target="_blank" rel="noreferrer"><span data-copy="secondaryCta">在 GitHub 查看</span><span>↗</span></a>
           </div>
-          <a class="registry-note" href="https://github.com/wangerzi/CastFabric/pkgs/container/castfabric" target="_blank" rel="noreferrer" aria-label="CastFabric GitHub Container Registry">
+          <a class="registry-note" href="https://github.com/DjangoAILab/CastFabric/pkgs/container/castfabric" target="_blank" rel="noreferrer" aria-label="CastFabric GitHub Container Registry">
             <i class="terminal-dot"></i>
-            <span class="registry-copy"><small data-copy="publicImage">PUBLIC GHCR IMAGE · 公开镜像</small><code>ghcr.io/wangerzi/castfabric:latest</code></span>
+            <span class="registry-copy"><small data-copy="publicImage">PUBLIC GHCR IMAGE · 公开镜像</small><code>ghcr.io/djangoailab/castfabric:latest</code></span>
             <span class="registry-arch">amd64 · arm64 ↗</span>
           </a>
         </div>
@@ -701,6 +704,7 @@
                 <article class="source-capability"><i class="device-icon phone"></i><span class="capability-copy"><strong data-copy="androidSender">支持妙播的 Android</strong><span data-copy="systemCast">系统投放入口</span></span><span class="protocol-chip">MiPlay</span></article>
                 <article class="source-capability"><i class="device-icon computer"></i><span class="capability-copy"><strong>iPhone / Mac</strong><span data-copy="systemCast">系统投放入口</span></span><span class="protocol-chip">AirPlay</span></article>
                 <article class="source-capability"><i class="device-icon app"></i><span class="capability-copy"><strong data-copy="dlnaSender">DLNA App / 控制端</strong><span data-copy="standardCast">标准投放</span></span><span class="protocol-chip">DLNA</span></article>
+                <article class="source-capability"><i class="device-icon agent"></i><span class="capability-copy"><strong data-copy="agentSender">AI Agent / 自动化</strong><span data-copy="agentAudio">URL · 文件 · 实时 PCM</span></span><span class="protocol-chip">MCP</span></article>
               </div>
             </section>
             <div class="fabric-core" aria-label="CastFabric receiver suite per speaker"><i class="fabric-pulse"></i><small data-copy="perSpeakerCore">每台音响独立</small><strong>CastFabric</strong><span>RECEIVER SUITE</span></div>
@@ -713,7 +717,7 @@
             </section>
           </div>
           <figcaption class="route-foot">
-            <span class="route-summary"><span><i></i><span data-copy="threeProtocols">3 种接收协议</span></span><span><i></i><span data-copy="twoOutputs">2 个已实现输出适配器</span></span><span><i></i><span data-copy="independentSuites">每台音响独立启停</span></span></span>
+            <span class="route-summary"><span><i></i><span data-copy="fourInputs">4 种已实现输入</span></span><span><i></i><span data-copy="twoOutputs">2 个已实现输出适配器</span></span><span><i></i><span data-copy="independentSuites">每台音响独立启停</span></span></span>
             <em class="extension-note" data-copy="extensionBoundary">项目方向：通过 PlaybackTarget 接入更多本地输出；未实现不列入支持</em>
           </figcaption>
         </figure>
@@ -722,7 +726,7 @@
 
     <section class="proof-section" id="capabilities">
       <div class="shell proof-grid">
-        <article class="proof-item"><small data-copy="proofIngress">RECEIVER INPUTS · 已实现</small><strong>DLNA · AirPlay · MiPlay</strong><p data-copy="proofIngressText">手机和电脑继续使用原有投放入口。</p></article>
+        <article class="proof-item"><small data-copy="proofIngress">AUDIO INPUTS · 已实现</small><strong>DLNA · AirPlay · MiPlay · MCP</strong><p data-copy="proofIngressText">手机沿用系统入口；AI 直接调用音响能力。</p></article>
         <article class="proof-item"><small data-copy="proofOutput">CORE OUTPUT · 已实现</small><strong>Standard DLNA</strong><p data-copy="proofOutputText">驱动实现 AVTransport 与 RenderingControl 的设备。</p></article>
         <article class="proof-item"><small data-copy="proofXiaomi">OPTIONAL OUTPUT · 已实现</small><strong>Xiaomi MiNA</strong><p data-copy="proofXiaomiText">旧 MiAir 兼容路径；默认关闭并需要小米账号。</p></article>
         <article class="proof-item"><small data-copy="proofFuture">EXTENSION BOUNDARY · 未承诺协议</small><strong>PlaybackTarget</strong><p data-copy="proofFutureText">为后续输出适配器留出接口，不把规划写成支持。</p></article>
@@ -767,17 +771,17 @@
           <p class="section-label" data-copy="deployEyebrow">RUN FROM GHCR · LINUX HOME SERVER</p>
           <h2 id="deployTitle" data-copy="deployTitle">一条命令启动<br>CastFabric。</h2>
           <p data-copy="deployLead">镜像公开托管在 GitHub Container Registry，提供 amd64 与 arm64。使用 host network，让 SSDP 和 mDNS 正常访问局域网；配置保存在宿主机目录。</p>
-          <a class="deploy-link" href="https://github.com/wangerzi/CastFabric#docker-%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2" target="_blank" rel="noreferrer" data-copy="fullGuide">查看完整部署与网络说明 ↗</a>
+          <a class="deploy-link" href="https://github.com/DjangoAILab/CastFabric#docker-%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2" target="_blank" rel="noreferrer" data-copy="fullGuide">查看完整部署与网络说明 ↗</a>
         </div>
         <div class="terminal">
-          <div class="terminal-head"><span>HOME-SERVER / CASTFABRIC</span><button type="button" data-copy-command="docker run -d --name castfabric --restart unless-stopped --network host -v &quot;$PWD/castfabric-conf:/app/conf&quot; ghcr.io/wangerzi/castfabric:latest"><span data-copy="copyAll">复制命令</span></button></div>
+          <div class="terminal-head"><span>HOME-SERVER / CASTFABRIC</span><button type="button" data-copy-command="docker run -d --name castfabric --restart unless-stopped --network host -v &quot;$PWD/castfabric-conf:/app/conf&quot; ghcr.io/djangoailab/castfabric:latest"><span data-copy="copyAll">复制命令</span></button></div>
           <pre><span class="comment"># pull and start from public GHCR</span>
 <span class="prompt">$</span> docker run -d \
     --name castfabric \
     --restart unless-stopped \
     --network host \
     -v "$PWD/castfabric-conf:/app/conf" \
-    ghcr.io/wangerzi/castfabric:latest
+    ghcr.io/djangoailab/castfabric:latest
 
 <span class="comment"># open the console</span>
 <span class="prompt">→</span> http://HOME_SERVER_IP:8300</pre>
@@ -789,7 +793,7 @@
       <div class="shell boundary">
         <span class="boundary-icon">i</span>
         <div><strong id="boundaryTitle" data-copy="boundaryTitle">两条声路，两种延迟</strong><p data-copy="boundaryText">原生 DLNA 直投在当前测试音箱通常低于 1 秒；AirPlay 与妙播经过实时 PCM / DLNA 桥接约有 4 秒延迟，不适合需要音画同步的视频。不同音箱的缓冲策略不同，实际结果以设备为准。</p></div>
-        <a href="https://github.com/wangerzi/CastFabric/blob/main/docs/architecture/live-bridge-latency.md" target="_blank" rel="noreferrer" data-copy="readEvidence">查看测试证据 ↗</a>
+        <a href="https://github.com/DjangoAILab/CastFabric/blob/main/docs/architecture/live-bridge-latency.md" target="_blank" rel="noreferrer" data-copy="readEvidence">查看测试证据 ↗</a>
       </div>
     </section>
   </main>
@@ -797,17 +801,17 @@
   <footer class="site-footer">
     <div class="shell footer-grid">
       <div class="footer-brand"><img src="../assets/castfabric-mark.svg" alt=""><span><strong>CastFabric</strong><span data-copy="footerCopy">开源、本地优先的家庭音频投放层 · MIT License</span></span></div>
-      <nav class="footer-links" aria-label="Footer navigation"><a href="https://github.com/wangerzi/CastFabric" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/wangerzi/CastFabric/releases" target="_blank" rel="noreferrer">Releases</a><a href="https://github.com/wangerzi/CastFabric/blob/main/README.en.md" target="_blank" rel="noreferrer">English README</a><a href="#top" data-copy="backTop">回到顶部 ↑</a></nav>
+      <nav class="footer-links" aria-label="Footer navigation"><a href="https://github.com/DjangoAILab/CastFabric" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/DjangoAILab/CastFabric/releases" target="_blank" rel="noreferrer">Releases</a><a href="https://github.com/DjangoAILab/CastFabric/blob/main/README.en.md" target="_blank" rel="noreferrer">English README</a><a href="#top" data-copy="backTop">回到顶部 ↑</a></nav>
     </div>
   </footer>
 
   <script>
     const copy = {
       navCapabilities: ['核心能力', 'Capabilities'], navHow: ['工作原理', 'How it works'], navDeploy: ['Docker 部署', 'Docker'], viewSource: ['查看源码', 'View source'],
-      eyebrow: ['跑在 NAS / Home Server 上的本地音频投放服务', 'LOCAL AUDIO CASTING FOR NAS AND HOME SERVERS'], heroLineOne: ['不挑协议，', 'Cast freely.'], heroLineTwo: ['投了就播。', 'It just plays.'], heroLead: ['接收手机和电脑投来的 DLNA、AirPlay 与妙播，再送到支持标准 DLNA 的音响；没有原生 DLNA 的旧小米音箱，可按需启用 MiNA 兼容输出。', 'Receive DLNA, AirPlay and MiPlay from phones and computers, then route audio to standard DLNA speakers. Legacy Xiaomi speakers without native DLNA can use the optional MiNA output.'],
+      eyebrow: ['跑在 NAS / Home Server 上的本地音频投放服务', 'LOCAL AUDIO CASTING FOR NAS AND HOME SERVERS'], heroLineOne: ['不挑协议，', 'Cast freely.'], heroLineTwo: ['投了就播。', 'It just plays.'], heroLead: ['手机和电脑继续使用 DLNA、AirPlay 与妙播；AI Agent 通过 MCP 播放 URL、本地文件或实时 PCM。声音统一送到标准 DLNA 音响。', 'Phones and computers keep DLNA, AirPlay, and MiPlay. AI agents use MCP for URLs, local files, or live PCM. CastFabric routes them all to standard DLNA speakers.'],
       pillLocal: ['核心链路仅在局域网', 'Core path stays on your LAN'], pillAccount: ['每台音响独立入口', 'Independent suite per speaker'], pillDocker: ['amd64 · arm64', 'amd64 · arm64'], primaryCta: ['用 Docker 部署', 'Deploy with Docker'], secondaryCta: ['在 GitHub 查看', 'View on GitHub'], publicImage: ['PUBLIC GHCR IMAGE · 公开镜像', 'PUBLIC GHCR IMAGE'], copy: ['复制', 'Copy'], copied: ['已复制', 'Copied'], copyFailed: ['请手动复制', 'Select and copy'],
-      routeEyebrow: ['CURRENT SUPPORT · 当前支持', 'CURRENT SUPPORT · IMPLEMENTED TODAY'], routeTitle: ['从什么投，投到什么，一屏看清', 'See what sends in and what plays out'], implementedNow: ['均已实现', 'IMPLEMENTED'], availableNow: ['现在可用', 'AVAILABLE NOW'], ingressTitle: ['1 · 发送设备 / 接收协议', '1 · SENDERS / RECEIVER INPUTS'], outputTitle: ['2 · 输出协议 / 设备', '2 · OUTPUT PROTOCOLS / DEVICES'], androidSender: ['支持妙播的 Android', 'MiPlay-capable Android'], systemCast: ['系统投放入口', 'Built-in casting control'], dlnaSender: ['DLNA App / 控制端', 'DLNA app / controller'], standardCast: ['标准投放', 'Standard casting'], perSpeakerCore: ['每台音响独立', 'ONE PER SPEAKER'], coreOutput: ['核心输出 · 本地', 'CORE OUTPUT · LOCAL'], dlnaOutputDevices: ['兼容的智能音箱、网络播放器、功放', 'Compatible speakers, network players and receivers'], optionalOutput: ['可选兼容 · 云端', 'OPTIONAL COMPATIBILITY · CLOUD'], accountRequired: ['需小米账号', 'XIAOMI ACCOUNT'], minaOutputDevices: ['没有原生 DLNA 的旧小米音箱；默认关闭', 'Legacy Xiaomi speakers without native DLNA; off by default'], threeProtocols: ['3 种接收协议', '3 receiver protocols'], twoOutputs: ['2 个已实现输出适配器', '2 implemented output adapters'], independentSuites: ['每台音响独立启停', 'Independent per speaker'], extensionBoundary: ['项目方向：通过 PlaybackTarget 接入更多本地输出；未实现不列入支持', 'Direction: add more local outputs through PlaybackTarget; unimplemented protocols are not listed as supported'],
-      proofIngress: ['RECEIVER INPUTS · 已实现', 'RECEIVER INPUTS · IMPLEMENTED'], proofIngressText: ['手机和电脑继续使用原有投放入口。', 'Phones and computers keep their existing casting controls.'], proofOutput: ['CORE OUTPUT · 已实现', 'CORE OUTPUT · IMPLEMENTED'], proofOutputText: ['驱动实现 AVTransport 与 RenderingControl 的设备。', 'Controls devices implementing AVTransport and RenderingControl.'], proofXiaomi: ['OPTIONAL OUTPUT · 已实现', 'OPTIONAL OUTPUT · IMPLEMENTED'], proofXiaomiText: ['旧 MiAir 兼容路径；默认关闭并需要小米账号。', 'Legacy MiAir compatibility; off by default and requires a Xiaomi account.'], proofFuture: ['EXTENSION BOUNDARY · 未承诺协议', 'EXTENSION BOUNDARY · NO PROTOCOL PROMISE'], proofFutureText: ['为后续输出适配器留出接口，不把规划写成支持。', 'An interface for future adapters, without presenting plans as support.'],
+      routeEyebrow: ['CURRENT SUPPORT · 当前支持', 'CURRENT SUPPORT · IMPLEMENTED TODAY'], routeTitle: ['从什么投，投到什么，一屏看清', 'See what sends in and what plays out'], implementedNow: ['均已实现', 'IMPLEMENTED'], availableNow: ['现在可用', 'AVAILABLE NOW'], ingressTitle: ['1 · 发送设备 / 接收协议', '1 · SENDERS / RECEIVER INPUTS'], outputTitle: ['2 · 输出协议 / 设备', '2 · OUTPUT PROTOCOLS / DEVICES'], androidSender: ['支持妙播的 Android', 'MiPlay-capable Android'], systemCast: ['系统投放入口', 'Built-in casting control'], dlnaSender: ['DLNA App / 控制端', 'DLNA app / controller'], standardCast: ['标准投放', 'Standard casting'], agentSender: ['AI Agent / 自动化', 'AI agent / automation'], agentAudio: ['URL · 文件 · 实时 PCM', 'URL · file · live PCM'], perSpeakerCore: ['每台音响独立', 'ONE PER SPEAKER'], coreOutput: ['核心输出 · 本地', 'CORE OUTPUT · LOCAL'], dlnaOutputDevices: ['兼容的智能音箱、网络播放器、功放', 'Compatible speakers, network players and receivers'], optionalOutput: ['可选兼容 · 云端', 'OPTIONAL COMPATIBILITY · CLOUD'], accountRequired: ['需小米账号', 'XIAOMI ACCOUNT'], minaOutputDevices: ['没有原生 DLNA 的旧小米音箱；默认关闭', 'Legacy Xiaomi speakers without native DLNA; off by default'], fourInputs: ['4 种已实现输入', '4 implemented inputs'], twoOutputs: ['2 个已实现输出适配器', '2 implemented output adapters'], independentSuites: ['每台音响独立启停', 'Independent per speaker'], extensionBoundary: ['项目方向：通过 PlaybackTarget 接入更多本地输出；未实现不列入支持', 'Direction: add more local outputs through PlaybackTarget; unimplemented protocols are not listed as supported'],
+      proofIngress: ['AUDIO INPUTS · 已实现', 'AUDIO INPUTS · IMPLEMENTED'], proofIngressText: ['手机沿用系统入口；AI 直接调用音响能力。', 'Phones keep native casting; AI calls speaker capabilities directly.'], proofOutput: ['CORE OUTPUT · 已实现', 'CORE OUTPUT · IMPLEMENTED'], proofOutputText: ['驱动实现 AVTransport 与 RenderingControl 的设备。', 'Controls devices implementing AVTransport and RenderingControl.'], proofXiaomi: ['OPTIONAL OUTPUT · 已实现', 'OPTIONAL OUTPUT · IMPLEMENTED'], proofXiaomiText: ['旧 MiAir 兼容路径；默认关闭并需要小米账号。', 'Legacy MiAir compatibility; off by default and requires a Xiaomi account.'], proofFuture: ['EXTENSION BOUNDARY · 未承诺协议', 'EXTENSION BOUNDARY · NO PROTOCOL PROMISE'], proofFutureText: ['为后续输出适配器留出接口，不把规划写成支持。', 'An interface for future adapters, without presenting plans as support.'],
       productProof: ['PRODUCT PROOF · 真实产品', 'PRODUCT PROOF · THE REAL CONSOLE'], screenshotLanguage: ['截图为中文界面 · 控制台支持 English', 'Screenshot shown in Chinese · English UI available'], consoleTitle: ['当前走哪条声路，\n一眼就能确认。', 'See the active path\nat a glance.'], consoleLead: ['控制台只展示能被系统确认的信息：发送设备、接收协议、输出音响、会话状态与失败原因；不猜来源 App，也不推测曲目。', 'The console shows only verifiable information: sender, receiver protocol, output speaker, session state and failure reason. It does not guess the source app or track.'], noteOverview: ['一眼看懂全屋声路', 'One view of every active route'], noteOverviewText: ['最多展开三条活跃路径，其余聚合，不让音响数量破坏首页。', 'Up to three active routes stay visible while additional speakers are summarized.'], noteManage: ['每台音响独立管理', 'Manage every speaker independently'], noteManageText: ['启停只影响当前音响的 Receiver Suite，不存在全局默认输出。', 'A switch affects one receiver suite only. There is no global default output.'], noteTruth: ['成功必须真的拉到声音', 'Success requires a real audio pull'], noteTruthText: ['实体音响没有拉取 HTTP 音频时，不把控制命令成功冒充播放成功。', 'A successful control command is not reported as playback until the physical renderer pulls audio.'],
       howEyebrow: ['HOW IT WORKS · 三个实际步骤', 'HOW IT WORKS · THREE CONCRETE STEPS'], howTitle: ['发现音响，发布入口，\n确认实体设备拉到声音。', 'Discover, publish receivers,\nthen verify the physical pull.'], stepDiscover: ['发现局域网音响', 'Discover LAN speakers'], stepDiscoverText: ['扫描标准 UPnP/DLNA MediaRenderer，不要求先登录小米或其他厂商账号。', 'Discover standard UPnP/DLNA MediaRenderers without signing in to Xiaomi or another vendor.'], stepPublish: ['发布独立接收入口', 'Publish independent receivers'], stepPublishText: ['每台已启用音响获得自己的 DLNA、AirPlay 和妙播名称，多个房间可以同时存在。', 'Every enabled speaker gets its own DLNA, AirPlay and MiPlay identity, so multiple rooms can coexist.'], stepVerify: ['确认实体设备拉流', 'Verify the physical output'], stepVerifyText: ['CastFabric 不止发送控制命令，还确认实体 DMR 真正打开并拉取音频流。', 'CastFabric goes beyond control acknowledgements and confirms that the physical DMR opens the audio stream.'],
       deployEyebrow: ['RUN FROM GHCR · LINUX HOME SERVER', 'RUN FROM GHCR · LINUX HOME SERVER'], deployTitle: ['一条命令启动\nCastFabric。', 'Start CastFabric\nwith one command.'], deployLead: ['镜像公开托管在 GitHub Container Registry，提供 amd64 与 arm64。使用 host network，让 SSDP 和 mDNS 正常访问局域网；配置保存在宿主机目录。', 'The public GitHub Container Registry image supports amd64 and arm64. Host networking gives SSDP and mDNS access to your LAN, while configuration stays on the host.'], fullGuide: ['查看完整部署与网络说明 ↗', 'Read the complete deployment guide ↗'], copyAll: ['复制命令', 'Copy command'],

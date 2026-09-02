@@ -634,7 +634,7 @@ def create_web_app(config: Config, app_instance) -> web.Application:
                 },
                 status=409,
             )
-        url = "https://github.com/wangerzi/CastFabric/archive/refs/heads/main.tar.gz"
+        url = "https://github.com/DjangoAILab/CastFabric/archive/refs/heads/main.tar.gz"
 
         log.info(f"开始一键更新 (目录: {app_dir}, Docker: {in_docker})")
 

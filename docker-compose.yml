@@ -1,6 +1,6 @@
 services:
   castfabric:
-    image: ghcr.io/wangerzi/castfabric:latest
+    image: ghcr.io/djangoailab/castfabric:latest
     build:
       context: .
     container_name: castfabric

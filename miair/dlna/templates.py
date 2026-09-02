@@ -24,7 +24,7 @@ def device_description_xml(udn: str, friendly_name: str, base_url: str) -> str:
     <deviceType>{DEVICE_TYPE}</deviceType>
     <friendlyName>{escape(friendly_name)}</friendlyName>
     <manufacturer>CastFabric Community</manufacturer>
-    <manufacturerURL>https://github.com/wangerzi/CastFabric</manufacturerURL>
+    <manufacturerURL>https://github.com/DjangoAILab/CastFabric</manufacturerURL>
     <modelDescription>CastFabric multi-protocol audio renderer</modelDescription>
     <modelName>CastFabric Renderer</modelName>
     <modelNumber>1.0</modelNumber>

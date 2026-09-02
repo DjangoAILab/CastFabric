@@ -18,7 +18,7 @@ CastFabric 0.10 采用增量迁移，不会主动删除以下内容：
 
 新默认值是：
 
-- 镜像：`ghcr.io/wangerzi/castfabric:latest`
+- 镜像：`ghcr.io/djangoailab/castfabric:latest`
 - 容器：`castfabric`
 - Compose 服务：`castfabric`
 - 容器内配置目录：仍为 `/app/conf`

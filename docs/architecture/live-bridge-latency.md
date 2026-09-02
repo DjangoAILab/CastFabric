@@ -1,6 +1,6 @@
 # AirPlay / MiPlay 实时桥接延迟边界
 
-状态：`v0.10.0-alpha.2` 发布基线  
+状态：`v0.11.0-alpha.1` 发布基线
 测试环境：Home Server `192.168.133.5`，同一局域网内的小爱音箱 HD 作为标准 UPnP/DLNA
 MediaRenderer  
 结论：约 4 秒是当前“实时输入 → DLNA HTTP pull 输出”组合的设备相关体验边界，不是

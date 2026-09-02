@@ -1,21 +1,22 @@
 <p align="center"><img src="docs/assets/castfabric-mark.svg" width="104" alt="CastFabric 标志"></p>
 <h1 align="center">CastFabric</h1>
 <p align="center"><strong>不挑协议，投了就播。</strong></p>
-<p align="center">面向局域网音响的开源多协议投放层：一台音响，一组独立的 DLNA、AirPlay 与妙播入口。</p>
+<p align="center">让手机、电脑与 AI Agent 共用一套局域网音响能力：DLNA、AirPlay、妙播与 MCP。</p>
 
 <p align="center">
-  <a href="https://github.com/wangerzi/CastFabric/actions/workflows/test.yml"><img alt="测试状态" src="https://github.com/wangerzi/CastFabric/actions/workflows/test.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/wangerzi/CastFabric/releases"><img alt="GitHub 发布" src="https://img.shields.io/github/v/release/wangerzi/CastFabric?include_prereleases&sort=semver"></a>
-  <a href="https://github.com/wangerzi/CastFabric/pkgs/container/castfabric"><img alt="GHCR 镜像" src="https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-1f2523"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/actions/workflows/test.yml"><img alt="测试状态" src="https://github.com/DjangoAILab/CastFabric/actions/workflows/test.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/releases"><img alt="GitHub 发布" src="https://img.shields.io/github/v/release/DjangoAILab/CastFabric?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/pkgs/container/castfabric"><img alt="GHCR 镜像" src="https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-1f2523"></a>
   <a href="LICENSE"><img alt="MIT 许可证" src="https://img.shields.io/badge/license-MIT-cb7a18"></a>
 </p>
 <p align="center">简体中文 · <a href="README.en.md">English</a></p>
 
 ![CastFabric 控制台总览](docs/assets/console-overview.png)
 
-CastFabric 把手机和电脑发来的 DLNA、AirPlay、妙播（MiPlay）音频，统一送到支持标准
-UPnP/DLNA MediaRenderer 的局域网音响。标准声路完全不依赖小米账号；小米云只保留为
-显式启用的兼容扩展。
+CastFabric 把手机、电脑和 AI Agent 发来的音频，统一送到局域网音响。手机继续使用
+DLNA、AirPlay、妙播（MiPlay）；AI 通过内嵌 MCP 播放 URL、本地文件或实时 PCM。
+核心输出面向标准 UPnP/DLNA MediaRenderer，完全不依赖小米账号；小米云只保留为显式
+启用的旧设备兼容扩展。
 
 默认情况下，每台已启用音响会对应一组 `CastFabric · <音响名称>` 接收入口。不同音响
 可以并行播放，同一音响内的协议会话由独立 Receiver Suite 协调，不存在“全局默认音响”。
@@ -25,6 +26,8 @@ UPnP/DLNA MediaRenderer 的局域网音响。标准声路完全不依赖小米�
 - **多协议、同一出口**：虚拟 DLNA、AirPlay、妙播最终都落到标准 DLNA 输出适配器。
 - **多音响、彼此隔离**：每台输出音响拥有独立 Receiver Suite、会话、端口和活动记录。
 - **不绑定厂商账号**：DLNA 扫描、发现与播放不受小米 token 或公网状态影响。
+- **让 AI 直接找到音响**：同一服务的 `/mcp` 暴露发现、管理、播放与控制，无需部署
+  sidecar、第二个容器或额外端口。
 - **保留原生直投**：实体音响自己的 DLNA 仍然存在，追求最低延迟时可以直接选择它。
 - **成功必须可验证**：控制命令成功后，还要确认实体音响真的拉取 HTTP 音频流，才记录
   输出已建立；“接受了命令但没有声音”会得到明确错误码。
@@ -34,17 +37,34 @@ UPnP/DLNA MediaRenderer 的局域网音响。标准声路完全不依赖小米�
 ## 声路模型
 
 ```text
-手机 / 电脑
-  ├─ DLNA ───────┐
-  ├─ AirPlay ────┼─▶ Receiver Suite（每台音响独立）─▶ DLNA 输出 ─▶ 实体音响
-  └─ 妙播 ───────┘
+手机 / 电脑 ── DLNA / AirPlay / 妙播 ──┐
+                                      ├─▶ Receiver Suite（每台音响独立）─▶ DLNA 输出 ─▶ 实体音响
+AI Agent ── MCP：URL / 文件 / 实时 PCM ┘
 
-音响 A：DLNA + AirPlay + MiPlay ─▶ 输出 A
-音响 B：DLNA + AirPlay + MiPlay ─▶ 输出 B
+音响 A：DLNA + AirPlay + MiPlay + MCP ─▶ 输出 A
+音响 B：DLNA + AirPlay + MiPlay + MCP ─▶ 输出 B
 ```
 
 妙播当前声路为 AAC → 48 kHz 双声道 PCM → HTTP WAV/L16 → 实体 DLNA DMR。妙播接收端
 基于公开资料和抓包行为独立实现，随 `0.10` 版本以预发布功能提供。
+
+## AI 与 MCP
+
+CastFabric `0.11` 在现有 Web 服务上直接提供 Streamable HTTP MCP：控制台地址若为
+`http://192.168.1.10:8300`，MCP 地址就是 `http://192.168.1.10:8300/mcp`。它复用同一套
+`target_id`、播放状态机和输出适配器，并非另一套播放服务。
+
+当前提供 11 个原子工具：
+
+- 管理：系统状态、列出音响、扫描音响、启用/停用或重命名音响；
+- 播放：HTTP(S) URL、Agent 本地文件、`s16le / 48 kHz / 双声道` 实时 PCM；
+- 控制：查询状态、暂停、停止、设置音量。
+
+仓库中的 [CastFabric Agent Skill](skills/castfabric/SKILL.md) 进一步封装了文件上传、FFmpeg
+实时转码和客户端侧的顺序/循环播放列表。MCP 保持轻量：CastFabric **不内置 TTS、媒体库
+或服务器播放队列**，Agent 负责生成或选择音频，CastFabric 只负责可靠地送到指定音响。
+
+> 当前 MCP 面向可信局域网，尚未提供公网认证。不要把 `/mcp` 直接暴露到互联网。
 
 ### 延迟边界
 
@@ -62,7 +82,7 @@ UPnP/DLNA MediaRenderer 的局域网音响。标准声路完全不依赖小米�
 SSDP 和 mDNS 依赖局域网组播，推荐在 Linux Home Server 上使用 host 网络：
 
 ```bash
-git clone https://github.com/wangerzi/CastFabric.git
+git clone https://github.com/DjangoAILab/CastFabric.git
 cd CastFabric
 docker compose pull
 docker compose up -d
@@ -100,6 +120,7 @@ CASTFABRIC_CONFIG_DIR=./conf
   三条，其余汇总，不因音响数量增加而破坏布局。
 - **音响**：管理多台输出音响、接收入口名称、启停状态和每协议健康。
 - **活动**：查看结构化会话与失败原因；诊断信息经过服务端脱敏。
+- **AI 接入**：复制当前实例的 MCP 地址、客户端配置与验证提示词；不会新增独立服务端口。
 
 连接、播放偏好、端口和可选扩展集中在二级「连接配置」面板；界面支持中英文切换。
 
@@ -123,8 +144,9 @@ castfabric-miplay scan --timeout 5
 castfabric-miplay simulate --target 192.168.1.20 --duration 1
 ```
 
-当前发布门槛同时覆盖：单元/集成测试、双实体 DMR 协议 POC、旧配置迁移与回滚读取、
-诊断隐私、Docker 冷启动、镜像内 wire self-test，以及 amd64/arm64 GHCR 构建。
+当前发布门槛同时覆盖：单元/集成测试、Agent Skill 测试、MCP 冷启动、真实音响文件与
+PCM 拉流、双实体 DMR 协议 POC、旧配置迁移与回滚读取、诊断隐私，以及 amd64/arm64
+GHCR 构建。
 
 ## 迁移、架构与协议资料
 
@@ -136,6 +158,7 @@ castfabric-miplay simulate --target 192.168.1.20 --duration 1
 - [控制台数据契约](docs/architecture/castfabric-console-data-contract.md)
 - [妙播协议研究与独立实现边界](docs/research/miplay-protocol-sources.md)
 - [Home Server 验收清单](docs/testing/castfabric-home-server-checklist.md)
+- [MCP 与 Agent Skill 设计](docs/plans/2026-09-01-castfabric-mcp-agent-skill-design.md)
 
 ## 兼容与开源
 

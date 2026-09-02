@@ -29,11 +29,12 @@ function assert(condition, message) {
   })));
 
   assert(await page.locator('h1').innerText() === '不挑协议，\n投了就播。', 'Chinese slogan is missing or changed');
-  assert(await page.locator('.source-capability').count() === 3, 'Expected three implemented receiver inputs');
+  assert(await page.locator('.source-capability').count() === 4, 'Expected four implemented audio inputs');
+  assert(await page.locator('.source-capability .protocol-chip').allTextContents().then(values => values.includes('MCP')), 'MCP input is missing');
   assert(await page.locator('.output-card').count() === 2, 'Expected core DLNA and optional MiNA outputs');
   assert(await page.locator('.output-card.optional').count() === 1, 'MiNA must be visibly marked as optional');
   assert((await page.locator('.extension-note').innerText()).includes('未实现不列入支持'), 'Future output support is not clearly separated from implemented support');
-  assert(await page.locator('.registry-copy code').innerText() === 'ghcr.io/wangerzi/castfabric:latest', 'Public GHCR image is missing');
+  assert(await page.locator('.registry-copy code').innerText() === 'ghcr.io/djangoailab/castfabric:latest', 'Public GHCR image is missing');
   assert(await page.locator('.console-frame img').evaluate(image => image.naturalWidth > 0), 'Desktop product image failed to load');
   assert(await page.locator('.mobile-proof img').evaluate(image => image.naturalWidth > 0), 'Mobile product image failed to load');
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'Desktop has horizontal overflow');
@@ -64,7 +65,7 @@ function assert(condition, message) {
   const deployCopy = page.locator('.terminal-head button');
   const deployCommand = await deployCopy.getAttribute('data-copy-command');
   assert(deployCommand.startsWith('docker run -d '), 'Deploy copy must contain a directly executable docker run command');
-  assert(deployCommand.includes('ghcr.io/wangerzi/castfabric:latest'), 'Deploy command must use the published GHCR image');
+  assert(deployCommand.includes('ghcr.io/djangoailab/castfabric:latest'), 'Deploy command must use the published GHCR image');
   assert(!deployCommand.includes('docker compose'), 'Deploy command must not require an unstated Compose file');
   await deployCopy.click();
   await page.waitForFunction(() => document.querySelector('.terminal-head button')?.dataset.state);
@@ -80,7 +81,7 @@ function assert(condition, message) {
   await page.reload({ waitUntil: 'networkidle' });
   await page.evaluate(() => scrollTo(0, 0));
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'Mobile has horizontal overflow');
-  assert(await page.locator('.source-capability').count() === 3, 'Mobile lost receiver inputs');
+  assert(await page.locator('.source-capability').count() === 4, 'Mobile lost receiver inputs');
   assert(await page.locator('.output-card').count() === 2, 'Mobile lost output adapters');
   await page.screenshot({ path: '/tmp/castfabric-landing-v1-mobile.png', fullPage: false });
   await page.locator('.deploy-card').screenshot({ path: '/tmp/castfabric-landing-v1-mobile-deploy.png' });

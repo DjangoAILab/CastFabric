@@ -1,21 +1,22 @@
 <p align="center"><img src="docs/assets/castfabric-mark.svg" width="104" alt="CastFabric mark"></p>
 <h1 align="center">CastFabric</h1>
 <p align="center"><strong>Cast it. It plays.</strong></p>
-<p align="center">An open local-audio fabric: one independent DLNA, AirPlay and MiPlay receiver suite per speaker.</p>
+<p align="center">One local-audio fabric for phones, computers, and AI agents: DLNA, AirPlay, MiPlay, and MCP.</p>
 
 <p align="center">
-  <a href="https://github.com/wangerzi/CastFabric/actions/workflows/test.yml"><img alt="Test status" src="https://github.com/wangerzi/CastFabric/actions/workflows/test.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/wangerzi/CastFabric/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/wangerzi/CastFabric?include_prereleases&sort=semver"></a>
-  <a href="https://github.com/wangerzi/CastFabric/pkgs/container/castfabric"><img alt="GHCR image" src="https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-1f2523"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/actions/workflows/test.yml"><img alt="Test status" src="https://github.com/DjangoAILab/CastFabric/actions/workflows/test.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/DjangoAILab/CastFabric?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/DjangoAILab/CastFabric/pkgs/container/castfabric"><img alt="GHCR image" src="https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-1f2523"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-cb7a18"></a>
 </p>
 <p align="center"><a href="README.md">简体中文</a> · English</p>
 
 ![CastFabric console overview](docs/assets/console-overview.png)
 
-CastFabric receives DLNA, AirPlay and MiPlay audio from phones and computers, then routes it to
-standard UPnP/DLNA MediaRenderers on your LAN. The standard path does not depend on a Xiaomi account.
-Xiaomi cloud support remains only as an explicitly enabled compatibility extension.
+CastFabric routes audio from phones, computers, and AI agents to speakers on your LAN. Phones keep
+using DLNA, AirPlay, or MiPlay; agents use the embedded MCP endpoint for URLs, local files, and live
+PCM. The core output targets standard UPnP/DLNA MediaRenderers and does not depend on a Xiaomi
+account. Xiaomi cloud remains an explicitly enabled legacy compatibility extension.
 
 Every enabled output gets its own `CastFabric · <speaker name>` receiver suite. Different speakers
 can play concurrently, while protocols targeting the same speaker share an isolated session owner.
@@ -29,6 +30,8 @@ There is no global “default speaker” in the product model.
   ports and activity history.
 - **No vendor-account dependency:** DLNA discovery and playback survive expired Xiaomi tokens and
   public-internet outages.
+- **AI can address real speakers directly:** `/mcp` exposes discovery, management, playback, and
+  control from the existing service—without a sidecar, second container, or additional port.
 - **Native DLNA stays visible:** choose the physical renderer directly when minimum latency matters.
 - **Success is verified:** CastFabric confirms that the physical renderer pulls the HTTP audio stream;
   a successful SOAP `Play` response alone is not reported as audible output.
@@ -39,18 +42,37 @@ There is no global “default speaker” in the product model.
 ## Audio path
 
 ```text
-Phone / computer
-  ├─ DLNA ───────┐
-  ├─ AirPlay ────┼─▶ Receiver Suite (one per speaker) ─▶ DLNA output ─▶ Speaker
-  └─ MiPlay ─────┘
+Phone / computer ── DLNA / AirPlay / MiPlay ──┐
+                                               ├─▶ Receiver Suite (one per speaker) ─▶ DLNA output ─▶ Speaker
+AI agent ── MCP: URL / file / live PCM ───────┘
 
-Speaker A: DLNA + AirPlay + MiPlay ─▶ Output A
-Speaker B: DLNA + AirPlay + MiPlay ─▶ Output B
+Speaker A: DLNA + AirPlay + MiPlay + MCP ─▶ Output A
+Speaker B: DLNA + AirPlay + MiPlay + MCP ─▶ Output B
 ```
 
 The current MiPlay path is AAC → 48 kHz stereo PCM → HTTP WAV/L16 → physical DLNA DMR. The receiver
 was independently implemented from public material and observed wire behavior. It ships as a
 prerelease capability in the `0.10` line.
+
+## AI and MCP
+
+CastFabric `0.11` serves Streamable HTTP MCP from the existing Web listener. If the console is at
+`http://192.168.1.10:8300`, the MCP endpoint is `http://192.168.1.10:8300/mcp`. It reuses the same
+`target_id`, playback state, and output adapters rather than introducing a second playback service.
+
+Eleven atomic tools are available:
+
+- management: system status, list and scan speakers, enable/disable or rename an output;
+- playback: HTTP(S) URL, agent-local file, and live `s16le / 48 kHz / stereo` PCM;
+- control: status, pause, stop, and volume.
+
+The bundled [CastFabric Agent Skill](skills/castfabric/SKILL.md) adds local-file upload, FFmpeg live
+conversion, and client-side sequential or looping playlists. MCP stays thin: CastFabric **does not
+embed TTS, a media library, or a server-side queue**. The agent creates or selects audio; CastFabric
+delivers it to the chosen speaker.
+
+> MCP currently targets trusted LANs and has no public-internet authentication. Do not expose
+> `/mcp` directly to the internet.
 
 ### Latency boundary
 
@@ -71,7 +93,7 @@ evidence, eliminated variants and future POCs.
 SSDP and mDNS need LAN multicast. A Linux home server with host networking is recommended:
 
 ```bash
-git clone https://github.com/wangerzi/CastFabric.git
+git clone https://github.com/DjangoAILab/CastFabric.git
 cd CastFabric
 docker compose pull
 docker compose up -d
@@ -107,6 +129,8 @@ The repository also includes non-destructive management scripts:
   desktop view within one screen and summarizes additional routes.
 - **Speakers:** manage multiple outputs, receiver aliases, suite enablement and protocol health.
 - **Activity:** inspect structured sessions and typed failures with server-side redaction.
+- **AI Access:** copy the current MCP endpoint, client configuration, and verification prompt without
+  managing another service port.
 
 Connection, playback, ports and optional extensions live in a secondary **Connection settings** panel.
 The complete console switches between Chinese and English.
@@ -131,8 +155,9 @@ castfabric-miplay scan --timeout 5
 castfabric-miplay simulate --target 192.168.1.20 --duration 1
 ```
 
-Release gates cover unit and integration tests, a two-DMR protocol POC, legacy migration and rollback
-reading, diagnostic privacy, Docker cold start, in-image wire testing, and amd64/arm64 GHCR builds.
+Release gates cover unit and integration tests, Agent Skill tests, MCP cold start, real-speaker file
+and PCM pulls, a two-DMR protocol POC, legacy migration and rollback reading, diagnostic privacy, and
+amd64/arm64 GHCR builds.
 
 ## Migration, architecture and protocol notes
 
@@ -144,6 +169,7 @@ reading, diagnostic privacy, Docker cold start, in-image wire testing, and amd64
 - [Console data contract](docs/architecture/castfabric-console-data-contract.md)
 - [MiPlay sources and independent implementation boundary](docs/research/miplay-protocol-sources.md)
 - [Home Server acceptance checklist](docs/testing/castfabric-home-server-checklist.md)
+- [MCP and Agent Skill design](docs/plans/2026-09-01-castfabric-mcp-agent-skill-design.md)
 
 ## Compatibility and open source
 

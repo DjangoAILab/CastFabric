@@ -360,8 +360,8 @@
 
   function aiVerifyPrompt() {
     return language === 'zh'
-      ? '连接 CastFabric MCP，先调用 list_outputs 列出所有可输出音响，但不要播放声音。若尚未安装 CastFabric Agent Skill，请从当前仓库的 skills/castfabric 安装；本地文件、实时 PCM 或播放列表优先按 Skill 的说明调用。'
-      : 'Connect to the CastFabric MCP and call list_outputs to list every output speaker without playing audio. If the CastFabric Agent Skill is not installed, install it from skills/castfabric in this repository; follow the Skill for local files, live PCM, and playlists.';
+      ? '连接 CastFabric MCP，先调用 list_outputs 列出所有可输出音响，但不要播放声音。若尚未安装 CastFabric Agent Skill，请从 github.com/DjangoAILab/CastFabric 的 skills/castfabric 安装；本地文件、实时 PCM 或播放列表优先按 Skill 的说明调用。'
+      : 'Connect to the CastFabric MCP and call list_outputs to list every output speaker without playing audio. If the CastFabric Agent Skill is not installed, install skills/castfabric from github.com/DjangoAILab/CastFabric; follow the Skill for local files, live PCM, and playlists.';
   }
 
   function renderAI() {

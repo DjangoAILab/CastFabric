@@ -1,14 +1,33 @@
 # CastFabric Home Server verification
 
-Date: 2026-08-30
+Latest verification: 2026-09-02
 
 Network: `192.168.133.0/24`
 
-Deployment commit: `e4237e2`
+Deployment commit: `e6a48fd`
 
-Candidate image: `castfabric:e4237e2` (`linux/amd64`)
+Candidate image: `castfabric:agent-audio-e6a48fd` (`linux/amd64`)
 
-Rollback container: `castfabric-rollback-54f104c`
+Immediate rollback container: `castfabric-rollback-agent-b815966`
+
+## Agent audio gates
+
+- [x] Streamable HTTP MCP initializes at `/mcp` on the existing `8300` listener; no second port,
+  process, or container is required.
+- [x] MCP exposes all 11 approved management, playback, and control tools.
+- [x] `list_outputs` returns the configured and online physical renderer without Xiaomi credentials.
+- [x] The packaged Agent Skill uploads a local WAV through the one-time file transaction and returns
+  a playing MCP session.
+- [x] The physical DMR performs the media HTTP GET; exactly one `agent.output_started` event records
+  that verified pull.
+- [x] The packaged Agent Skill converts and streams real-time `s16le / 48 kHz / stereo` PCM over the
+  returned WebSocket.
+- [x] Real PCM records `agent.output_started`, `agent.pcm_forwarded`, then
+  `agent.output_stopped`, without `agent.output_failed`.
+- [x] MCP volume and stop commands reach the physical renderer; the test restores the original
+  volume (`14`).
+- [x] After file and PCM tests, playback is stopped, active/playing session counts are zero, and
+  DLNA, AirPlay, and MiPlay receiver health remains `1/1`.
 
 ## Automated gates
 
@@ -59,7 +78,7 @@ from the simulator or mDNS browse.
 
 ## Rollback
 
-The pre-deployment CastFabric container is retained as
-`castfabric-rollback-54f104c`. Earlier CastFabric rollback containers and the MiAir container
-`miair-rollback-30c7a79` remain stopped. Restore only one service at a time because all
-three ingress protocols bind host-network ports.
+The immediately preceding Agent candidate is retained as
+`castfabric-rollback-agent-b815966`; the last published release is retained as
+`castfabric-rollback-pre-agent-0df999b`. Earlier CastFabric rollback containers remain stopped.
+Restore only one service at a time because the ingress protocols bind host-network ports.

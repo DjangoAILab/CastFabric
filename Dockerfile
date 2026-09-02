@@ -34,7 +34,7 @@ LABEL org.opencontainers.image.title="CastFabric" \
       org.opencontainers.image.description="Open-source multi-protocol casting fabric for LAN audio devices" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.source="https://github.com/wangerzi/CastFabric"
+      org.opencontainers.image.source="https://github.com/DjangoAILab/CastFabric"
 
 EXPOSE 8200/tcp 8300/tcp 8899/tcp 5353/udp 56666/udp
 
