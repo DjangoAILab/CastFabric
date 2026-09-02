@@ -1,5 +1,10 @@
 # Repository Instructions
 
+## Session Bootstrap
+- Before planning or changing this repository, read `docs/project/CURRENT_STATE.md`. It is the canonical handoff for the current product scope, verified deployment, release state, known limitations, and remaining work.
+- Treat older files under `docs/plans/` and `docs/roadmap/` as historical unless `docs/project/CURRENT_STATE.md` explicitly marks them active.
+- For Home Server or real-device work, also read `docs/testing/castfabric-home-server-checklist.md`; never infer a real-device pass from a simulator or unit test.
+
 ## Project Shape
 - Product name is CastFabric. The Python package remains `miair` plus top-level compatibility launcher `miair.py`; primary installed CLI entrypoints are `castfabric` and `castfabric-miplay`, with legacy aliases retained.
 - `miair.app.CastFabric` wires the app (`MiAir` is an alias): Web UI/API starts first, then enabled generic DLNA targets start virtual DLNA, AirPlay and MiPlay without requiring Xiaomi credentials.
