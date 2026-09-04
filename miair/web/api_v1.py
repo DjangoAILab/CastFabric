@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from aiohttp import web
 
 from miair.const import VERSION
+from miair.content import ContentServiceError
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
 from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
@@ -233,6 +234,21 @@ async def _json_object(request: web.Request) -> dict[str, Any] | web.Response:
 
 
 def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
+    def content_error(exc: ContentServiceError) -> web.Response:
+        status = {
+            "INVALID_INPUT": 400,
+            "NOT_FOUND": 404,
+            "CONFLICT": 409,
+            "UNAVAILABLE": 409,
+            "STORAGE_ERROR": 503,
+        }.get(exc.code, 500)
+        return _error(
+            exc.code,
+            f"error.{exc.reason.lower()}",
+            status=status,
+            details={"reason": exc.reason, **exc.details},
+        )
+
     def playback_error(exc: PlaybackServiceError) -> web.Response:
         status = {
             "TARGET_NOT_FOUND": 404,
@@ -391,6 +407,111 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         return web.json_response(
             {"items": [suite.to_dict() for suite in app.suite_registry.snapshots()]}
         )
+
+    async def list_media_assets(request):
+        try:
+            result = app.media_assets.list_assets(
+                query=request.query.get("query"),
+                source_kind=request.query.get("source_kind"),
+                status=request.query.get("status"),
+                sort=request.query.get("sort", "recent_added"),
+                limit=int(request.query.get("limit", 50)),
+                offset=int(request.query.get("offset", 0)),
+            )
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_pagination", status=400)
+        return web.json_response(result)
+
+    async def get_media_asset(request):
+        try:
+            return web.json_response(
+                {"item": app.media_assets.get_asset(request.match_info["asset_id"])}
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+
+    async def create_url_media_asset(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        required = {"url", "display_name"}
+        allowed = required | {"description", "tags"}
+        if not required <= set(payload) or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_asset", status=400)
+        try:
+            item = app.media_assets.create_external_url(
+                payload["url"],
+                display_name=payload["display_name"],
+                description=payload.get("description"),
+                tags=payload.get("tags"),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item}, status=201)
+
+    async def patch_media_asset(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        allowed = {"display_name", "description", "tags", "external_url"}
+        if not payload or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_asset", status=400)
+        try:
+            item = app.media_assets.update_asset(
+                request.match_info["asset_id"],
+                **payload,
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def delete_media_asset(request):
+        try:
+            item = app.media_assets.delete_asset(request.match_info["asset_id"])
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def begin_media_upload(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        required = {"filename", "content_type", "size_bytes"}
+        allowed = required | {"display_name"}
+        if not required <= set(payload) or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_upload", status=400)
+        try:
+            result = app.media_assets.begin_upload(
+                payload["filename"],
+                payload["content_type"],
+                payload["size_bytes"],
+                display_name=payload.get("display_name"),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        result["upload_url"] = request_public_origin(request) + result["upload_path"]
+        return web.json_response(result, status=201)
+
+    async def upload_media_asset(request):
+        try:
+            result = await app.media_assets.accept_upload(
+                request.match_info["upload_id"],
+                request.content.iter_chunked(64 * 1024),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response(result, status=201)
+
+    async def get_media_asset_content(request):
+        try:
+            path, content_type = app.media_assets.resolve_managed_file(
+                request.match_info["asset_id"]
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        response = web.FileResponse(path)
+        response.content_type = content_type
+        return response
 
     async def play_url(request):
         payload = await _json_object(request)
@@ -856,6 +977,16 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     web_app.router.add_post("/api/v1/targets/scan", scan_targets)
     web_app.router.add_patch("/api/v1/targets/{target_id:.+}", patch_target)
     web_app.router.add_get("/api/v1/suites", get_suites)
+    web_app.router.add_get("/api/v1/media/assets", list_media_assets)
+    web_app.router.add_post("/api/v1/media/assets/url", create_url_media_asset)
+    web_app.router.add_post("/api/v1/media/uploads", begin_media_upload)
+    web_app.router.add_put("/api/v1/media/uploads/{upload_id}", upload_media_asset)
+    web_app.router.add_get(
+        "/api/v1/media/assets/{asset_id}/content", get_media_asset_content
+    )
+    web_app.router.add_get("/api/v1/media/assets/{asset_id}", get_media_asset)
+    web_app.router.add_patch("/api/v1/media/assets/{asset_id}", patch_media_asset)
+    web_app.router.add_delete("/api/v1/media/assets/{asset_id}", delete_media_asset)
     web_app.router.add_post("/api/v1/playback/url", play_url)
     web_app.router.add_get("/api/v1/playback/{target_id:.+}", playback_status)
     web_app.router.add_post(

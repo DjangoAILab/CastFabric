@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import zipfile
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -715,3 +716,92 @@ async def test_settings_save_failure_restores_every_mutated_runtime_value(tmp_pa
     assert config.device_name_prefix == original_prefix
     assert config.default_volume == original_volume
     assert app.suite_registry.device_name_prefix == original_prefix
+
+
+@pytest.mark.asyncio
+async def test_persistent_media_asset_http_contract_is_searchable_redacted_and_deduplicated(tmp_path):
+    config, app = _build_app(tmp_path)
+    client = await _client(config, app)
+    wav = io.BytesIO()
+    with wave.open(wav, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b"\0\0" * 400)
+    body = wav.getvalue()
+    try:
+        created_url = await client.post(
+            "/api/v1/media/assets/url",
+            json={
+                "url": "https://audio.example.test/show.mp3?token=private",
+                "display_name": "Morning show",
+                "description": "Daily focus",
+                "tags": ["Radio"],
+            },
+        )
+        url_payload = await created_url.json()
+        asset_id = url_payload["item"]["id"]
+        listed = await client.get("/api/v1/media/assets?query=focus&sort=name")
+        list_payload = await listed.json()
+        updated = await client.patch(
+            f"/api/v1/media/assets/{asset_id}",
+            json={"display_name": "First light", "tags": ["Morning"]},
+        )
+        update_payload = await updated.json()
+
+        transaction = await client.post(
+            "/api/v1/media/uploads",
+            json={
+                "filename": "../../clip.wav",
+                "content_type": "application/octet-stream",
+                "size_bytes": len(body),
+            },
+        )
+        transaction_payload = await transaction.json()
+        uploaded = await client.put(
+            urlsplit(transaction_payload["upload_url"]).path,
+            data=body,
+            headers={"content-type": "application/octet-stream"},
+        )
+        upload_payload = await uploaded.json()
+        fetched = await client.get(
+            f"/api/v1/media/assets/{upload_payload['asset']['id']}/content"
+        )
+        fetched_body = await fetched.read()
+    finally:
+        await client.close()
+
+    assert created_url.status == 201
+    assert listed.status == 200
+    assert list_payload["total"] == 1
+    assert update_payload["item"]["display_name"] == "First light"
+    assert "private" not in json.dumps([url_payload, list_payload, update_payload])
+    assert transaction.status == 201
+    assert uploaded.status == 201
+    assert upload_payload["asset"]["original_filename"] == "clip.wav"
+    assert fetched.status == 200
+    assert fetched.content_type == "audio/wav"
+    assert fetched_body == body
+
+
+@pytest.mark.asyncio
+async def test_persistent_media_http_errors_use_stable_category_reason_and_details(tmp_path):
+    config, app = _build_app(tmp_path)
+    client = await _client(config, app)
+    try:
+        invalid = await client.post(
+            "/api/v1/media/assets/url",
+            json={"url": "file:///private/audio", "display_name": "Private"},
+        )
+        missing = await client.get("/api/v1/media/assets/missing")
+        invalid_payload = await invalid.json()
+        missing_payload = await missing.json()
+    finally:
+        await client.close()
+
+    assert invalid.status == 400
+    assert invalid_payload["error"]["code"] == "INVALID_INPUT"
+    assert invalid_payload["error"]["details"]["reason"] == "INVALID_URL"
+    assert missing.status == 404
+    assert missing_payload["error"]["code"] == "NOT_FOUND"
+    assert missing_payload["error"]["details"]["reason"] == "ASSET_NOT_FOUND"

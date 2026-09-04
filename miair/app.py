@@ -33,7 +33,7 @@ from miair.runtime.models import (
 from miair.runtime.sessions import MediaSessionCoordinator
 from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
 from miair.playback import EphemeralMediaStore, PcmStreamRegistry, PlaybackService
-from miair.content import ContentRepository
+from miair.content import ContentRepository, MediaAssetService
 
 log = logging.getLogger("miair")
 
@@ -59,6 +59,10 @@ class CastFabric:
             os.path.join(self.config.conf_path, "castfabric.sqlite3")
         )
         self.content_repository.interrupt_active_playback()
+        self.media_assets = MediaAssetService(
+            self.content_repository,
+            os.path.join(self.config.conf_path, "media"),
+        )
         self.activity_journal = ActivityEventJournal(
             repository=self.content_repository
         )

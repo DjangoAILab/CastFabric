@@ -219,6 +219,143 @@ class ContentRepository:
             )
         return self.get_playlist(playlist_id)
 
+    def create_media_asset(self, values: dict[str, Any]) -> dict[str, Any]:
+        now = self._now()
+        with self.transaction() as connection:
+            connection.execute(
+                "INSERT INTO media_assets "
+                "(id, source_kind, display_name, description, tags_json, original_filename, "
+                "content_type, size_bytes, duration_seconds, content_hash, source_value, status, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', ?, ?)",
+                (
+                    values["id"],
+                    values["source_kind"],
+                    values["display_name"],
+                    values.get("description"),
+                    values.get("tags_json", "[]"),
+                    values.get("original_filename"),
+                    values.get("content_type"),
+                    values.get("size_bytes"),
+                    values.get("duration_seconds"),
+                    values.get("content_hash"),
+                    values["source_value"],
+                    now,
+                    now,
+                ),
+            )
+        return self.get_media_asset(values["id"])
+
+    def get_media_asset(self, asset_id: str) -> dict[str, Any] | None:
+        return self._row(
+            self._connection.execute(
+                "SELECT * FROM media_assets WHERE id = ?", (asset_id,)
+            ).fetchone()
+        )
+
+    def find_media_asset_by_hash(self, content_hash: str) -> dict[str, Any] | None:
+        return self._row(
+            self._connection.execute(
+                "SELECT * FROM media_assets WHERE content_hash = ?", (content_hash,)
+            ).fetchone()
+        )
+
+    def update_media_asset(self, asset_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+        allowed = {"display_name", "description", "tags_json", "source_value", "status"}
+        updates = {key: value for key, value in values.items() if key in allowed}
+        if not updates:
+            return self.get_media_asset(asset_id)
+        updates["updated_at"] = self._now()
+        assignments = ", ".join(f"{key} = ?" for key in updates)
+        with self.transaction() as connection:
+            connection.execute(
+                f"UPDATE media_assets SET {assignments} WHERE id = ?",
+                (*updates.values(), asset_id),
+            )
+        return self.get_media_asset(asset_id)
+
+    def list_media_assets(
+        self,
+        *,
+        query: str | None = None,
+        source_kind: str | None = None,
+        status: str | None = None,
+        sort: str = "recent_added",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        clauses = ["a.status != 'deleted'"]
+        parameters: list[Any] = []
+        if query:
+            clauses.append(
+                "(lower(a.display_name) LIKE ? OR lower(COALESCE(a.description, '')) LIKE ? "
+                "OR lower(a.tags_json) LIKE ? OR lower(COALESCE(a.original_filename, '')) LIKE ?)"
+            )
+            term = f"%{query.strip().lower()}%"
+            parameters.extend([term, term, term, term])
+        if source_kind:
+            clauses.append("a.source_kind = ?")
+            parameters.append(source_kind)
+        if status:
+            clauses.append("a.status = ?")
+            parameters.append(status)
+        where = " AND ".join(clauses)
+        order = {
+            "name": "lower(a.display_name), a.id",
+            "recent_used": "last_used_at IS NULL, last_used_at DESC, a.id",
+            "duration": "a.duration_seconds IS NULL, a.duration_seconds, a.id",
+            "recent_added": "a.created_at DESC, a.id",
+        }.get(sort, "a.created_at DESC, a.id")
+        total = int(
+            self._connection.execute(
+                f"SELECT count(*) FROM media_assets a WHERE {where}", parameters
+            ).fetchone()[0]
+        )
+        rows = self._connection.execute(
+            "SELECT a.*, "
+            "(SELECT count(*) FROM playlist_items pi WHERE pi.asset_id = a.id AND pi.removed_at IS NULL) AS reference_count, "
+            "(SELECT max(ms.started_at) FROM media_sessions ms WHERE ms.asset_id = a.id) AS last_used_at "
+            f"FROM media_assets a WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?",
+            (*parameters, max(1, min(int(limit), 200)), max(0, int(offset))),
+        ).fetchall()
+        return {"items": [dict(row) for row in rows], "total": total}
+
+    def media_asset_references(self, asset_id: str) -> dict[str, int]:
+        row = self._connection.execute(
+            "SELECT "
+            "(SELECT count(*) FROM playlist_items WHERE asset_id = ? AND removed_at IS NULL), "
+            "(SELECT count(*) FROM media_sessions WHERE asset_id = ? AND state != 'ended')",
+            (asset_id, asset_id),
+        ).fetchone()
+        return {"playlist_items": int(row[0]), "active_sessions": int(row[1])}
+
+    def mark_media_asset_deleted(self, asset_id: str) -> dict[str, Any] | None:
+        now = self._now()
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE media_assets SET status = 'deleted', source_value = '', "
+                "updated_at = ?, deleted_at = ? WHERE id = ? AND status != 'deleted'",
+                (now, now, asset_id),
+            )
+        return self.get_media_asset(asset_id)
+
+    def add_playlist_item_record(
+        self, item_id: str, playlist_id: str, asset_id: str, position: int
+    ) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                "INSERT INTO playlist_items "
+                "(id, playlist_id, asset_id, position, created_at) VALUES (?, ?, ?, ?, ?)",
+                (item_id, playlist_id, asset_id, int(position), self._now()),
+            )
+
+    def remove_playlist_item_record(self, item_id: str) -> bool:
+        with self.transaction() as connection:
+            changed = connection.execute(
+                "UPDATE playlist_items SET removed_at = ? WHERE id = ? AND removed_at IS NULL",
+                (self._now(), item_id),
+            ).rowcount
+        return bool(changed)
+
     def get_playlist(self, playlist_id: str) -> dict[str, Any] | None:
         return self._row(
             self._connection.execute(
