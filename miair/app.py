@@ -33,6 +33,7 @@ from miair.runtime.models import (
 from miair.runtime.sessions import MediaSessionCoordinator
 from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
 from miair.playback import EphemeralMediaStore, PcmStreamRegistry, PlaybackService
+from miair.content import ContentRepository
 
 log = logging.getLogger("miair")
 
@@ -54,11 +55,16 @@ class CastFabric:
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
         self.miplay_receivers: dict[str, MiPlayReceiver] = {}
+        self.content_repository = ContentRepository(
+            os.path.join(self.config.conf_path, "castfabric.sqlite3")
+        )
+        self.content_repository.interrupt_active_playback()
         self.activity_journal = ActivityEventJournal(
-            path=os.path.join(self.config.conf_path, "activity.jsonl")
+            repository=self.content_repository
         )
         self.session_coordinator = MediaSessionCoordinator(
-            journal=self.activity_journal
+            journal=self.activity_journal,
+            repository=self.content_repository,
         )
         self._miplay_session_ids: dict[str, str] = {}
         self.discovered_targets = {}
@@ -828,6 +834,7 @@ class CastFabric:
         await self._stop_dlna_services()
         # 关闭并重新初始化 auth，确保账号切换生效
         await self.auth.close()
+        self.content_repository.close()
         self.auth = AuthManager(self.config)
         # 重建 speaker manager
         self.speaker_manager = SpeakerManager(self.config, self.auth)

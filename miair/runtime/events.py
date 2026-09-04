@@ -28,14 +28,34 @@ class ActivityEventJournal:
         backups: int = 3,
         clock: Callable[[], datetime] = _utcnow,
         id_factory: Callable[[], str] = lambda: str(uuid.uuid4()),
+        repository=None,
     ):
         self._events: deque[ActivityEventSnapshot] = deque(maxlen=max(1, max_events))
-        self.path = Path(path) if path is not None else None
+        self.repository = repository
+        self.path = Path(path) if path is not None and repository is None else None
         self.max_file_bytes = max_file_bytes
         self.backups = max(0, backups)
         self.clock = clock
         self.id_factory = id_factory
         self.degraded = False
+        if self.repository is not None:
+            persisted = reversed(self.repository.query_events(limit=max_events))
+            for item in persisted:
+                protocol = item.get("protocol")
+                self._events.append(
+                    ActivityEventSnapshot(
+                        id=item["id"],
+                        occurred_at=datetime.fromisoformat(item["occurred_at"]),
+                        target_id=item["target_id"],
+                        session_id=item.get("session_id"),
+                        protocol=IngressProtocol(protocol) if protocol else None,
+                        type=item["type"],
+                        outcome=EventOutcome(item["outcome"]),
+                        summary_key=item["summary_key"],
+                        reason_code=item.get("reason_code"),
+                        details=item.get("details") or {},
+                    )
+                )
 
     def append(
         self,
@@ -56,7 +76,13 @@ class ActivityEventJournal:
             details=redact_event_details(details),
         )
         self._events.append(event)
-        self._persist(event)
+        if self.repository is not None:
+            try:
+                self.repository.append_event(event.to_dict())
+            except Exception:
+                self.degraded = True
+        else:
+            self._persist(event)
         return event
 
     def get(self, event_id: str) -> ActivityEventSnapshot | None:

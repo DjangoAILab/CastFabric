@@ -23,10 +23,12 @@ def _utcnow() -> datetime:
 class MediaSessionCoordinator:
     def __init__(self, *, journal: ActivityEventJournal | None = None,
                  clock: Callable[[], datetime] = _utcnow,
-                 id_factory: Callable[[], str] = lambda: str(uuid.uuid4())):
+                 id_factory: Callable[[], str] = lambda: str(uuid.uuid4()),
+                 repository=None):
         self.journal = journal
         self.clock = clock
         self.id_factory = id_factory
+        self.repository = repository
         self._current: dict[str, MediaSessionSnapshot] = {}
         self._session_targets: dict[str, str] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -54,6 +56,8 @@ class MediaSessionCoordinator:
                     protocol=old.protocol, type="session.preempted",
                     outcome=EventOutcome.INFO, summary_key="activity.session_preempted")
             if old:
+                if self.repository is not None:
+                    self.repository.end_session(old.id, "preempted")
                 self._session_targets.pop(old.id, None)
                 self._recent.append(
                     replace(old, state=SessionState.STOPPED, ended_at=self.clock())
@@ -66,6 +70,13 @@ class MediaSessionCoordinator:
             )
             self._current[target_id] = session
             self._session_targets[session.id] = target_id
+            if self.repository is not None:
+                self.repository.create_session(
+                    session.id,
+                    target_id,
+                    source_type=protocol.value,
+                    source_label=session.source.device_name,
+                )
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session.id,
                     protocol=protocol, type="session.started",
@@ -82,9 +93,17 @@ class MediaSessionCoordinator:
             if current is None or current.id != session_id:
                 return False
             self._current[target_id] = replace(current, state=state)
+            if self.repository is not None:
+                self.repository.transition_session(session_id, state.value)
             return True
 
-    async def end(self, session_id: str, *, failed: bool = False) -> bool:
+    async def end(
+        self,
+        session_id: str,
+        *,
+        failed: bool = False,
+        reason: str | None = None,
+    ) -> bool:
         target_id = self._session_targets.get(session_id)
         if not target_id:
             return False
@@ -101,6 +120,11 @@ class MediaSessionCoordinator:
                     ended_at=self.clock(),
                 )
             )
+            if self.repository is not None:
+                self.repository.end_session(
+                    session_id,
+                    reason or ("failed" if failed else "stopped"),
+                )
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session_id,
                     protocol=current.protocol,
