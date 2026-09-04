@@ -208,14 +208,22 @@ class ContentRepository:
     def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
         return dict(row) if row is not None else None
 
-    def create_playlist_record(self, playlist_id: str, name: str) -> dict[str, Any]:
+    def create_playlist_record(
+        self,
+        playlist_id: str,
+        name: str,
+        *,
+        description: str | None = None,
+        default_order: str = "sequential",
+        default_repeat: str = "none",
+    ) -> dict[str, Any]:
         now = self._now()
         with self.transaction() as connection:
             connection.execute(
                 "INSERT INTO playlists "
-                "(id, name, default_order, default_repeat, revision, created_at, updated_at) "
-                "VALUES (?, ?, 'sequential', 'none', 1, ?, ?)",
-                (playlist_id, name, now, now),
+                "(id, name, description, default_order, default_repeat, revision, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+                (playlist_id, name, description, default_order, default_repeat, now, now),
             )
         return self.get_playlist(playlist_id)
 
@@ -362,6 +370,244 @@ class ContentRepository:
                 "SELECT * FROM playlists WHERE id = ?", (playlist_id,)
             ).fetchone()
         )
+
+    def list_playlists(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+        clause = "" if include_archived else "WHERE archived_at IS NULL"
+        rows = self._connection.execute(
+            "SELECT p.*, "
+            "(SELECT count(*) FROM playlist_items pi WHERE pi.playlist_id = p.id AND pi.removed_at IS NULL) AS item_count, "
+            "(SELECT count(*) FROM playback_runs pr WHERE pr.playlist_id = p.id AND pr.state = 'active') AS active_run_count "
+            f"FROM playlists p {clause} ORDER BY p.updated_at DESC, p.id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def playlist_items(self, playlist_id: str) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT pi.*, a.display_name AS asset_display_name, a.source_kind, a.status AS asset_status, "
+            "a.content_type, a.size_bytes, a.duration_seconds "
+            "FROM playlist_items pi JOIN media_assets a ON a.id = pi.asset_id "
+            "WHERE pi.playlist_id = ? AND pi.removed_at IS NULL ORDER BY pi.position, pi.id",
+            (playlist_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_playlist_item(self, item_id: str) -> dict[str, Any] | None:
+        return self._row(
+            self._connection.execute(
+                "SELECT * FROM playlist_items WHERE id = ?", (item_id,)
+            ).fetchone()
+        )
+
+    def _require_revision(self, connection, playlist_id: str, expected_revision: int):
+        row = connection.execute(
+            "SELECT revision FROM playlists WHERE id = ? AND archived_at IS NULL",
+            (playlist_id,),
+        ).fetchone()
+        if row is None:
+            return "missing", None
+        if int(row[0]) != int(expected_revision):
+            return "changed", int(row[0])
+        return "ok", int(row[0])
+
+    def update_playlist_record(
+        self, playlist_id: str, expected_revision: int, values: dict[str, Any]
+    ) -> tuple[str, int | None]:
+        allowed = {"name", "description", "default_order", "default_repeat"}
+        updates = {key: value for key, value in values.items() if key in allowed}
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            updates["revision"] = revision + 1
+            updates["updated_at"] = self._now()
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            connection.execute(
+                f"UPDATE playlists SET {assignments} WHERE id = ?",
+                (*updates.values(), playlist_id),
+            )
+        return "ok", revision + 1
+
+    def add_playlist_item(
+        self,
+        item_id: str,
+        playlist_id: str,
+        asset_id: str,
+        title: str | None,
+        expected_revision: int,
+    ) -> tuple[str, int | None]:
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            position = int(
+                connection.execute(
+                    "SELECT COALESCE(max(position), -1) + 1 FROM playlist_items "
+                    "WHERE playlist_id = ? AND removed_at IS NULL",
+                    (playlist_id,),
+                ).fetchone()[0]
+            )
+            connection.execute(
+                "INSERT INTO playlist_items "
+                "(id, playlist_id, asset_id, position, title, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (item_id, playlist_id, asset_id, position, title, self._now()),
+            )
+            connection.execute(
+                "UPDATE playlists SET revision = ?, updated_at = ? WHERE id = ?",
+                (revision + 1, self._now(), playlist_id),
+            )
+        return "ok", revision + 1
+
+    def update_playlist_item(
+        self,
+        playlist_id: str,
+        item_id: str,
+        expected_revision: int,
+        values: dict[str, Any],
+    ) -> tuple[str, int | None]:
+        updates = {key: value for key, value in values.items() if key in {"asset_id", "title"}}
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            exists = connection.execute(
+                "SELECT 1 FROM playlist_items WHERE id = ? AND playlist_id = ? AND removed_at IS NULL",
+                (item_id, playlist_id),
+            ).fetchone()
+            if exists is None:
+                return "item_missing", revision
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            if assignments:
+                connection.execute(
+                    f"UPDATE playlist_items SET {assignments} WHERE id = ?",
+                    (*updates.values(), item_id),
+                )
+            connection.execute(
+                "UPDATE playlists SET revision = ?, updated_at = ? WHERE id = ?",
+                (revision + 1, self._now(), playlist_id),
+            )
+        return "ok", revision + 1
+
+    @staticmethod
+    def _reposition(connection, playlist_id: str, ordered_ids: list[str]) -> None:
+        connection.execute(
+            "UPDATE playlist_items SET position = position + 1000000 "
+            "WHERE playlist_id = ? AND removed_at IS NULL",
+            (playlist_id,),
+        )
+        for position, item_id in enumerate(ordered_ids):
+            connection.execute(
+                "UPDATE playlist_items SET position = ? WHERE id = ? AND playlist_id = ? AND removed_at IS NULL",
+                (position, item_id, playlist_id),
+            )
+
+    def reorder_playlist_items(
+        self, playlist_id: str, ordered_ids: list[str], expected_revision: int
+    ) -> tuple[str, int | None]:
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            current = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT id FROM playlist_items WHERE playlist_id = ? AND removed_at IS NULL ORDER BY position",
+                    (playlist_id,),
+                )
+            ]
+            if len(ordered_ids) != len(set(ordered_ids)) or set(current) != set(ordered_ids):
+                return "items_changed", revision
+            self._reposition(connection, playlist_id, ordered_ids)
+            connection.execute(
+                "UPDATE playlists SET revision = ?, updated_at = ? WHERE id = ?",
+                (revision + 1, self._now(), playlist_id),
+            )
+        return "ok", revision + 1
+
+    def remove_playlist_item(
+        self, playlist_id: str, item_id: str, expected_revision: int
+    ) -> tuple[str, int | None]:
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            changed = connection.execute(
+                "UPDATE playlist_items SET removed_at = ? "
+                "WHERE id = ? AND playlist_id = ? AND removed_at IS NULL",
+                (self._now(), item_id, playlist_id),
+            ).rowcount
+            if not changed:
+                return "item_missing", revision
+            ordered_ids = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT id FROM playlist_items WHERE playlist_id = ? AND removed_at IS NULL ORDER BY position",
+                    (playlist_id,),
+                )
+            ]
+            self._reposition(connection, playlist_id, ordered_ids)
+            connection.execute(
+                "UPDATE playlists SET revision = ?, updated_at = ? WHERE id = ?",
+                (revision + 1, self._now(), playlist_id),
+            )
+        return "ok", revision + 1
+
+    def archive_playlist_record(
+        self, playlist_id: str, expected_revision: int
+    ) -> tuple[str, int | None]:
+        with self.transaction() as connection:
+            status, revision = self._require_revision(connection, playlist_id, expected_revision)
+            if status != "ok":
+                return status, revision
+            now = self._now()
+            connection.execute(
+                "UPDATE playlists SET archived_at = ?, revision = ?, updated_at = ? WHERE id = ?",
+                (now, revision + 1, now, playlist_id),
+            )
+        return "ok", revision + 1
+
+    def active_item_conflicts(
+        self, *, playlist_id: str, item_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        clauses = ["pr.playlist_id = ?", "pr.state = 'active'", "ms.state != 'ended'"]
+        parameters: list[Any] = [playlist_id]
+        if item_id is not None:
+            clauses.append("ms.playlist_item_id = ?")
+            parameters.append(item_id)
+        rows = self._connection.execute(
+            "SELECT pr.id AS run_id, pr.target_id, ms.id AS session_id "
+            "FROM playback_runs pr JOIN media_sessions ms ON ms.run_id = pr.id "
+            f"WHERE {' AND '.join(clauses)} ORDER BY pr.target_id, pr.id",
+            parameters,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def run_sessions(self, run_id: str, *, cycle_number: int | None = None) -> list[dict[str, Any]]:
+        clause = " AND cycle_number = ?" if cycle_number is not None else ""
+        parameters = (run_id, cycle_number) if cycle_number is not None else (run_id,)
+        rows = self._connection.execute(
+            "SELECT * FROM media_sessions WHERE run_id = ?" + clause + " ORDER BY started_at DESC, id DESC",
+            parameters,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_run_modes(
+        self, run_id: str, *, order_mode: str, repeat_mode: str
+    ) -> dict[str, Any] | None:
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE playback_runs SET order_mode = ?, repeat_mode = ?, updated_at = ? "
+                "WHERE id = ? AND state = 'active'",
+                (order_mode, repeat_mode, self._now(), run_id),
+            )
+        return self.get_run(run_id)
+
+    def set_run_cycle(self, run_id: str, cycle_number: int) -> bool:
+        with self.transaction() as connection:
+            changed = connection.execute(
+                "UPDATE playback_runs SET cycle_number = ?, updated_at = ? WHERE id = ? AND state = 'active'",
+                (int(cycle_number), self._now(), run_id),
+            ).rowcount
+        return bool(changed)
 
     def create_run(
         self,
