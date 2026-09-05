@@ -53,6 +53,8 @@ class CastFabric:
         self.ssdp_server: SSDPServer | None = None
         self.device_server: DeviceServer | None = None
         self._web_runner: web.AppRunner | None = None
+        self._stop_lock = asyncio.Lock()
+        self._stopped = False
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
         self.miplay_receivers: dict[str, MiPlayReceiver] = {}
@@ -898,6 +900,14 @@ class CastFabric:
 
     async def stop(self):
         """停止所有服务"""
+        async with self._stop_lock:
+            if self._stopped:
+                return
+            await self._stop_once()
+            self._stopped = True
+
+    async def _stop_once(self):
+        """Run the shutdown sequence once; ``stop`` supplies idempotence."""
         log.info("%s 正在关闭...", PRODUCT_NAME)
 
         if hasattr(self, '_device_check_task') and self._device_check_task:
