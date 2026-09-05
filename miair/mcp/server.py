@@ -392,6 +392,10 @@ class EmbeddedMcpEndpoint:
             except ContentServiceError as exc:
                 raise self._tool_error(exc) from exc
 
+        @server.tool(description="List active server-side playlist runs.", structured_output=True)
+        async def list_playlist_runs(playlist_id: str | None = None) -> dict[str, Any]:
+            return self.app.playlist_runner.list_active_runs(playlist_id=playlist_id)
+
         @server.tool(description="Control one active playlist run.", structured_output=True)
         async def control_playlist_run(
             run_id: str, action: str, if_session_id: str | None = None,

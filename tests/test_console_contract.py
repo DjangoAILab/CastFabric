@@ -64,7 +64,7 @@ def test_console_has_language_persistence_and_mobile_overflow_rules():
     assert "prefers-reduced-motion:reduce" in HTML
 
 
-def test_ai_access_is_a_bilingual_fourth_page_with_one_origin_mcp_setup():
+def test_ai_access_is_bilingual_and_uses_one_origin_mcp_setup():
     assert 'data-page-target="ai"' in HTML
     assert 'id="page-ai"' in HTML
     assert "aiAccess:['AI 接入','AI Access']" in HTML
@@ -79,11 +79,25 @@ def test_ai_access_is_a_bilingual_fourth_page_with_one_origin_mcp_setup():
 def test_ai_access_exposes_only_implemented_capabilities_and_safe_onboarding():
     for capability in ("list_outputs", "本地文件", "实时 PCM", "播放列表"):
         assert capability in JS
-    assert "支持 URL、本地文件与实时 PCM" in HTML
-    assert "查询状态、暂停、停止并调整音量" in HTML
+    assert "支持持久音频资源、服务端播放列表与实时 PCM" in HTML
+    assert "查询状态、暂停、继续、定位和调整音量" in HTML
     assert "不要播放声音" in JS
     assert "不应把 MCP 地址直接暴露到公网" in HTML
     assert "TTS" not in HTML
+
+
+def test_content_workbench_exposes_real_server_collections_and_no_history_resume():
+    for path in (
+        "/api/v1/playlists",
+        "/api/v1/media/assets?limit=200",
+        "/api/v1/playback/history?limit=100",
+        "/api/v1/playlist-runs",
+    ):
+        assert path in JS
+    assert 'id="page-content"' in HTML
+    assert "不提供“继续播放”" in HTML
+    assert "waitUntilStopped" not in JS
+    assert "客户端" not in HTML.split('id="page-content"', 1)[1].split('id="page-activity"', 1)[0]
 
 
 def test_ai_access_has_keyboard_tabs_copy_feedback_and_responsive_layout():

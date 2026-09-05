@@ -414,6 +414,12 @@ class PlaylistRunner:
     def get_run(self, run_id: str) -> dict[str, Any]:
         return self._project(run_id)
 
+    def list_active_runs(self, *, playlist_id: str | None = None) -> dict[str, Any]:
+        runs = self.repository.active_runs()
+        if playlist_id:
+            runs = [run for run in runs if run["playlist_id"] == playlist_id]
+        return {"items": [self._project(run["id"]) for run in runs]}
+
     async def start_playlist(
         self,
         playlist_id: str,

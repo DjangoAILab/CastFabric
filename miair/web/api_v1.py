@@ -661,6 +661,13 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             return playback_error(exc)
         return web.json_response(result, status=201)
 
+    async def list_playlist_runs(request):
+        return web.json_response(
+            app.playlist_runner.list_active_runs(
+                playlist_id=request.query.get("playlist_id")
+            )
+        )
+
     async def get_playlist_run(request):
         try:
             return web.json_response(app.playlist_runner.get_run(request.match_info["run_id"]))
@@ -694,6 +701,19 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
             return content_error(exc)
         items = app.content_repository.playlist_resume_candidates(playlist_id, limit=limit)
         return web.json_response({"items": items})
+
+    async def get_playback_history(request):
+        try:
+            limit = int(request.query.get("limit", 50))
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_pagination", status=400)
+        return web.json_response({
+            "items": app.content_repository.playback_history(
+                target_id=request.query.get("target_id"),
+                playlist_id=request.query.get("playlist_id"),
+                limit=limit,
+            )
+        })
 
     async def play_url(request):
         payload = await _json_object(request)
@@ -1184,11 +1204,13 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     web_app.router.add_get("/api/v1/playlists/{playlist_id}", get_playlist)
     web_app.router.add_patch("/api/v1/playlists/{playlist_id}", patch_playlist)
     web_app.router.add_delete("/api/v1/playlists/{playlist_id}", archive_playlist)
+    web_app.router.add_get("/api/v1/playlist-runs", list_playlist_runs)
     web_app.router.add_post("/api/v1/playlist-runs", start_playlist_run)
     web_app.router.add_get("/api/v1/playlist-runs/{run_id}", get_playlist_run)
     web_app.router.add_post(
         "/api/v1/playlist-runs/{run_id}/control", control_playlist_run
     )
+    web_app.router.add_get("/api/v1/playback/history", get_playback_history)
     web_app.router.add_post("/api/v1/playback/url", play_url)
     web_app.router.add_get("/api/v1/playback/{target_id:.+}", playback_status)
     web_app.router.add_post(

@@ -135,6 +135,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
         "archive_playlist",
         "start_playlist",
         "get_playlist_run",
+        "list_playlist_runs",
         "control_playlist_run",
         "get_playlist_progress",
         "query_playback_history",
