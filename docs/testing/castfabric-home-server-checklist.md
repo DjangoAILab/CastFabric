@@ -1,18 +1,70 @@
 # CastFabric Home Server verification
 
-Latest verification: 2026-09-02
+Latest verification: 2026-09-05
 
 Published baseline: `v0.11.0-alpha.3`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: `v0.11.0-alpha.3`
+Deployment baseline: server-playlists candidate `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`
 
 Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
 Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
+
+Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-playlists`
+
+## Server playlists candidate (2026-09-05)
+
+- Branch: `codex/server-playlists`; deployed implementation commit:
+  `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`.
+- Feature CI run `33933686147` passed Python/integration, Agent Skill, offline MiPlay and Docker
+  jobs. Publish run `33933891530` passed the same gates and published `linux/amd64` and
+  `linux/arm64` images.
+- Candidate tag: `ghcr.io/djangoailab/castfabric:sha-0e68e9f`; OCI index digest:
+  `sha256:d6e1dc34d98137cb413ac42cfa3f2ee558f095679319d7268632a8857a92ff66`;
+  deployed AMD64 manifest:
+  `sha256:e8a475a48e66146aad0a6fc62fa88e65f67efff8ec37de180bcee163f2cdc5fc`.
+- GHCR pulls from the Home Server returned EOF, so the already-published AMD64 manifest was pulled
+  and revision-verified locally, then imported through the existing SSH channel. The deployed image
+  label still resolves exactly to the candidate commit.
+- Deployment completed at `2026-09-05T01:03:00Z` (`09:03` Asia/Shanghai). Host networking,
+  `unless-stopped`, the existing `/app/conf` bind mount, target identity and enabled state were
+  preserved.
+- The pre-deployment `v0.11.0-alpha.3` image was tagged
+  `castfabric:rollback-20260905-3563c5b-pre-playlists`; its stopped container uses the same rollback
+  name. Full container and image inspection snapshots are stored mode `0600` in the deployment
+  directory's dated `rollback/20260905-3563c5b-pre-playlists/` folder.
+
+### Silent acceptance
+
+- [x] Preflight found the production container healthy, one enabled/online target, one ready suite,
+  DLNA/AirPlay/MiPlay each `1/1`, zero active/playing sessions, stopped playback and volume `33`.
+- [x] An isolated bridge-network candidate exposed only a loopback Web port. Receiver protocols and
+  Xiaomi extension were disabled; no production protocol port or registration was used.
+- [x] Isolated cold start created exactly the six approved business tables. Asset/playlist CRUD,
+  raw WAV upload, URL redaction, MCP initialize/list/call and restart persistence passed.
+- [x] Production TLS page and static resources load. Browser checks passed Chinese and English,
+  desktop and mobile layouts, the empty content workbench and the playback-history no-resume copy.
+- [x] Production MCP initializes and exposes 32 tools. Every new media/playlist/progress/history tool
+  and input schema is discoverable, and a read-only playlist call succeeds.
+- [x] A temporary managed WAV, redacted external URL and playlist survived a formal-container
+  restart from persistent `/app/conf`; the temporary playlist was then unlinked/archived and both
+  visible test assets were deleted.
+- [x] Diagnostic export omitted the test URL secret, an active upload ticket and complete LAN
+  addresses. SQLite and the managed-media directory are on the existing persistent mount.
+- [x] After cleanup and restart, the service is healthy, the original target remains online, all
+  three receiver protocols remain `1/1`, playback is stopped, volume remains `33`, and active
+  session/run counts are zero.
+- [ ] Real-speaker Playlist sound is pending explicit user permission. No play, seek, pause, stop or
+  set-volume command was issued during this silent gate.
+
+Rollback preserves the failed candidate for inspection: stop and rename the current `castfabric`
+container, rename `castfabric-rollback-20260905-3563c5b-pre-playlists` back to `castfabric`, then
+start it. Only one host-network service may run at a time; verify domain health and all three suite
+readiness counters after restoration.
 
 ## MiPlay field incident (2026-09-02)
 

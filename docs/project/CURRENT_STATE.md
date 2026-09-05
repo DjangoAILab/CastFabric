@@ -1,6 +1,6 @@
 # CastFabric current state and session handoff
 
-Last updated: 2026-09-02
+Last updated: 2026-09-05
 
 This is the canonical starting point for a new development session. Read it together with
 `AGENTS.md` before using older plans or prototypes: those files preserve design history and may
@@ -36,15 +36,19 @@ MCP URL / file / PCM inputs ───┘
 - Generic SSDP discovery and persistent management of multiple standard DLNA renderers.
 - Playback (including an optional whole-second start position), pause/stop, current-session seek
   where supported, volume and structured/redacted activity reporting.
-- Chinese/English responsive console with Overview, Speakers, Activity and AI Access surfaces plus
-  secondary connection configuration.
+- Chinese/English responsive console with Overview, Speakers, Playlists, Activity and AI Access
+  surfaces plus secondary connection configuration. The Playlists area contains the user-facing
+  content workbench, secondary audio-resource management and factual playback history.
 - Embedded Streamable HTTP MCP at `/mcp` on the existing Web listener (`8300`); there is no MCP
   sidecar, extra container or extra listening port.
-- Twelve MCP tools covering system/output discovery and management, URL/file/real-time PCM playback,
-  positioned playback, current-session seek, status, pause, stop and volume.
-- A packaged Agent Skill under `skills/castfabric/` that handles local file upload, FFmpeg PCM
-  streaming, and client-side sequential/loop playlists. CastFabric itself intentionally does not add
-  TTS, a media library or a server-side playlist engine.
+- Thirty-two MCP tools cover system/output discovery, persistent media assets, server playlists,
+  progress/history, URL/file/real-time PCM playback and transport controls.
+- A packaged Agent Skill under `skills/castfabric/` is now a thin local-data adapter: its helper
+  uploads or plays a file, streams FFmpeg PCM, or performs a one-shot playlist import. Playlist
+  execution and progress remain in CastFabric after the helper exits.
+- Persistent content uses exactly six SQLite business tables under `/app/conf`; managed files use
+  the same persistent mount. A failed playlist item records the reason and stops without retry,
+  fallback or silent skipping, and restart never starts sound automatically.
 
 The public product and deployment contract lives in `README.md` and `README.en.md`. The MCP/Skill
 contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design.md` and
@@ -62,12 +66,14 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
    media (`docs/adr/0007-*`).
 7. Cached DLNA endpoints are refreshed after renderer port drift (`docs/adr/0008-*`).
 8. AI support is a thin embedded MCP adapter over existing playback services (`docs/adr/0009-*`).
-9. Positioned playback and current-session seek share one output primitive without introducing a
-   media library or reusable asset IDs (`docs/adr/0010-*`).
+9. Positioned playback and current-session seek share one output primitive (`docs/adr/0010-*`).
+10. Stable media assets and server-run playlists use the six-table SQLite model in ADR 0011, which
+    supersedes the former no-stable-ID/no-server-playlist parts of ADR 0009 and ADR 0010
+    (`docs/adr/0011-*`).
 
 ## Verification and deployment baseline
 
-- Current release code commit: `3563c5bb549db67c4d4ad7b940db2e1babb660a7`.
+- Current released code commit: `3563c5bb549db67c4d4ad7b940db2e1babb660a7`.
 - Current published prerelease: `v0.11.0-alpha.3`.
 - Canonical repository: `https://github.com/DjangoAILab/CastFabric`.
 - GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.3`, published for
@@ -76,9 +82,12 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 - GitHub Actions publish run `33647910803` passed Python/integration tests, Agent Skill tests,
   offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
   prerelease creation.
-- The Home Server runs `v0.11.0-alpha.3`; OpenClaw `2026.6.33` has the released CastFabric Skill
-  installed and discovers all 12 MCP tools. This release was accepted silently through simulated
-  outputs, offline protocol tests, health checks and capability discovery only.
+- The Home Server currently runs the `codex/server-playlists` candidate commit
+  `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`, image tag `sha-0e68e9f`. Feature CI run
+  `33933686147` and multi-architecture publish run `33933891530` passed. Domain-side silent
+  acceptance covers TLS/static assets, bilingual desktop/mobile UI, 32-tool MCP discovery/call,
+  six-table persistence across restart, privacy, unchanged target/readiness and zero playback.
+  Real-speaker playlist sound remains behind explicit user permission and is not yet accepted.
 - The repository was recreated after accidental remote deletion. Seven branches and nineteen tags
   were restored. The surviving GHCR package was reattached to the recreated repository with Actions
   `Write` access.
@@ -102,6 +111,8 @@ live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
 
 ## Remaining work and explicit non-goals
 
+- The deployed playlist candidate still requires the explicit real-speaker gate recorded in the
+  Home Server checklist. Do not infer audible output from fake DMR, simulator, API or silent checks.
 - Still open in the real-device checklist: repeat standard-protocol checks while expired Xiaomi
   credentials are present, proving again that the core remains independent.
 - Future output adapters are extension work, not implemented capability. The current core output is
