@@ -78,6 +78,18 @@ Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-p
 - Full candidate redeployment and transport/conflict acceptance remain pending. Audible listening
   and independent progress on two physical speakers are unverified (one authorized speaker).
 
+### Re-upload boundary found during the next acceptance attempt
+
+- Candidate `3bf15940f56403e8de3066eb6e00b72817499335` passed 224 local tests, feature CI
+  `33943547373`, publish run `33943547936`, isolated checks and domain-side silent/restart checks.
+- Re-uploading the exact previously deleted device-test WAV exposed a unique-hash collision with
+  its retained tombstone. No playlist started in this attempt. The candidate was retained stopped
+  as `castfabric-failed-playlists-3bf1594-20260905` and alpha.3 was restored again.
+- The fix releases only a deleted row's blob-hash reservation in the same transaction that creates
+  the new asset. The old asset ID and historical references remain deleted, while live-content
+  deduplication remains intact. No schema/table addition, historical revival or data deletion is
+  required; legacy tombstones are covered by the regression test.
+
 Rollback preserves the failed candidate for inspection: stop and rename the current `castfabric`
 container, rename `castfabric-rollback-20260905-3563c5b-pre-playlists` back to `castfabric`, then
 start it. Only one host-network service may run at a time; verify domain health and all three suite

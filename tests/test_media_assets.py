@@ -106,6 +106,35 @@ async def test_persistent_upload_is_one_use_safe_and_deduplicates_blob_by_sha256
 
 
 @pytest.mark.asyncio
+async def test_reupload_deleted_bytes_creates_new_asset_without_reviving_history(tmp_path):
+    payload = _wav_bytes()
+    repository, service = _service(tmp_path)
+    try:
+        ticket = service.begin_upload("original.wav", "audio/wav", len(payload))
+        original = (await service.accept_upload(ticket["upload_id"], _chunks(payload)))["asset"]
+        old_hash = repository.get_media_asset(original["id"])["content_hash"]
+        service.delete_asset(original["id"])
+        # Exercise legacy tombstones too: they still own the unique hash.
+        assert repository.find_media_asset_by_hash(old_hash)["status"] == "deleted"
+        ticket = service.begin_upload("new-name.wav", "audio/wav", len(payload))
+        result = await service.accept_upload(ticket["upload_id"], _chunks(payload))
+        assert result["deduplicated"] is False
+        assert result["asset"]["id"] != original["id"]
+        assert result["asset"]["original_filename"] == "new-name.wav"
+        assert repository.get_media_asset(original["id"])["status"] == "deleted"
+        assert repository.find_media_asset_by_hash(old_hash)["id"] == result["asset"]["id"]
+        path, _ = service.resolve_managed_file(result["asset"]["id"])
+        assert path.read_bytes() == payload
+        ticket = service.begin_upload("copy.wav", "audio/wav", len(payload))
+        duplicate = await service.accept_upload(ticket["upload_id"], _chunks(payload))
+        assert duplicate["deduplicated"] is True
+        assert duplicate["asset"]["id"] == result["asset"]["id"]
+        assert len(list((tmp_path / "media" / "blobs").iterdir())) == 1
+    finally:
+        repository.close()
+
+
+@pytest.mark.asyncio
 async def test_expired_invalid_or_mismatched_upload_leaves_no_asset_or_part(tmp_path):
     now = [10.0]
     repository, service = _service(

@@ -230,6 +230,15 @@ class ContentRepository:
     def create_media_asset(self, values: dict[str, Any]) -> dict[str, Any]:
         now = self._now()
         with self.transaction() as connection:
+            # A deleted asset keeps its identity/history, not ownership of a
+            # removed blob. Release old tombstones atomically with the new row,
+            # including tombstones written by earlier versions.
+            if values.get("content_hash"):
+                connection.execute(
+                    "UPDATE media_assets SET content_hash = NULL "
+                    "WHERE content_hash = ? AND status = 'deleted'",
+                    (values["content_hash"],),
+                )
             connection.execute(
                 "INSERT INTO media_assets "
                 "(id, source_kind, display_name, description, tags_json, original_filename, "
