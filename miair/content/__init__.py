@@ -2,7 +2,7 @@
 
 from .repository import ContentRepository, ContentStorageError, SCHEMA_VERSION
 from .media import ContentServiceError, MediaAssetService
-from .playlists import PlaylistService
+from .playlists import PlaylistRunner, PlaylistService
 
 __all__ = [
     "ContentRepository",
@@ -10,5 +10,6 @@ __all__ = [
     "ContentStorageError",
     "MediaAssetService",
     "PlaylistService",
+    "PlaylistRunner",
     "SCHEMA_VERSION",
 ]

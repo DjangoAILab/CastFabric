@@ -31,11 +31,13 @@ def _build_app(tmp_path):
         play_url=AsyncMock(return_value=True),
         seek=AsyncMock(return_value=True),
         pause=AsyncMock(return_value=True),
+        resume=AsyncMock(return_value=True),
         stop=AsyncMock(return_value=True),
         set_volume=AsyncMock(return_value=True),
         get_status=AsyncMock(return_value={"status": 0, "volume": 20}),
     )
     app.suite_registry.register(target, "controller", controller)
+    app.playlist_runner.auto_monitor = False
     return config, app
 
 
@@ -75,9 +77,34 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
                         "size_bytes": 12,
                     },
                 )
+                asset_result = await session.call_tool(
+                    "create_url_media_asset",
+                    {"url": "https://media.example.test/song.mp3", "display_name": "Song"},
+                )
+                playlist_result = await session.call_tool(
+                    "create_playlist", {"name": "Morning"}
+                )
+                playlist = playlist_result.structured_content["item"]
+                mutation_result = await session.call_tool(
+                    "mutate_playlist_items",
+                    {
+                        "playlist_id": playlist["id"],
+                        "operation": "add",
+                        "expected_revision": playlist["revision"],
+                        "asset_id": asset_result.structured_content["item"]["id"],
+                    },
+                )
+                run_result = await session.call_tool(
+                    "start_playlist",
+                    {"playlist_id": playlist["id"], "target_id": "uuid:living"},
+                )
+                history_result = await session.call_tool(
+                    "query_playback_history", {"playlist_id": playlist["id"]}
+                )
     finally:
         await server.close()
         await app.media_store.close()
+        await app.playlist_runner.close()
 
     assert {tool.name for tool in listed.tools} == {
         "get_system_status",
@@ -90,14 +117,36 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
         "open_pcm_stream",
         "get_playback_status",
         "pause",
+        "resume",
         "stop",
         "set_volume",
+        "list_media_assets",
+        "get_media_asset",
+        "create_url_media_asset",
+        "update_media_asset",
+        "delete_media_asset",
+        "play_media_asset",
+        "begin_media_upload",
+        "list_playlists",
+        "get_playlist",
+        "create_playlist",
+        "update_playlist",
+        "mutate_playlist_items",
+        "archive_playlist",
+        "start_playlist",
+        "get_playlist_run",
+        "control_playlist_run",
+        "get_playlist_progress",
+        "query_playback_history",
     }
     assert result.is_error is False
     assert result.structured_content["items"][0]["id"] == "uuid:living"
     assert play_result.structured_content["position_seconds"] == 30
     assert seek_result.structured_content["position_seconds"] == 45
     assert file_result.is_error is False
+    assert mutation_result.is_error is False
+    assert run_result.structured_content["state"] == "active"
+    assert history_result.structured_content["items"][0]["playlist_id"] == playlist["id"]
     assert file_result.structured_content["upload_url"].startswith(
         public_origin + "/api/v1/playback/files/"
     )
@@ -110,6 +159,7 @@ async def test_official_streamable_http_client_lists_and_calls_tools(tmp_path):
         "open_pcm_stream",
         "get_playback_status",
         "pause",
+        "resume",
         "stop",
         "set_volume",
     }:

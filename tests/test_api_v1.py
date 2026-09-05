@@ -53,6 +53,7 @@ def _build_app(tmp_path):
             play_url=AsyncMock(return_value=True),
             seek=AsyncMock(return_value=True),
             pause=AsyncMock(return_value=True),
+            resume=AsyncMock(return_value=True),
             stop=AsyncMock(return_value=True),
             set_volume=AsyncMock(return_value=True),
             get_status=AsyncMock(return_value={"status": 1, "volume": 20}),
@@ -66,6 +67,75 @@ def _build_app(tmp_path):
             port=8200,
         )
     return config, app
+
+
+@pytest.mark.asyncio
+async def test_playlist_http_contract_uses_server_runner_and_revision_fencing(tmp_path):
+    config, app = _build_app(tmp_path)
+    app.playlist_runner.auto_monitor = False
+    client = await _client(config, app)
+    try:
+        asset_response = await client.post(
+            "/api/v1/media/assets/url",
+            json={
+                "url": "https://media.example.test/one.mp3?secret=hidden",
+                "display_name": "One",
+            },
+        )
+        asset = (await asset_response.json())["item"]
+        created_response = await client.post(
+            "/api/v1/playlists", json={"name": "Morning"}
+        )
+        playlist = (await created_response.json())["item"]
+        added_response = await client.post(
+            f"/api/v1/playlists/{playlist['id']}/items",
+            json={"asset_id": asset["id"], "expected_revision": playlist["revision"]},
+        )
+        item = (await added_response.json())["item"]
+        stale_response = await client.patch(
+            f"/api/v1/playlists/{playlist['id']}",
+            json={"expected_revision": 1, "name": "Stale"},
+        )
+        started_response = await client.post(
+            "/api/v1/playlist-runs",
+            json={"playlist_id": playlist["id"], "target_id": "uuid:living"},
+        )
+        started = await started_response.json()
+        paused_response = await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={"action": "pause", "if_session_id": started["session_id"]},
+        )
+        await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={
+                "action": "seek", "if_session_id": started["session_id"],
+                "position_seconds": 5,
+            },
+        )
+        stopped_response = await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={"action": "stop", "if_session_id": started["session_id"]},
+        )
+        progress_response = await client.get(
+            f"/api/v1/playlists/{playlist['id']}/progress"
+        )
+        progress = await progress_response.json()
+    finally:
+        await app.playlist_runner.close()
+        await client.close()
+        app.content_repository.close()
+
+    assert asset_response.status == 201
+    assert created_response.status == 201
+    assert added_response.status == 201
+    assert item["asset_id"] == asset["id"]
+    assert stale_response.status == 409
+    assert started_response.status == 201
+    assert paused_response.status == 200
+    assert stopped_response.status == 200
+    assert progress_response.status == 200
+    assert progress["items"][0]["end_reason"] == "stopped"
+    assert "secret" not in str(progress)
 
 
 async def _client(config, app):

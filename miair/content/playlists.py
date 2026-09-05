@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import random
 import secrets
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from miair.content.media import ContentServiceError
@@ -206,12 +207,15 @@ class PlaylistService:
         }
         if resolution not in details["allowed_resolutions"]:
             raise ContentServiceError("CONFLICT", "ACTIVE_PLAYBACK_CONFLICT", details)
-        return
+        if resolution == "stop" and self.conflict_handler is not None:
+            result = self.conflict_handler(resolution, conflicts, action)
+            if inspect.isawaitable(result):
+                await result
 
     async def _apply_resolution(
         self, resolution: str | None, conflicts: list[dict[str, Any]], action: str
     ) -> None:
-        if conflicts and self.conflict_handler is not None:
+        if conflicts and resolution != "stop" and self.conflict_handler is not None:
             result = self.conflict_handler(resolution, conflicts, action)
             if inspect.isawaitable(result):
                 await result
@@ -404,6 +408,7 @@ class PlaylistRunner:
             "position_seconds": session.get("position_seconds") if session else None,
             "duration_seconds": session.get("duration_seconds") if session else None,
             "seek_supported": bool(session.get("seek_supported")) if session else False,
+            "observed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_run(self, run_id: str) -> dict[str, Any]:
@@ -534,6 +539,17 @@ class PlaylistRunner:
                     session["id"], "paused" if state == "paused" else "playing"
                 )
                 return self._project(run_id)
+            position = status.get("position_seconds")
+            duration = status.get("duration_seconds")
+            naturally_completed = (
+                state == "stopped"
+                and isinstance(position, (int, float))
+                and isinstance(duration, (int, float))
+                and duration > 0
+                and position >= max(duration - 2, duration * 0.95)
+            )
+            if not naturally_completed:
+                return await self._finish(run_id, "interrupted")
             await self.playback.session_coordinator.end(session["id"], reason="completed")
             self.repository.end_session(session["id"], "completed")
             next_item = self.playlists.next_item(run_id, session["playlist_item_id"])

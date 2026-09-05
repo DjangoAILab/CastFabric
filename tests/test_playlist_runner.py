@@ -142,6 +142,22 @@ async def test_failure_stops_on_current_item_without_skip_retry_or_fallback(tmp_
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_early_stop_interrupts_instead_of_advancing(tmp_path):
+    repository, _assets, _playlists, runner, controllers, _items = _runtime(tmp_path)
+    try:
+        started = await runner.start_playlist("playlist", "uuid:living")
+        controllers["uuid:living"].get_status.return_value = {
+            "state": "stopped", "position_seconds": 2, "duration_seconds": 10
+        }
+        result = await runner.observe_once(started["run_id"])
+        assert result["end_reason"] == "interrupted"
+        assert controllers["uuid:living"].play_url.await_count == 1
+    finally:
+        await runner.close()
+        repository.close()
+
+
+@pytest.mark.asyncio
 async def test_controls_are_fenced_and_navigation_uses_server_history(tmp_path):
     repository, _assets, _playlists, runner, controllers, items = _runtime(tmp_path)
     try:

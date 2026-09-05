@@ -590,6 +590,51 @@ class ContentRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def playlist_session_history(
+        self, playlist_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT ms.* FROM media_sessions ms "
+            "JOIN playback_runs pr ON pr.id = ms.run_id "
+            "WHERE pr.playlist_id = ? ORDER BY ms.started_at DESC, ms.id DESC LIMIT ?",
+            (playlist_id, max(1, min(int(limit), 200))),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def playlist_resume_candidates(
+        self, playlist_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT ms.* FROM media_sessions ms "
+            "JOIN playback_runs pr ON pr.id = ms.run_id "
+            "JOIN playlist_items pi ON pi.id = ms.playlist_item_id AND pi.removed_at IS NULL "
+            "WHERE pr.playlist_id = ? AND ms.state = 'ended' "
+            "AND ms.position_seconds > 0 AND ms.end_reason IN ('stopped', 'preempted', 'failed', 'interrupted') "
+            "ORDER BY ms.ended_at DESC, ms.id DESC LIMIT ?",
+            (playlist_id, max(1, min(int(limit), 200))),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def playback_history(
+        self, *, target_id: str | None = None, playlist_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        clauses, parameters = [], []
+        if target_id:
+            clauses.append("ms.target_id = ?")
+            parameters.append(target_id)
+        if playlist_id:
+            clauses.append("pr.playlist_id = ?")
+            parameters.append(playlist_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self._connection.execute(
+            "SELECT ms.*, pr.playlist_id FROM media_sessions ms "
+            "LEFT JOIN playback_runs pr ON pr.id = ms.run_id "
+            f"{where} ORDER BY ms.started_at DESC, ms.id DESC LIMIT ?",
+            (*parameters, max(1, min(int(limit), 200))),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def set_run_modes(
         self, run_id: str, *, order_mode: str, repeat_mode: str
     ) -> dict[str, Any] | None:
@@ -859,6 +904,13 @@ class ContentRepository:
 
     def append_event(self, payload: dict[str, Any]) -> None:
         with self.transaction() as connection:
+            run_id = payload.get("run_id")
+            if run_id is None and payload.get("session_id"):
+                row = connection.execute(
+                    "SELECT run_id FROM media_sessions WHERE id = ?",
+                    (payload["session_id"],),
+                ).fetchone()
+                run_id = row[0] if row else None
             connection.execute(
                 "INSERT INTO activity_events "
                 "(id, occurred_at, target_id, run_id, session_id, protocol, type, outcome, "
@@ -867,7 +919,7 @@ class ContentRepository:
                     payload["id"],
                     payload["occurred_at"],
                     payload["target_id"],
-                    payload.get("run_id"),
+                    run_id,
                     payload.get("session_id"),
                     payload.get("protocol"),
                     payload["type"],
