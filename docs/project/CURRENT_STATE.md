@@ -82,16 +82,18 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 - GitHub Actions publish run `33647910803` passed Python/integration tests, Agent Skill tests,
   offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
   prerelease creation.
-- The Home Server was restored to `v0.11.0-alpha.3` after authorized real-device testing exposed
-  missing DLNA progress forwarding and a renderer that remains PLAYING at EOF. The former candidate
-  `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`, image tag `sha-0e68e9f`. Feature CI run
-  `33933686147` and multi-architecture publish run `33933891530` passed. Domain-side silent
-  acceptance covers TLS/static assets, bilingual desktop/mobile UI, 32-tool MCP discovery/call,
-  six-table persistence across restart, privacy, unchanged target/readiness and zero playback.
-  Real-speaker permission is now granted; nobody is home to listen. Actual pull/transport/progress
-  verification is authorized, while audible listening must remain explicitly unverified. A local
-  fix reads renderer timing and seek capability and recognizes exact reported EOF; redeployment
-  and end-to-end acceptance remain pending.
+- The Home Server runs feature-branch candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`,
+  image `sha-94e993e`, pinned to OCI index
+  `sha256:9adaac8ead99c8e210a8e7644077db26795acc2d58275286b3b1cd888e781b74`.
+  Feature CI `33944065999` and multi-architecture publish run `33944066270` passed.
+  Domain-side silent acceptance covers TLS/static assets, bilingual desktop/mobile UI, 32-tool
+  MCP discovery/call, six-table persistence across restart, privacy and unchanged target/readiness.
+  Authorized physical-speaker checks passed two-item server-driven completion, actual media GETs,
+  pause/resume/seek/navigation, active-resource conflict, uninterrupted reorder, persisted progress
+  and explicit positioned resume. Final playback is stopped, volume is `33`, and active counts are
+  zero. Nobody was home to listen: audible output is explicitly unverified, as accepted by the user.
+  Earlier candidates were rolled back before local fixes for real DLNA timing/EOF and deleted-file
+  re-upload; their incident evidence and the verified alpha.3 rollback point remain in the checklist.
 - The repository was recreated after accidental remote deletion. Seven branches and nineteen tags
   were restored. The surviving GHCR package was reattached to the recreated repository with Actions
   `Write` access.
@@ -115,8 +117,9 @@ live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
 
 ## Remaining work and explicit non-goals
 
-- The playlist candidate requires redeployment and authorized real-device acceptance after the
-  progress/EOF fix. Do not infer audible output from fake DMR, simulator, API or silent checks.
+- The server-playlist implementation and authorized single-speaker chain acceptance are complete.
+  Audible listening and simultaneous progress on two physical speakers remain unverified; only one
+  physical speaker was authorized. Do not infer those results from fake DMR or API checks.
 - Still open in the real-device checklist: repeat standard-protocol checks while expired Xiaomi
   credentials are present, proving again that the core remains independent.
 - Future output adapters are extension work, not implemented capability. The current core output is
