@@ -27,9 +27,10 @@ def normalize_position_seconds(value: int) -> int:
 
 
 class PlaybackService:
-    def __init__(self, suite_registry, session_coordinator):
+    def __init__(self, suite_registry, session_coordinator, *, before_play=None):
         self.suite_registry = suite_registry
         self.session_coordinator = session_coordinator
+        self.before_play = before_play
 
     def _suite_for(self, target_id: str):
         normalized = normalize_target_id(target_id)
@@ -61,13 +62,22 @@ class PlaybackService:
         *,
         media_format: str | None = None,
         start_position_seconds: int = 0,
+        preempt: bool = True,
+        session_id: str | None = None,
+        persist_session: bool = True,
+        session_context: dict | None = None,
     ) -> dict[str, Any]:
         position = normalize_position_seconds(start_position_seconds)
         normalized, suite = self._suite_for(target_id)
+        if preempt and self.before_play is not None:
+            await self.before_play(normalized)
         session = await self.session_coordinator.begin(
             normalized,
             IngressProtocol.MCP,
             media_format=media_format,
+            session_id=session_id,
+            persist=persist_session,
+            session_context=session_context,
         )
         suite.current_session_id = session.id
         output_started = False
@@ -135,11 +145,18 @@ class PlaybackService:
             await self.session_coordinator.transition(session.id, SessionState.PAUSED)
         return {"ok": True, "target_id": normalized, "state": "paused"}
 
-    async def stop(self, target_id: str) -> dict[str, Any]:
+    async def resume(self, target_id: str) -> dict[str, Any]:
+        normalized, _suite = await self._command(target_id, "resume")
+        session = self.session_coordinator.current(normalized)
+        if session is not None and session.protocol is IngressProtocol.MCP:
+            await self.session_coordinator.transition(session.id, SessionState.PLAYING)
+        return {"ok": True, "target_id": normalized, "state": "playing"}
+
+    async def stop(self, target_id: str, *, reason: str = "stopped") -> dict[str, Any]:
         normalized, suite = await self._command(target_id, "stop")
         session = self.session_coordinator.current(normalized)
         if session is not None and session.protocol is IngressProtocol.MCP:
-            await self.session_coordinator.end(session.id)
+            await self.session_coordinator.end(session.id, reason=reason)
             if suite.current_session_id == session.id:
                 suite.current_session_id = None
         return {"ok": True, "target_id": normalized, "state": "stopped"}
@@ -151,11 +168,12 @@ class PlaybackService:
             "set_volume",
             normalized_volume,
         )
-        return {
+        result = {
             "ok": True,
             "target_id": normalized,
             "volume": normalized_volume,
         }
+        return result
 
     async def get_status(self, target_id: str) -> dict[str, Any]:
         normalized, suite = self._suite_for(target_id)
@@ -168,9 +186,13 @@ class PlaybackService:
             state = raw_state.strip().lower()
         else:
             state = {1: "playing", 2: "paused"}.get(raw.get("status"), "stopped")
-        return {
+        result = {
             "ok": True,
             "target_id": normalized,
             "state": state,
             "volume": raw.get("volume"),
         }
+        for key in ("position_seconds", "duration_seconds", "seek_supported"):
+            if key in raw:
+                result[key] = raw[key]
+        return result

@@ -18,6 +18,9 @@ class DLNAOutputAdapter:
     async def pause(self) -> bool:
         return bool(await self.client.pause())
 
+    async def resume(self) -> bool:
+        return bool(await self.client.resume())
+
     async def stop(self) -> bool:
         return bool(await self.client.stop())
 

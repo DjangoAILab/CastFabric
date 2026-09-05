@@ -48,7 +48,10 @@ class MediaSessionCoordinator:
 
     async def begin(self, target_id: str, protocol: IngressProtocol, *,
                     source: SessionSourceSnapshot | None = None,
-                    media_format: str | None = None) -> MediaSessionSnapshot:
+                    media_format: str | None = None,
+                    session_id: str | None = None,
+                    persist: bool = True,
+                    session_context: dict | None = None) -> MediaSessionSnapshot:
         async with self._locks.setdefault(target_id, asyncio.Lock()):
             old = self._current.get(target_id)
             if old and self.journal:
@@ -63,19 +66,27 @@ class MediaSessionCoordinator:
                     replace(old, state=SessionState.STOPPED, ended_at=self.clock())
                 )
             session = MediaSessionSnapshot(
-                id=self.id_factory(), target_id=target_id, protocol=protocol,
+                id=session_id or self.id_factory(), target_id=target_id, protocol=protocol,
                 state=SessionState.STARTING,
                 source=source or SessionSourceSnapshot(),
                 media_format=media_format, started_at=self.clock(),
             )
             self._current[target_id] = session
             self._session_targets[session.id] = target_id
-            if self.repository is not None:
+            if self.repository is not None and persist:
+                context = session_context or {}
                 self.repository.create_session(
                     session.id,
                     target_id,
-                    source_type=protocol.value,
-                    source_label=session.source.device_name,
+                    source_type=context.get("source_type", protocol.value),
+                    source_label=context.get("source_label", session.source.device_name),
+                    run_id=context.get("run_id"),
+                    asset_id=context.get("asset_id"),
+                    playlist_item_id=context.get("playlist_item_id"),
+                    item_title_snapshot=context.get("item_title_snapshot"),
+                    cycle_number=context.get("cycle_number"),
+                    duration_seconds=context.get("duration_seconds"),
+                    seek_supported=context.get("seek_supported", False),
                 )
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session.id,

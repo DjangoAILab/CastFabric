@@ -392,6 +392,10 @@ class LocalDLNAClient:
             await self._soap(AVTRANSPORT_URN, "Stop", {"InstanceID": 0})
         return True
 
+    async def resume(self) -> bool:
+        await self._soap(AVTRANSPORT_URN, "Play", {"InstanceID": 0, "Speed": 1})
+        return True
+
     async def stop(self) -> bool:
         await self._soap(AVTRANSPORT_URN, "Stop", {"InstanceID": 0})
         return True

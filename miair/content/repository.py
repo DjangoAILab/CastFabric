@@ -638,6 +638,56 @@ class ContentRepository:
             )
         return self.get_run(run_id)
 
+    def start_run_with_session(
+        self,
+        run_id: str,
+        session_id: str,
+        target_id: str,
+        playlist_id: str,
+        *,
+        order_mode: str,
+        repeat_mode: str,
+        asset_id: str,
+        playlist_item_id: str,
+        item_title_snapshot: str | None,
+        source_type: str,
+        source_label: str | None,
+        duration_seconds: float | None,
+        seek_supported: bool,
+        resumed_from_session_id: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Atomically replace target ownership and create a run's first session."""
+        now = self._now()
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE media_sessions SET state = 'ended', end_reason = 'preempted', "
+                "updated_at = ?, ended_at = ? WHERE target_id = ? AND state != 'ended'",
+                (now, now, target_id),
+            )
+            connection.execute(
+                "UPDATE playback_runs SET state = 'ended', end_reason = 'preempted', "
+                "updated_at = ?, ended_at = ? WHERE target_id = ? AND state = 'active'",
+                (now, now, target_id),
+            )
+            connection.execute(
+                "INSERT INTO playback_runs "
+                "(id, target_id, playlist_id, order_mode, repeat_mode, cycle_number, state, started_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 0, 'active', ?, ?)",
+                (run_id, target_id, playlist_id, order_mode, repeat_mode, now, now),
+            )
+            connection.execute(
+                "INSERT INTO media_sessions "
+                "(id, run_id, target_id, asset_id, playlist_item_id, item_title_snapshot, "
+                "source_type, source_label, cycle_number, state, position_seconds, duration_seconds, "
+                "seek_supported, started_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'starting', ?, ?, ?, ?, ?)",
+                (session_id, run_id, target_id, asset_id, playlist_item_id,
+                 item_title_snapshot, source_type, source_label,
+                 0 if resumed_from_session_id is None else None,
+                 duration_seconds, int(seek_supported), now, now),
+            )
+        return self.get_run(run_id), self.get_session(session_id)
+
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         return self._row(
             self._connection.execute(
@@ -652,6 +702,12 @@ class ContentRepository:
                 (target_id,),
             ).fetchone()
         )
+
+    def active_runs(self) -> list[dict[str, Any]]:
+        rows = self._connection.execute(
+            "SELECT * FROM playback_runs WHERE state = 'active' ORDER BY target_id, id"
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def end_run(self, run_id: str, reason: str) -> bool:
         now = self._now()
@@ -718,6 +774,14 @@ class ContentRepository:
             ).fetchone()
         )
 
+    def active_session_for_run(self, run_id: str) -> dict[str, Any] | None:
+        return self._row(
+            self._connection.execute(
+                "SELECT * FROM media_sessions WHERE run_id = ? AND state != 'ended'",
+                (run_id,),
+            ).fetchone()
+        )
+
     def transition_session(self, session_id: str, state: str) -> bool:
         if state not in {"starting", "playing", "paused"}:
             raise ValueError("INVALID_SESSION_STATE")
@@ -745,6 +809,18 @@ class ContentRepository:
                 "duration_seconds = COALESCE(?, duration_seconds), updated_at = ? "
                 "WHERE id = ? AND state != 'ended'",
                 (position, duration_seconds, self._now(), session_id),
+            ).rowcount
+        return bool(changed)
+
+    def update_ended_session_progress(self, session_id: str, position_seconds: float) -> bool:
+        position = float(position_seconds)
+        if position < 0:
+            raise ValueError("INVALID_POSITION")
+        with self.transaction() as connection:
+            changed = connection.execute(
+                "UPDATE media_sessions SET position_seconds = ?, updated_at = ? "
+                "WHERE id = ? AND state = 'ended'",
+                (position, self._now(), session_id),
             ).rowcount
         return bool(changed)
 
