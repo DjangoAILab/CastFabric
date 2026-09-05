@@ -201,3 +201,63 @@ async def test_explicit_resume_validates_candidate_and_seeks_selected_item(tmp_p
     finally:
         await runner.close()
         repository.close()
+
+
+@pytest.mark.asyncio
+async def test_random_uses_unplayed_items_and_repeat_all_starts_a_new_cycle(tmp_path):
+    repository, _assets, playlists, runner, controllers, items = _runtime(tmp_path)
+    playlists.randomizer.choice = lambda choices: choices[-1]
+    try:
+        random_run = await runner.start_playlist(
+            "playlist", "uuid:living", order_mode="random"
+        )
+        assert random_run["current_item"]["id"] == items[2]["id"]
+        controllers["uuid:living"].get_status.return_value = {
+            "state": "stopped", "position_seconds": 10, "duration_seconds": 10
+        }
+        random_next = await runner.observe_once(random_run["run_id"])
+        assert random_next["current_item"]["id"] == items[1]["id"]
+
+        repeated = await runner.start_playlist(
+            "playlist", "uuid:study", repeat_mode="all"
+        )
+        controllers["uuid:study"].get_status.return_value = {
+            "state": "stopped", "position_seconds": 10, "duration_seconds": 10
+        }
+        await runner.observe_once(repeated["run_id"])
+        await runner.observe_once(repeated["run_id"])
+        next_cycle = await runner.observe_once(repeated["run_id"])
+        assert next_cycle["state"] == "active"
+        assert next_cycle["cycle_number"] == 1
+        assert next_cycle["current_item"]["id"] == items[0]["id"]
+    finally:
+        await runner.close()
+        repository.close()
+
+
+@pytest.mark.asyncio
+async def test_ordinary_playback_preempts_playlist_and_live_edit_requires_resolution(tmp_path):
+    repository, _assets, playlists, runner, controllers, items = _runtime(tmp_path)
+    runner.playback.before_play = runner.preempt_target
+    try:
+        started = await runner.start_playlist("playlist", "uuid:living")
+        with pytest.raises(Exception) as conflict:
+            await playlists.update_item(
+                "playlist", items[0]["id"], expected_revision=4, asset_id="asset-two"
+            )
+        assert getattr(conflict.value, "reason", None) == "ACTIVE_PLAYBACK_CONFLICT"
+        assert controllers["uuid:living"].play_url.await_count == 1
+
+        changed = await playlists.update_item(
+            "playlist", items[0]["id"], expected_revision=4,
+            asset_id="asset-two", resolution="reload",
+        )
+        assert changed["items"][0]["asset_id"] == "asset-two"
+        assert controllers["uuid:living"].play_url.await_count == 2
+
+        await runner.playback.play_url("uuid:living", "https://example.test/ordinary.mp3")
+        assert repository.get_run(started["run_id"])["end_reason"] == "preempted"
+        assert repository.active_run("uuid:living") is None
+    finally:
+        await runner.close()
+        repository.close()

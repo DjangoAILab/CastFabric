@@ -322,7 +322,9 @@ class PlaylistService:
         else:
             for index, item in enumerate(items):
                 if item["id"] == current_item_id:
-                    return items[index + 1] if index + 1 < len(items) else None
+                    if index + 1 < len(items):
+                        return items[index + 1]
+                    break
             if current_item_id is None:
                 return items[0]
             removed = self.repository.get_playlist_item(current_item_id)
@@ -438,9 +440,14 @@ class PlaylistRunner:
         )
         if not playlist["items"]:
             raise ContentServiceError("INVALID_INPUT", "PLAYLIST_EMPTY")
+        default_item = (
+            self.playlists.randomizer.choice(playlist["items"])
+            if start_item_id is None and order == "random"
+            else playlist["items"][0] if start_item_id is None else None
+        )
         item = next(
             (entry for entry in playlist["items"] if entry["id"] == start_item_id),
-            playlist["items"][0] if start_item_id is None else None,
+            default_item,
         )
         if item is None:
             raise ContentServiceError("NOT_FOUND", "PLAYLIST_ITEM_NOT_FOUND")
