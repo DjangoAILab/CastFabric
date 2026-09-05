@@ -14,7 +14,8 @@
 ![CastFabric 控制台总览](docs/assets/console-overview.png)
 
 CastFabric 把手机、电脑和 AI Agent 发来的音频，统一送到局域网音响。手机继续使用
-DLNA、AirPlay、妙播（MiPlay）；AI 通过内嵌 MCP 播放 URL、本地文件或实时 PCM。
+DLNA、AirPlay、妙播（MiPlay）；AI 通过内嵌 MCP 播放 URL、本地文件或实时 PCM，也可以管理
+持久音频资源和由服务端持续执行的播放列表。
 核心输出面向标准 UPnP/DLNA MediaRenderer，完全不依赖小米账号；小米云只保留为显式
 启用的旧设备兼容扩展。
 
@@ -54,16 +55,18 @@ CastFabric `0.11` 在现有 Web 服务上直接提供 Streamable HTTP MCP：控�
 `http://192.168.1.10:8300`，MCP 地址就是 `http://192.168.1.10:8300/mcp`。它复用同一套
 `target_id`、播放状态机和输出适配器，并非另一套播放服务。
 
-当前提供 12 个原子工具：
+当前提供 32 个短调用工具：
 
 - 管理：系统状态、列出音响、扫描音响、启用/停用或重命名音响；
 - 播放：HTTP(S) URL、Agent 本地文件、`s16le / 48 kHz / 双声道` 实时 PCM；
-- 控制：查询状态、暂停、停止、绝对秒定位、设置音量。
+- 内容：持久音频上传与元数据、外部 URL 资源、播放列表定义、显式续播候选和只读历史；
+- 控制：查询状态、暂停、继续、停止、绝对秒定位、上一项、下一项、指定项和音量。
 
 仓库中的 [CastFabric Agent Skill](skills/castfabric/SKILL.md) 进一步封装了文件上传、FFmpeg
-实时转码、定点起播、当前会话定位和客户端侧的顺序/循环播放列表。会话 ID 只作为防止
-误控新会话的可选并发条件，不是素材 ID。MCP 保持轻量：CastFabric **不内置 TTS、媒体库
-或服务器播放队列**，Agent 负责生成或选择音频，CastFabric 只负责可靠地送到指定音响。
+实时转码、持久文件上传和一次性的 Playlist manifest 导入。播放列表启动后完全由 CastFabric
+服务端推进，helper 退出不会中断。会话 ID 只作为防止误控新会话的并发条件，不是素材 ID。
+CastFabric **不内置 TTS、通用媒体库或播放队列**；失败会记录原因并停止，不会自动跳过、
+重试或换音箱。
 
 > 当前 MCP 面向可信局域网，尚未提供公网认证。不要把 `/mcp` 直接暴露到互联网。
 
@@ -120,6 +123,8 @@ CASTFABRIC_CONFIG_DIR=./conf
 - **总览**：在单屏内展示当前声路、可确认的发送端信息、协议与输出音响；多声路最多展示
   三条，其余汇总，不因音响数量增加而破坏布局。
 - **音响**：管理多台输出音响、接收入口名称、启停状态和每协议健康。
+- **播放列表**：在内容工作台管理可复用音频、播放列表和只读播放记录；可以全部播放或从
+  明确的一项开始，并在小弹窗中选择音响。
 - **活动**：查看结构化会话与失败原因；诊断信息经过服务端脱敏。
 - **AI 接入**：复制当前实例的 MCP 地址、客户端配置与验证提示词；不会新增独立服务端口。
 
@@ -160,6 +165,7 @@ GHCR 构建。
 - [妙播协议研究与独立实现边界](docs/research/miplay-protocol-sources.md)
 - [Home Server 验收清单](docs/testing/castfabric-home-server-checklist.md)
 - [MCP 与 Agent Skill 设计](docs/plans/2026-09-01-castfabric-mcp-agent-skill-design.md)
+- [服务端播放列表架构决策](docs/adr/0011-persist-media-assets-and-run-server-playlists.md)
 
 ## 兼容与开源
 
