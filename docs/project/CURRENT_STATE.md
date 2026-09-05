@@ -82,12 +82,16 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 - GitHub Actions publish run `33647910803` passed Python/integration tests, Agent Skill tests,
   offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
   prerelease creation.
-- The Home Server currently runs the `codex/server-playlists` candidate commit
+- The Home Server was restored to `v0.11.0-alpha.3` after authorized real-device testing exposed
+  missing DLNA progress forwarding and a renderer that remains PLAYING at EOF. The former candidate
   `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`, image tag `sha-0e68e9f`. Feature CI run
   `33933686147` and multi-architecture publish run `33933891530` passed. Domain-side silent
   acceptance covers TLS/static assets, bilingual desktop/mobile UI, 32-tool MCP discovery/call,
   six-table persistence across restart, privacy, unchanged target/readiness and zero playback.
-  Real-speaker playlist sound remains behind explicit user permission and is not yet accepted.
+  Real-speaker permission is now granted; nobody is home to listen. Actual pull/transport/progress
+  verification is authorized, while audible listening must remain explicitly unverified. A local
+  fix reads renderer timing and seek capability and recognizes exact reported EOF; redeployment
+  and end-to-end acceptance remain pending.
 - The repository was recreated after accidental remote deletion. Seven branches and nineteen tags
   were restored. The surviving GHCR package was reattached to the recreated repository with Actions
   `Write` access.
@@ -111,8 +115,8 @@ live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
 
 ## Remaining work and explicit non-goals
 
-- The deployed playlist candidate still requires the explicit real-speaker gate recorded in the
-  Home Server checklist. Do not infer audible output from fake DMR, simulator, API or silent checks.
+- The playlist candidate requires redeployment and authorized real-device acceptance after the
+  progress/EOF fix. Do not infer audible output from fake DMR, simulator, API or silent checks.
 - Still open in the real-device checklist: repeat standard-protocol checks while expired Xiaomi
   credentials are present, proving again that the core remains independent.
 - Future output adapters are extension work, not implemented capability. The current core output is

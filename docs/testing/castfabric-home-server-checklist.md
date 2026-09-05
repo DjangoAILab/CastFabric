@@ -6,7 +6,7 @@ Published baseline: `v0.11.0-alpha.3`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: server-playlists candidate `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`
+Deployment baseline: restored `v0.11.0-alpha.3`; playlist progress/EOF fix awaiting redeployment.
 
 Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
@@ -58,8 +58,25 @@ Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-p
 - [x] After cleanup and restart, the service is healthy, the original target remains online, all
   three receiver protocols remain `1/1`, playback is stopped, volume remains `33`, and active
   session/run counts are zero.
-- [ ] Real-speaker Playlist sound is pending explicit user permission. No play, seek, pause, stop or
-  set-volume command was issued during this silent gate.
+- [x] This silent gate issued no play, seek, pause, stop or set-volume commands. The user subsequently
+  authorized real-speaker tests, accepting chain evidence because nobody is home to listen.
+
+### Authorized device failure and rollback
+
+- The initial two-item test did not advance. The real adapter omitted `GetPositionInfo`, while the
+  integration fixture substituted synthetic status instead of exercising that SOAP path.
+- A separate short physical DMR probe confirmed a GET for a 384,044-byte, nonzero 12-second WAV;
+  reported position increased to 12 seconds, but transport remained PLAYING at EOF.
+- The candidate was stopped and retained as `castfabric-failed-playlists-0e68e9f-20260905`; the
+  verified alpha.3 rollback container was restored as `castfabric` at approximately `03:52Z`.
+  Domain health, original target and all three protocol readiness counters returned to `1/1`.
+- Test assets were removed after unlinking their archived test playlist. Device playback was
+  stopped, volume remained `33`, and no active session/run remained before rollback.
+- Local regression coverage now traverses actual SOAP status/position in the fake DMR, including
+  both STOPPED-at-EOF and PLAYING-at-EOF. Completion while PLAYING requires exact reported duration,
+  never elapsed wall time; optional timing/actions remain unknown when unsupported.
+- Full candidate redeployment and transport/conflict acceptance remain pending. Audible listening
+  and independent progress on two physical speakers are unverified (one authorized speaker).
 
 Rollback preserves the failed candidate for inspection: stop and rename the current `castfabric`
 container, rename `castfabric-rollback-20260905-3563c5b-pre-playlists` back to `castfabric`, then

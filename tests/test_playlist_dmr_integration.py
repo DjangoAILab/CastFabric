@@ -1,6 +1,5 @@
 import asyncio
 import xml.etree.ElementTree as ET
-from types import SimpleNamespace
 
 import aiohttp
 import pytest
@@ -9,7 +8,7 @@ from aiohttp import web
 from miair.content.media import MediaAssetService
 from miair.content.playlists import PlaylistRunner, PlaylistService
 from miair.content.repository import ContentRepository
-from miair.dlna.client import AVTRANSPORT_URN, LocalDLNAClient
+from miair.dlna.client import AVTRANSPORT_URN, RENDERING_CONTROL_URN, LocalDLNAClient
 from miair.outputs.dlna import DLNAOutputAdapter
 from miair.playback.service import PlaybackService
 from miair.runtime.sessions import MediaSessionCoordinator
@@ -18,7 +17,8 @@ from miair.targets import OutputTargetConfig
 
 
 class PullingDMR:
-    def __init__(self):
+    def __init__(self, end_state):
+        self.end_state = end_state
         self.current_uri = None
         self.actions = []
         self.pulls = []
@@ -46,11 +46,19 @@ class PullingDMR:
             )
         elif action == "Play":
             self._tasks.append(asyncio.create_task(self.pull(self.current_uri)))
+        values = {}
+        if action == "GetTransportInfo":
+            values = {"CurrentTransportState": self.end_state}
+        elif action == "GetPositionInfo":
+            values = {"RelTime": "00:00:01", "TrackDuration": "00:00:01"}
+        elif action == "GetVolume":
+            values = {"CurrentVolume": "16"}
+        fields = "".join(f"<{key}>{value}</{key}>" for key, value in values.items())
         return web.Response(
             text=(
                 '<?xml version="1.0"?>'
                 '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
-                f'<s:Body><u:{action}Response xmlns:u="{AVTRANSPORT_URN}"/>'
+                f'<s:Body><u:{action}Response xmlns:u="{AVTRANSPORT_URN}">{fields}</u:{action}Response>'
                 '</s:Body></s:Envelope>'
             ),
             content_type="text/xml",
@@ -76,7 +84,8 @@ class PullingDMR:
 
 
 @pytest.mark.asyncio
-async def test_server_playlist_advances_and_physical_dmr_pulls_each_item(tmp_path):
+@pytest.mark.parametrize("end_state", ["STOPPED", "PLAYING"])
+async def test_server_playlist_advances_and_fake_dmr_pulls_each_item(tmp_path, end_state):
     async def first_media(_request):
         return web.Response(body=b"first-audio")
 
@@ -92,7 +101,7 @@ async def test_server_playlist_advances_and_physical_dmr_pulls_each_item(tmp_pat
     await media_site.start()
     media_port = media_site._server.sockets[0].getsockname()[1]
 
-    dmr = PullingDMR()
+    dmr = PullingDMR(end_state)
     control_url = await dmr.start()
     repository = ContentRepository(tmp_path / "castfabric.sqlite3")
     assets = MediaAssetService(
@@ -115,41 +124,33 @@ async def test_server_playlist_advances_and_physical_dmr_pulls_each_item(tmp_pat
 
     adapter = DLNAOutputAdapter(
         "uuid:physical", "Physical",
-        LocalDLNAClient(control_url, {AVTRANSPORT_URN: control_url}),
-    )
-    statuses = iter([
-        {"state": "stopped", "position_seconds": 1, "duration_seconds": 1},
-        {"state": "stopped", "position_seconds": 1, "duration_seconds": 1},
-    ])
-    controller = SimpleNamespace(
-        play_url=adapter.play_url,
-        get_status=lambda: _next_status(statuses),
-        pause=adapter.pause,
-        resume=adapter.resume,
-        stop=adapter.stop,
-        seek=adapter.seek,
-        set_volume=adapter.set_volume,
+        LocalDLNAClient(control_url, {
+            AVTRANSPORT_URN: control_url, RENDERING_CONTROL_URN: control_url,
+        }),
     )
     target = OutputTargetConfig(
         id="uuid:physical", name="Physical", virtual_udn="physical-virtual"
     )
     registry = ReceiverSuiteRegistry(device_name_prefix="CastFabric")
-    registry.register(target, "physical-controller", controller)
+    registry.register(target, "physical-controller", adapter)
     playback = PlaybackService(registry, MediaSessionCoordinator(repository=repository))
     runner = PlaylistRunner(
         repository, playlists, assets, playback,
-        media_origin="http://127.0.0.1:8300", auto_monitor=False,
+        media_origin="http://127.0.0.1:8300", poll_interval=0.25,
         id_factory=iter(["run", "session-one", "session-two"]).__next__,
     )
     try:
         started = await runner.start_playlist("playlist", "uuid:physical")
         await dmr.wait_for_pulls(1)
-        await runner.observe_once(started["run_id"])
         await dmr.wait_for_pulls(2)
-        ended = await runner.observe_once(started["run_id"])
+        for _ in range(100):
+            ended = runner.get_run(started["run_id"])
+            if ended["state"] == "ended":
+                break
+            await asyncio.sleep(0.01)
 
         assert [body for _url, body in dmr.pulls] == [b"first-audio", b"second-audio"]
-        assert dmr.actions[:4] == [
+        assert [action for action in dmr.actions if action in {"SetAVTransportURI", "Play"}] == [
             "SetAVTransportURI", "Play", "SetAVTransportURI", "Play"
         ]
         assert ended["end_reason"] == "completed"
@@ -159,7 +160,3 @@ async def test_server_playlist_advances_and_physical_dmr_pulls_each_item(tmp_pat
         repository.close()
         await dmr.close()
         await media_runner.cleanup()
-
-
-async def _next_status(statuses):
-    return next(statuses)

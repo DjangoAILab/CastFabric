@@ -103,6 +103,29 @@ async def test_sequential_runner_advances_and_completes_without_client_polling(t
 
 
 @pytest.mark.asyncio
+async def test_renderer_still_playing_at_exact_eof_advances_and_stops(tmp_path):
+    repository, _assets, _playlists, runner, controllers, items = _runtime(tmp_path)
+    try:
+        started = await runner.start_playlist("playlist", "uuid:living")
+        controller = controllers["uuid:living"]
+        controller.get_status.return_value = {
+            "state": "playing", "position_seconds": 9.9, "duration_seconds": 10
+        }
+        await runner.observe_once(started["run_id"])
+        assert controller.play_url.await_count == 1
+        controller.get_status.return_value["position_seconds"] = 10
+        advanced = await runner.observe_once(started["run_id"])
+        assert advanced["current_item"]["id"] == items[1]["id"]
+        await runner.observe_once(started["run_id"])
+        await runner.observe_once(started["run_id"])
+        assert repository.get_run(started["run_id"])["end_reason"] == "completed"
+        assert controller.stop.await_count == 3
+    finally:
+        await runner.close()
+        repository.close()
+
+
+@pytest.mark.asyncio
 async def test_same_playlist_on_two_targets_keeps_independent_progress(tmp_path):
     repository, _assets, _playlists, runner, controllers, _items = _runtime(tmp_path)
     try:
@@ -135,6 +158,7 @@ async def test_failure_stops_on_current_item_without_skip_retry_or_fallback(tmp_
         assert result["state"] == "ended"
         assert result["end_reason"] == "failed"
         assert controllers["uuid:living"].play_url.await_count == 1
+        controllers["uuid:living"].stop.assert_awaited_once()
         assert repository.active_session("uuid:living") is None
     finally:
         await runner.close()

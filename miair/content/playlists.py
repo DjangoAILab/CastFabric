@@ -469,7 +469,7 @@ class PlaylistRunner:
             order_mode=order, repeat_mode=repeat, asset_id=asset["id"],
             playlist_item_id=item["id"], item_title_snapshot=item["title"],
             source_type="playlist", source_label=asset["display_name"],
-            duration_seconds=asset.get("duration_seconds"), seek_supported=True,
+            duration_seconds=asset.get("duration_seconds"), seek_supported=False,
             resumed_from_session_id=resumed_from_session_id,
         )
         if start_position_seconds:
@@ -498,7 +498,7 @@ class PlaylistRunner:
             asset_id=asset["id"], playlist_item_id=item["id"],
             item_title_snapshot=item["title"], source_label=asset["display_name"],
             cycle_number=run["cycle_number"], duration_seconds=asset.get("duration_seconds"),
-            seek_supported=True,
+            seek_supported=False,
         )
         try:
             await self.playback.play_url(
@@ -516,6 +516,13 @@ class PlaylistRunner:
         run = self.repository.get_run(run_id)
         session = self.repository.active_session_for_run(run_id)
         if session:
+            if reason == "failed":
+                try:
+                    await self.playback.stop(run["target_id"], reason="failed")
+                except PlaybackServiceError:
+                    # One best-effort stop; preserve the original failure and
+                    # never retry or advance to another item on an offline DMR.
+                    pass
             await self.playback.session_coordinator.end(
                 session["id"], failed=reason == "failed", reason=reason
             )
@@ -545,24 +552,33 @@ class PlaylistRunner:
                 self.repository.update_session_progress(
                     session["id"], status["position_seconds"],
                     duration_seconds=status.get("duration_seconds"),
+                    seek_supported=status.get("seek_supported", False),
                 )
             state = status.get("state")
-            if state in {"playing", "paused", "starting"}:
+            position = status.get("position_seconds")
+            duration = status.get("duration_seconds")
+            has_timing = (
+                isinstance(position, (int, float))
+                and isinstance(duration, (int, float))
+                and duration > 0
+            )
+            # Some renderers remain PLAYING at EOF. Only an exact, reported
+            # endpoint counts in that state; never estimate it from wall time.
+            reached_end = state == "playing" and has_timing and position >= duration
+            if state in {"playing", "paused", "starting"} and not reached_end:
                 self.repository.transition_session(
                     session["id"], "paused" if state == "paused" else "playing"
                 )
                 return self._project(run_id)
-            position = status.get("position_seconds")
-            duration = status.get("duration_seconds")
-            naturally_completed = (
+            naturally_completed = reached_end or (
                 state == "stopped"
-                and isinstance(position, (int, float))
-                and isinstance(duration, (int, float))
-                and duration > 0
+                and has_timing
                 and position >= max(duration - 2, duration * 0.95)
             )
             if not naturally_completed:
                 return await self._finish(run_id, "interrupted")
+            if reached_end:
+                await self.playback.stop(run["target_id"], reason="completed")
             await self.playback.session_coordinator.end(session["id"], reason="completed")
             self.repository.end_session(session["id"], "completed")
             next_item = self.playlists.next_item(run_id, session["playlist_item_id"])
@@ -621,7 +637,8 @@ class PlaylistRunner:
                 else:
                     raise ContentServiceError("INVALID_INPUT", "INVALID_PLAYBACK_ACTION")
             except PlaybackServiceError as exc:
-                raise ContentServiceError("PLAYBACK_ERROR", exc.code) from exc
+                category = "CONFLICT" if exc.code == "SESSION_CHANGED" else "UNAVAILABLE"
+                raise ContentServiceError(category, exc.code) from exc
             return self._project(run_id)
 
     async def preempt_target(self, target_id: str) -> None:

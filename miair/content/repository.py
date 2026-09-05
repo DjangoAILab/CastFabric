@@ -844,6 +844,7 @@ class ContentRepository:
         position_seconds: float,
         *,
         duration_seconds: float | None = None,
+        seek_supported: bool | None = None,
     ) -> bool:
         position = float(position_seconds)
         if position < 0:
@@ -851,9 +852,10 @@ class ContentRepository:
         with self.transaction() as connection:
             changed = connection.execute(
                 "UPDATE media_sessions SET position_seconds = ?, "
-                "duration_seconds = COALESCE(?, duration_seconds), updated_at = ? "
+                "duration_seconds = COALESCE(?, duration_seconds), "
+                "seek_supported = COALESCE(?, seek_supported), updated_at = ? "
                 "WHERE id = ? AND state != 'ended'",
-                (position, duration_seconds, self._now(), session_id),
+                (position, duration_seconds, seek_supported, self._now(), session_id),
             ).rowcount
         return bool(changed)
 
