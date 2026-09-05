@@ -114,6 +114,7 @@ class MediaSessionCoordinator:
         *,
         failed: bool = False,
         reason: str | None = None,
+        error_code: str | None = None,
     ) -> bool:
         target_id = self._session_targets.get(session_id)
         if not target_id:
@@ -135,6 +136,7 @@ class MediaSessionCoordinator:
                 self.repository.end_session(
                     session_id,
                     reason or ("failed" if failed else "stopped"),
+                    error_code=error_code,
                 )
             if self.journal:
                 self.journal.append(target_id=target_id, session_id=session_id,

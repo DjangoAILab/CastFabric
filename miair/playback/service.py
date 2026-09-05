@@ -94,7 +94,10 @@ class PlaybackService:
                     await suite.controller.stop()
                 except Exception:
                     pass
-            await self.session_coordinator.end(session.id, failed=True)
+            await self.session_coordinator.end(
+                session.id, failed=True,
+                error_code=getattr(exc, "code", "TARGET_COMMAND_FAILED"),
+            )
             suite.current_session_id = None
             if isinstance(exc, PlaybackServiceError):
                 raise

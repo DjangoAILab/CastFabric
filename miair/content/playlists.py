@@ -516,6 +516,7 @@ class PlaylistRunner:
         run = self.repository.get_run(run_id)
         session = self.repository.active_session_for_run(run_id)
         if session:
+            self.repository.end_session(session["id"], reason, error_code=error_code)
             if reason == "failed":
                 try:
                     await self.playback.stop(run["target_id"], reason="failed")
@@ -526,7 +527,6 @@ class PlaylistRunner:
             await self.playback.session_coordinator.end(
                 session["id"], failed=reason == "failed", reason=reason
             )
-            self.repository.end_session(session["id"], reason, error_code=error_code)
         self.repository.end_run(run_id, reason)
         task = self._tasks.pop(run_id, None)
         if task and task is not asyncio.current_task():

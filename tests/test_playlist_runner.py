@@ -157,9 +157,26 @@ async def test_failure_stops_on_current_item_without_skip_retry_or_fallback(tmp_
 
         assert result["state"] == "ended"
         assert result["end_reason"] == "failed"
+        assert repository.get_session(started["session_id"])["error_code"] == "TARGET_COMMAND_FAILED"
         assert controllers["uuid:living"].play_url.await_count == 1
         controllers["uuid:living"].stop.assert_awaited_once()
         assert repository.active_session("uuid:living") is None
+    finally:
+        await runner.close()
+        repository.close()
+
+
+@pytest.mark.asyncio
+async def test_initial_output_rejection_persists_failure_reason(tmp_path):
+    repository, _assets, _playlists, runner, controllers, _items = _runtime(tmp_path, accepted=False)
+    try:
+        with pytest.raises(Exception):
+            await runner.start_playlist("playlist", "uuid:living")
+        session = repository.get_session("session-living-1")
+        assert session["end_reason"] == "failed"
+        assert session["error_code"] == "TARGET_COMMAND_FAILED"
+        assert repository.active_run("uuid:living") is None
+        assert controllers["uuid:living"].play_url.await_count == 1
     finally:
         await runner.close()
         repository.close()
