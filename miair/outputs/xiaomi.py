@@ -97,6 +97,9 @@ class XiaomiOutputAdapter:
             await self._retry_login()
             return await self._pause_once()
 
+    async def resume(self) -> bool:
+        return False
+
     async def _stop_once(self) -> bool:
         await self.auth.ensure_login()
         ret = await self.auth.mina_service.player_stop(self.device_id)

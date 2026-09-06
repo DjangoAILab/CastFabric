@@ -1,0 +1,52 @@
+const { chromium } = require('playwright');
+const path = require('path');
+const base = 'http://127.0.0.1:4173/docs/prototypes/castfabric-server-playlists-review-v2.html';
+const output = process.argv[2] || '/tmp';
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(base, { waitUntil: 'load' });
+  assert(await page.locator('#page-home.active').count() === 1, 'Overview did not load');
+  assert(await page.locator('#page-home .route').count() === 2, 'Overview lost current routes');
+  assert(await page.locator('#page-home .route').first().getByText('下一项').count() === 1, 'Playlist controls lack next');
+  assert(await page.locator('#page-home .route').last().getByText('下一项').count() === 0, 'Ordinary playback incorrectly has next');
+  await page.locator('[data-page-target="playlists"]').first().click();
+  assert(await page.locator('#page-playlists.active').count() === 1, 'Playlist workbench did not open');
+  await page.locator('[data-play="all"]').click();
+  assert(await page.locator('#speakerPicker.open').count() === 1, 'Play all did not open speaker picker');
+  assert((await page.locator('[data-confirm-play]').innerText()).includes('全部播放'), 'Play-all intent changed');
+  await page.locator('#speakerPicker [data-close]').first().click();
+  await page.locator('[data-play="item"]').nth(1).click();
+  assert(await page.locator('[data-picker-copy]').innerText() === '将从“Coastline”开始，随后继续列表。', 'Item start intent missing');
+  await page.locator('#speakerPicker [data-close]').first().click();
+  await page.locator('[data-tab="history"]').click();
+  assert(await page.locator('.history-view.active').count() === 1, 'History did not open');
+  assert(await page.locator('.history-view button').count() === 0, 'Playback history contains an action');
+  await page.locator('[data-tab="tracks"]').click();
+  assert(await page.locator('.seek-range').count() === 1, 'Seekable progress is not draggable');
+  await page.locator('#scenario').selectOption('conflict');
+  assert(await page.locator('#conflictDialog.open').count() === 1, 'Conflict state missing');
+  for (const scenario of ['normal', 'upload', 'empty', 'loading', 'unavailable', 'offline', 'degraded', 'storage']) {
+    await page.locator('#scenario').selectOption(scenario);
+    assert(await page.locator('body').getAttribute('data-scenario') === scenario, `Scenario ${scenario} failed`);
+  }
+  await page.locator('#scenario').selectOption('normal');
+  await page.locator('[data-page-target="playlists"]').first().click();
+  await page.locator('#language').click();
+  assert(await page.locator('html').getAttribute('lang') === 'en', 'English did not activate');
+  assert(!/[\u3400-\u9fff]/.test(await page.locator('body').innerText()), 'English view contains Chinese');
+  await page.screenshot({ path: path.join(output, 'server-playlists-v2-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload({ waitUntil: 'load' });
+  await page.locator('[data-page-target="playlists"]').first().click();
+  const sizing = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
+  assert(sizing.scroll <= sizing.width, `Mobile horizontal overflow: ${JSON.stringify(sizing)}`);
+  await page.screenshot({ path: path.join(output, 'server-playlists-v2-mobile.png'), fullPage: true });
+  assert(errors.length === 0, errors.join('\n'));
+  await browser.close();
+  console.log('PASS: content workbench, playback intents, read-only history, i18n, all states and mobile');
+})().catch(error => { console.error(error.stack || error); process.exit(1); });

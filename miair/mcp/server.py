@@ -12,6 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 
 from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
+from miair.content import ContentServiceError
 from miair.targets import OutputTargetConfig, normalize_target_id
 from miair.web.origin import request_public_origin
 
@@ -198,6 +199,235 @@ class EmbeddedMcpEndpoint:
             result["upload_url"] = self._public_origin() + result["upload_path"]
             return result
 
+        @server.tool(description="List reusable media assets.", structured_output=True)
+        async def list_media_assets(
+            query: str | None = None, source_kind: str | None = None,
+            sort: str = "recent_added", limit: int = 50, offset: int = 0,
+        ) -> dict[str, Any]:
+            try:
+                return self.app.media_assets.list_assets(
+                    query=query, source_kind=source_kind, sort=sort,
+                    limit=limit, offset=offset,
+                )
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Get one reusable media asset.", structured_output=True)
+        async def get_media_asset(asset_id: str) -> dict[str, Any]:
+            try:
+                return {"item": self.app.media_assets.get_asset(asset_id)}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Create a reusable external-URL media asset.", structured_output=True)
+        async def create_url_media_asset(
+            url: str, display_name: str, description: str | None = None,
+            tags: list[str] | None = None,
+        ) -> dict[str, Any]:
+            try:
+                return {"item": self.app.media_assets.create_external_url(
+                    url, display_name=display_name, description=description, tags=tags
+                )}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Update editable metadata on a reusable media asset.", structured_output=True)
+        async def update_media_asset(
+            asset_id: str, display_name: str | None = None,
+            description: str | None = None, tags: list[str] | None = None,
+            external_url: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                values = {
+                    key: value for key, value in {
+                        "display_name": display_name, "description": description,
+                        "tags": tags, "external_url": external_url,
+                    }.items() if value is not None
+                }
+                return {"item": self.app.media_assets.update_asset(asset_id, **values)}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Delete an unreferenced reusable media asset.", structured_output=True)
+        async def delete_media_asset(asset_id: str) -> dict[str, Any]:
+            try:
+                return {"item": self.app.media_assets.delete_asset(asset_id)}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Play one reusable media asset on an exact target.", structured_output=True)
+        async def play_media_asset(
+            asset_id: str, target_id: str, start_position_seconds: int = 0,
+        ) -> dict[str, Any]:
+            try:
+                return await self.app.play_media_asset(
+                    asset_id, target_id,
+                    start_position_seconds=start_position_seconds,
+                )
+            except (ContentServiceError, PlaybackServiceError) as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Begin raw HTTP upload of a persistent media asset.", structured_output=True)
+        async def begin_media_upload(
+            filename: str, content_type: str, size_bytes: int,
+            display_name: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                result = self.app.media_assets.begin_upload(
+                    filename, content_type, size_bytes, display_name=display_name
+                )
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+            result["upload_url"] = self._public_origin() + result["upload_path"]
+            return result
+
+        @server.tool(description="List server-side playlists.", structured_output=True)
+        async def list_playlists() -> dict[str, Any]:
+            return self.app.playlists.list_playlists()
+
+        @server.tool(description="Get one server-side playlist and its items.", structured_output=True)
+        async def get_playlist(playlist_id: str) -> dict[str, Any]:
+            try:
+                return {"item": self.app.playlists.get_playlist(playlist_id)}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Create a server-side playlist.", structured_output=True)
+        async def create_playlist(
+            name: str, description: str | None = None,
+            default_order: str = "sequential", default_repeat: str = "none",
+        ) -> dict[str, Any]:
+            try:
+                return {"item": self.app.playlists.create_playlist(
+                    name, description=description, default_order=default_order,
+                    default_repeat=default_repeat,
+                )}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Update playlist metadata using optimistic revision fencing.", structured_output=True)
+        async def update_playlist(
+            playlist_id: str, expected_revision: int, name: str | None = None,
+            description: str | None = None, default_order: str | None = None,
+            default_repeat: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                values = {
+                    key: value for key, value in {
+                        "name": name, "description": description,
+                        "default_order": default_order,
+                        "default_repeat": default_repeat,
+                    }.items() if value is not None
+                }
+                return {"item": self.app.playlists.update_playlist(
+                    playlist_id, expected_revision=expected_revision, **values
+                )}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Add, update, remove, or reorder playlist items.", structured_output=True)
+        async def mutate_playlist_items(
+            playlist_id: str, operation: str, expected_revision: int,
+            asset_id: str | None = None, item_id: str | None = None,
+            item_ids: list[str] | None = None, title: str | None = None,
+            resolution: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                if operation == "add" and asset_id:
+                    item = self.app.playlists.add_item(
+                        playlist_id, asset_id, expected_revision=expected_revision, title=title
+                    )
+                    return {"item": item}
+                if operation == "update" and item_id:
+                    return {"item": await self.app.playlists.update_item(
+                        playlist_id, item_id, expected_revision=expected_revision,
+                        asset_id=asset_id, title=title, resolution=resolution,
+                    )}
+                if operation == "remove" and item_id:
+                    return {"item": await self.app.playlists.remove_item(
+                        playlist_id, item_id, expected_revision=expected_revision,
+                        resolution=resolution,
+                    )}
+                if operation == "reorder" and item_ids is not None:
+                    return {"item": self.app.playlists.reorder_items(
+                        playlist_id, item_ids, expected_revision=expected_revision
+                    )}
+                raise ToolError("INVALID_PLAYLIST_ITEM_OPERATION")
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Archive a playlist using optimistic revision fencing.", structured_output=True)
+        async def archive_playlist(
+            playlist_id: str, expected_revision: int,
+            resolution: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                return {"item": await self.app.playlists.archive_playlist(
+                    playlist_id, expected_revision=expected_revision, resolution=resolution
+                )}
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Start server-side playlist playback and return immediately.", structured_output=True)
+        async def start_playlist(
+            playlist_id: str, target_id: str, order_mode: str | None = None,
+            repeat_mode: str | None = None, start_item_id: str | None = None,
+            start_position_seconds: int = 0,
+            resumed_from_session_id: str | None = None,
+        ) -> dict[str, Any]:
+            try:
+                return await self.app.playlist_runner.start_playlist(
+                    playlist_id, target_id, order_mode=order_mode,
+                    repeat_mode=repeat_mode, start_item_id=start_item_id,
+                    start_position_seconds=start_position_seconds,
+                    resumed_from_session_id=resumed_from_session_id,
+                )
+            except (ContentServiceError, PlaybackServiceError) as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Get one playlist run's current server projection.", structured_output=True)
+        async def get_playlist_run(run_id: str) -> dict[str, Any]:
+            try:
+                return self.app.playlist_runner.get_run(run_id)
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="List active server-side playlist runs.", structured_output=True)
+        async def list_playlist_runs(playlist_id: str | None = None) -> dict[str, Any]:
+            return self.app.playlist_runner.list_active_runs(playlist_id=playlist_id)
+
+        @server.tool(description="Control one active playlist run.", structured_output=True)
+        async def control_playlist_run(
+            run_id: str, action: str, if_session_id: str | None = None,
+            item_id: str | None = None, position_seconds: int | None = None,
+        ) -> dict[str, Any]:
+            try:
+                return await self.app.playlist_runner.control(
+                    run_id, action, if_session_id=if_session_id,
+                    item_id=item_id, position_seconds=position_seconds,
+                )
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="List explicit resume candidates for a playlist.", structured_output=True)
+        async def get_playlist_progress(playlist_id: str, limit: int = 50) -> dict[str, Any]:
+            try:
+                self.app.playlists.get_playlist(playlist_id, include_archived=True)
+            except ContentServiceError as exc:
+                raise self._tool_error(exc) from exc
+            return {"items": self.app.content_repository.playlist_resume_candidates(
+                playlist_id, limit=limit
+            )}
+
+        @server.tool(description="Query persisted playback history without continuing it.", structured_output=True)
+        async def query_playback_history(
+            target_id: str | None = None, playlist_id: str | None = None,
+            limit: int = 50,
+        ) -> dict[str, Any]:
+            return {"items": self.app.content_repository.playback_history(
+                target_id=target_id, playlist_id=playlist_id, limit=limit
+            )}
+
         @server.tool(
             description=(
                 "Open a real-time PCM input for target_id. The only accepted "
@@ -238,6 +468,13 @@ class EmbeddedMcpEndpoint:
         async def pause(target_id: str) -> dict[str, Any]:
             try:
                 return await self.app.playback_service.pause(target_id)
+            except PlaybackServiceError as exc:
+                raise self._tool_error(exc) from exc
+
+        @server.tool(description="Resume paused playback on target_id.", structured_output=True)
+        async def resume(target_id: str) -> dict[str, Any]:
+            try:
+                return await self.app.playback_service.resume(target_id)
             except PlaybackServiceError as exc:
                 raise self._tool_error(exc) from exc
 

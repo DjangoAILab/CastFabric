@@ -11,6 +11,22 @@ from miair.runtime.models import IngressProtocol, IngressState
 
 
 @pytest.mark.asyncio
+async def test_app_stop_is_idempotent(tmp_path):
+    app = CastFabric(
+        Config(
+            hostname="127.0.0.1",
+            conf_path=str(tmp_path),
+            enable_miplay=False,
+        )
+    )
+
+    await app.stop()
+    await app.stop()
+
+    assert app._stopped is True
+
+
+@pytest.mark.asyncio
 async def test_generic_dlna_target_starts_ingress_without_xiaomi_login(tmp_path):
     target = OutputTargetConfig(
         id="uuid:renderer",

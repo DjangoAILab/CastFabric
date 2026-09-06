@@ -25,6 +25,8 @@ class PlaybackTarget(Protocol):
 
     async def pause(self) -> bool: ...
 
+    async def resume(self) -> bool: ...
+
     async def stop(self) -> bool: ...
 
     async def set_volume(self, volume: int) -> bool: ...
@@ -46,6 +48,9 @@ class UnavailablePlaybackTarget:
         return False
 
     async def pause(self) -> bool:
+        return False
+
+    async def resume(self) -> bool:
         return False
 
     async def stop(self) -> bool:
@@ -118,6 +123,9 @@ class FallbackPlaybackTarget:
 
     async def pause(self) -> bool:
         return await self._command("pause")
+
+    async def resume(self) -> bool:
+        return await self._command("resume")
 
     async def stop(self) -> bool:
         return await self._command("stop")

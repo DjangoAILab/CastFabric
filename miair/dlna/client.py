@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import re
 import socket
 import time
 import xml.etree.ElementTree as ET
@@ -392,6 +393,10 @@ class LocalDLNAClient:
             await self._soap(AVTRANSPORT_URN, "Stop", {"InstanceID": 0})
         return True
 
+    async def resume(self) -> bool:
+        await self._soap(AVTRANSPORT_URN, "Play", {"InstanceID": 0, "Speed": 1})
+        return True
+
     async def stop(self) -> bool:
         await self._soap(AVTRANSPORT_URN, "Stop", {"InstanceID": 0})
         return True
@@ -428,13 +433,51 @@ class LocalDLNAClient:
         return int(result.get("CurrentVolume", 0))
 
     async def get_status(self) -> dict:
-        transport, volume = await asyncio.gather(
+        transport, volume, position, seek_supported = await asyncio.gather(
             self._soap(AVTRANSPORT_URN, "GetTransportInfo", {"InstanceID": 0}),
             self.get_volume(),
+            self._get_position(),
+            self._seek_supported(),
         )
         state = transport.get("CurrentTransportState", "STOPPED")
         status = {"PLAYING": 1, "PAUSED_PLAYBACK": 2}.get(state, 0)
-        return {"status": status, "volume": volume}
+        return {"status": status, "volume": volume, "seek_supported": seek_supported, **position}
+
+    async def _seek_supported(self) -> bool:
+        try:
+            actions = await self._soap(
+                AVTRANSPORT_URN, "GetCurrentTransportActions", {"InstanceID": 0}
+            )
+        except (aiohttp.ClientError, TimeoutError, ET.ParseError):
+            return False
+        return "Seek" in {value.strip() for value in actions.get("Actions", "").split(",")}
+
+    async def _get_position(self) -> dict:
+        # Position reporting is optional on renderers. Its absence must not
+        # break transport controls or turn an unknown end into completion.
+        try:
+            result = await self._soap(
+                AVTRANSPORT_URN, "GetPositionInfo", {"InstanceID": 0}
+            )
+        except (aiohttp.ClientError, TimeoutError, ET.ParseError):
+            return {}
+        position = {}
+        for source, destination in (
+            ("RelTime", "position_seconds"),
+            ("TrackDuration", "duration_seconds"),
+        ):
+            value = _parse_transport_time(result.get(source, ""))
+            if value is not None:
+                position[destination] = value
+        return position
+
+
+def _parse_transport_time(value: str) -> float | None:
+    """Parse UPnP H+:MM:SS[.fraction], leaving unsupported values unknown."""
+    if not re.fullmatch(r"\d+:[0-5]\d:[0-5]\d(?:\.\d+)?", value):
+        return None
+    hours, minutes, seconds = value.split(":")
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
 def _parse_ssdp_headers(data: bytes) -> dict[str, str]:

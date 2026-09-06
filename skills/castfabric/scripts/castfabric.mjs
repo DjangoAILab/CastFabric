@@ -101,6 +101,66 @@ export async function playLocalFile(server, targetId, path, startPositionSeconds
   return response.json();
 }
 
+export async function uploadPersistentFile(server, path, displayName = null, fetchImpl = fetch) {
+  const absolute = resolve(path);
+  const details = await stat(absolute);
+  if (!details.isFile()) throw new Error("LOCAL_FILE_NOT_FOUND");
+  const args = {
+    filename: basename(absolute),
+    content_type: contentType(absolute),
+    size_bytes: details.size,
+  };
+  if (displayName) args.display_name = displayName;
+  const transaction = await mcpCall(server, "begin_media_upload", args, fetchImpl);
+  const response = await fetchImpl(transaction.upload_url, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream" },
+    body: createReadStream(absolute),
+    duplex: "half",
+  });
+  if (!response.ok) throw new Error(`UPLOAD_HTTP_${response.status}`);
+  return response.json();
+}
+
+export async function importPlaylist(server, manifestPath, fetchImpl = fetch) {
+  const absolute = resolve(manifestPath);
+  const manifest = JSON.parse(await readFile(absolute, "utf8"));
+  if (manifest.version !== 1 || !manifest.name || !Array.isArray(manifest.items) || !manifest.items.length) {
+    throw new Error("INVALID_PLAYLIST");
+  }
+  const created = await mcpCall(server, "create_playlist", {
+    name: manifest.name,
+    ...(manifest.description ? { description: manifest.description } : {}),
+    ...(manifest.default_order ? { default_order: manifest.default_order } : {}),
+    ...(manifest.default_repeat ? { default_repeat: manifest.default_repeat } : {}),
+  }, fetchImpl);
+  const playlistId = created.item.id;
+  let revision = created.item.revision;
+  for (const item of manifest.items) {
+    let assetId;
+    if (item.type === "file") {
+      const uploaded = await uploadPersistentFile(
+        server, resolve(dirname(absolute), item.path), item.title || null, fetchImpl,
+      );
+      assetId = uploaded.asset.id;
+    } else if (item.type === "url") {
+      const asset = await mcpCall(server, "create_url_media_asset", {
+        url: item.url, display_name: item.title || item.url,
+      }, fetchImpl);
+      assetId = asset.item.id;
+    } else {
+      throw new Error("INVALID_PLAYLIST_ITEM");
+    }
+    await mcpCall(server, "mutate_playlist_items", {
+      playlist_id: playlistId, operation: "add", expected_revision: revision,
+      asset_id: assetId, ...(item.title ? { title: item.title } : {}),
+    }, fetchImpl);
+    const refreshed = await mcpCall(server, "get_playlist", { playlist_id: playlistId }, fetchImpl);
+    revision = refreshed.item.revision;
+  }
+  return mcpCall(server, "get_playlist", { playlist_id: playlistId }, fetchImpl);
+}
+
 function contentType(path) {
   const extension = path.toLowerCase().split(".").pop();
   return ({ mp3: "audio/mpeg", wav: "audio/wav", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg" })[extension] || "application/octet-stream";
@@ -173,15 +233,6 @@ function option(args, name) {
   return args[index + 1];
 }
 
-async function waitUntilStopped(server, target, stopRequested = () => false) {
-  for (;;) {
-    if (stopRequested()) return false;
-    const status = await mcpCall(server, "get_playback_status", { target_id: target });
-    if (["stopped", "failed"].includes(status.state)) return true;
-    await new Promise((accept) => setTimeout(accept, 1000));
-  }
-}
-
 async function runCli(argv) {
   const { server, args } = parse(argv);
   const command = args[0];
@@ -197,6 +248,12 @@ async function runCli(argv) {
     result = await playUrl(server, target, targetValue, startPosition);
   } else if (command === "play-file") {
     result = await playLocalFile(server, target, targetValue, startPosition);
+  } else if (command === "upload-file") {
+    result = await uploadPersistentFile(
+      server, args[1], args.includes("--name") ? option(args, "--name") : null,
+    );
+  } else if (command === "import-playlist") {
+    result = await importPlaylist(server, args[1]);
   } else if (command === "seek") {
     result = await seekPlayback(
       server,
@@ -207,37 +264,10 @@ async function runCli(argv) {
   } else if (command === "stream") {
     await streamInput(server, target, args.includes("--stdin") ? null : option(args, "--input"), args.includes("--stdin"));
     return;
-  } else if (["status", "pause", "stop"].includes(command)) {
+  } else if (["status", "pause", "resume", "stop"].includes(command)) {
     result = await mcpCall(server, command === "status" ? "get_playback_status" : command, { target_id: target });
   } else if (command === "volume") {
     result = await mcpCall(server, "set_volume", { target_id: target, volume: Number(args.at(-1)) });
-  } else if (command === "playlist") {
-    const playlistPath = resolve(targetValue);
-    const playlist = JSON.parse(await readFile(playlistPath, "utf8"));
-    if (playlist.version !== 1 || !Array.isArray(playlist.items) || !playlist.items.length) throw new Error("INVALID_PLAYLIST");
-    let interrupted = false;
-    const stopPlaylist = () => {
-      interrupted = true;
-      void mcpCall(server, "stop", { target_id: target }).catch(() => {});
-    };
-    process.once("SIGINT", stopPlaylist);
-    process.once("SIGTERM", stopPlaylist);
-    try {
-      do {
-        for (const item of playlist.items) {
-          if (interrupted) break;
-          const itemPosition = positionSeconds(item.start_seconds ?? 0);
-          if (item.type === "file") await playLocalFile(server, target, resolve(dirname(playlistPath), item.path), itemPosition);
-          else if (item.type === "url") await playUrl(server, target, item.url, itemPosition);
-          else throw new Error("INVALID_PLAYLIST_ITEM");
-          await waitUntilStopped(server, target, () => interrupted);
-        }
-      } while (!interrupted && args.includes("--loop"));
-    } finally {
-      process.off("SIGINT", stopPlaylist);
-      process.off("SIGTERM", stopPlaylist);
-    }
-    return;
   } else {
     throw new Error("Unknown command");
   }

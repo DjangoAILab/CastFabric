@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from aiohttp import web
 
 from miair.const import VERSION
+from miair.content import ContentServiceError
 from miair.identity import PRODUCT_NAME, normalize_device_prefix
 from miair.playback import FilePlaybackError, PcmStreamError, PlaybackServiceError
 from miair.runtime.discovery import DiscoveryBusyError
@@ -233,6 +234,21 @@ async def _json_object(request: web.Request) -> dict[str, Any] | web.Response:
 
 
 def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
+    def content_error(exc: ContentServiceError) -> web.Response:
+        status = {
+            "INVALID_INPUT": 400,
+            "NOT_FOUND": 404,
+            "CONFLICT": 409,
+            "UNAVAILABLE": 409,
+            "STORAGE_ERROR": 503,
+        }.get(exc.code, 500)
+        return _error(
+            exc.code,
+            f"error.{exc.reason.lower()}",
+            status=status,
+            details={"reason": exc.reason, **exc.details},
+        )
+
     def playback_error(exc: PlaybackServiceError) -> web.Response:
         status = {
             "TARGET_NOT_FOUND": 404,
@@ -391,6 +407,313 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
         return web.json_response(
             {"items": [suite.to_dict() for suite in app.suite_registry.snapshots()]}
         )
+
+    async def list_media_assets(request):
+        try:
+            result = app.media_assets.list_assets(
+                query=request.query.get("query"),
+                source_kind=request.query.get("source_kind"),
+                status=request.query.get("status"),
+                sort=request.query.get("sort", "recent_added"),
+                limit=int(request.query.get("limit", 50)),
+                offset=int(request.query.get("offset", 0)),
+            )
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_pagination", status=400)
+        return web.json_response(result)
+
+    async def get_media_asset(request):
+        try:
+            return web.json_response(
+                {"item": app.media_assets.get_asset(request.match_info["asset_id"])}
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+
+    async def create_url_media_asset(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        required = {"url", "display_name"}
+        allowed = required | {"description", "tags"}
+        if not required <= set(payload) or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_asset", status=400)
+        try:
+            item = app.media_assets.create_external_url(
+                payload["url"],
+                display_name=payload["display_name"],
+                description=payload.get("description"),
+                tags=payload.get("tags"),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item}, status=201)
+
+    async def patch_media_asset(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        allowed = {"display_name", "description", "tags", "external_url"}
+        if not payload or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_asset", status=400)
+        try:
+            item = app.media_assets.update_asset(
+                request.match_info["asset_id"],
+                **payload,
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def delete_media_asset(request):
+        try:
+            item = app.media_assets.delete_asset(request.match_info["asset_id"])
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def begin_media_upload(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        required = {"filename", "content_type", "size_bytes"}
+        allowed = required | {"display_name"}
+        if not required <= set(payload) or set(payload) - allowed:
+            return _error("INVALID_INPUT", "error.invalid_media_upload", status=400)
+        try:
+            result = app.media_assets.begin_upload(
+                payload["filename"],
+                payload["content_type"],
+                payload["size_bytes"],
+                display_name=payload.get("display_name"),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        result["upload_url"] = request_public_origin(request) + result["upload_path"]
+        return web.json_response(result, status=201)
+
+    async def upload_media_asset(request):
+        try:
+            result = await app.media_assets.accept_upload(
+                request.match_info["upload_id"],
+                request.content.iter_chunked(64 * 1024),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response(result, status=201)
+
+    async def get_media_asset_content(request):
+        try:
+            path, content_type = app.media_assets.resolve_managed_file(
+                request.match_info["asset_id"]
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        response = web.FileResponse(path)
+        response.content_type = content_type
+        return response
+
+    async def play_media_asset(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if not {"target_id"} <= set(payload) or set(payload) - {"target_id", "start_position_seconds"}:
+            return _error("INVALID_INPUT", "error.invalid_media_play", status=400)
+        try:
+            result = await app.play_media_asset(
+                request.match_info["asset_id"], payload["target_id"],
+                start_position_seconds=payload.get("start_position_seconds", 0),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result)
+
+    async def list_playlists(request):
+        return web.json_response(app.playlists.list_playlists())
+
+    async def create_playlist(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if "name" not in payload or set(payload) - {"name", "description", "default_order", "default_repeat"}:
+            return _error("INVALID_INPUT", "error.invalid_playlist", status=400)
+        try:
+            item = app.playlists.create_playlist(**payload)
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item}, status=201)
+
+    async def get_playlist(request):
+        try:
+            return web.json_response({"item": app.playlists.get_playlist(request.match_info["playlist_id"])})
+        except ContentServiceError as exc:
+            return content_error(exc)
+
+    async def patch_playlist(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if "expected_revision" not in payload or set(payload) - {
+            "expected_revision", "name", "description", "default_order", "default_repeat"
+        }:
+            return _error("INVALID_INPUT", "error.invalid_playlist", status=400)
+        revision = payload.pop("expected_revision")
+        try:
+            item = app.playlists.update_playlist(
+                request.match_info["playlist_id"], expected_revision=revision, **payload
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def archive_playlist(request):
+        try:
+            item = await app.playlists.archive_playlist(
+                request.match_info["playlist_id"],
+                expected_revision=int(request.query.get("expected_revision", "0")),
+                resolution=request.query.get("resolution"),
+            )
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_revision", status=400)
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def add_playlist_item(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if not {"asset_id", "expected_revision"} <= set(payload) or set(payload) - {
+            "asset_id", "expected_revision", "title"
+        }:
+            return _error("INVALID_INPUT", "error.invalid_playlist_item", status=400)
+        try:
+            item = app.playlists.add_item(
+                request.match_info["playlist_id"], payload["asset_id"],
+                expected_revision=payload["expected_revision"], title=payload.get("title"),
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item}, status=201)
+
+    async def patch_playlist_item(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if "expected_revision" not in payload or set(payload) - {
+            "expected_revision", "asset_id", "title", "resolution"
+        }:
+            return _error("INVALID_INPUT", "error.invalid_playlist_item", status=400)
+        revision = payload.pop("expected_revision")
+        try:
+            item = await app.playlists.update_item(
+                request.match_info["playlist_id"], request.match_info["item_id"],
+                expected_revision=revision, **payload,
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def remove_playlist_item(request):
+        try:
+            item = await app.playlists.remove_item(
+                request.match_info["playlist_id"], request.match_info["item_id"],
+                expected_revision=int(request.query.get("expected_revision", "0")),
+                resolution=request.query.get("resolution"),
+            )
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_revision", status=400)
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def reorder_playlist_items(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if set(payload) != {"expected_revision", "item_ids"} or not isinstance(payload["item_ids"], list):
+            return _error("INVALID_INPUT", "error.invalid_playlist_order", status=400)
+        try:
+            item = app.playlists.reorder_items(
+                request.match_info["playlist_id"], payload["item_ids"],
+                expected_revision=payload["expected_revision"],
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+        return web.json_response({"item": item})
+
+    async def start_playlist_run(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if not {"playlist_id", "target_id"} <= set(payload) or set(payload) - {
+            "playlist_id", "target_id", "order_mode", "repeat_mode", "start_item_id",
+            "start_position_seconds", "resumed_from_session_id",
+        }:
+            return _error("INVALID_INPUT", "error.invalid_playlist_run", status=400)
+        try:
+            result = await app.playlist_runner.start_playlist(**payload)
+        except ContentServiceError as exc:
+            return content_error(exc)
+        except PlaybackServiceError as exc:
+            return playback_error(exc)
+        return web.json_response(result, status=201)
+
+    async def list_playlist_runs(request):
+        return web.json_response(
+            app.playlist_runner.list_active_runs(
+                playlist_id=request.query.get("playlist_id")
+            )
+        )
+
+    async def get_playlist_run(request):
+        try:
+            return web.json_response(app.playlist_runner.get_run(request.match_info["run_id"]))
+        except ContentServiceError as exc:
+            return content_error(exc)
+
+    async def control_playlist_run(request):
+        payload = await _json_object(request)
+        if isinstance(payload, web.Response):
+            return payload
+        if "action" not in payload or set(payload) - {
+            "action", "if_session_id", "item_id", "position_seconds"
+        }:
+            return _error("INVALID_INPUT", "error.invalid_playlist_control", status=400)
+        action = payload.pop("action")
+        try:
+            return web.json_response(
+                await app.playlist_runner.control(request.match_info["run_id"], action, **payload)
+            )
+        except ContentServiceError as exc:
+            return content_error(exc)
+
+    async def get_playlist_progress(request):
+        playlist_id = request.match_info["playlist_id"]
+        try:
+            app.playlists.get_playlist(playlist_id, include_archived=True)
+            limit = int(request.query.get("limit", 50))
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_pagination", status=400)
+        except ContentServiceError as exc:
+            return content_error(exc)
+        items = app.content_repository.playlist_resume_candidates(playlist_id, limit=limit)
+        return web.json_response({"items": items})
+
+    async def get_playback_history(request):
+        try:
+            limit = int(request.query.get("limit", 50))
+        except (TypeError, ValueError):
+            return _error("INVALID_INPUT", "error.invalid_pagination", status=400)
+        return web.json_response({
+            "items": app.content_repository.playback_history(
+                target_id=request.query.get("target_id"),
+                playlist_id=request.query.get("playlist_id"),
+                limit=limit,
+            )
+        })
 
     async def play_url(request):
         payload = await _json_object(request)
@@ -856,6 +1179,38 @@ def setup_api_v1_routes(web_app: web.Application, config, app) -> None:
     web_app.router.add_post("/api/v1/targets/scan", scan_targets)
     web_app.router.add_patch("/api/v1/targets/{target_id:.+}", patch_target)
     web_app.router.add_get("/api/v1/suites", get_suites)
+    web_app.router.add_get("/api/v1/media/assets", list_media_assets)
+    web_app.router.add_post("/api/v1/media/assets/url", create_url_media_asset)
+    web_app.router.add_post("/api/v1/media/uploads", begin_media_upload)
+    web_app.router.add_put("/api/v1/media/uploads/{upload_id}", upload_media_asset)
+    web_app.router.add_get(
+        "/api/v1/media/assets/{asset_id}/content", get_media_asset_content
+    )
+    web_app.router.add_get("/api/v1/media/assets/{asset_id}", get_media_asset)
+    web_app.router.add_post("/api/v1/media/assets/{asset_id}/play", play_media_asset)
+    web_app.router.add_patch("/api/v1/media/assets/{asset_id}", patch_media_asset)
+    web_app.router.add_delete("/api/v1/media/assets/{asset_id}", delete_media_asset)
+    web_app.router.add_get("/api/v1/playlists", list_playlists)
+    web_app.router.add_post("/api/v1/playlists", create_playlist)
+    web_app.router.add_get("/api/v1/playlists/{playlist_id}/progress", get_playlist_progress)
+    web_app.router.add_post("/api/v1/playlists/{playlist_id}/items", add_playlist_item)
+    web_app.router.add_put("/api/v1/playlists/{playlist_id}/items", reorder_playlist_items)
+    web_app.router.add_patch(
+        "/api/v1/playlists/{playlist_id}/items/{item_id}", patch_playlist_item
+    )
+    web_app.router.add_delete(
+        "/api/v1/playlists/{playlist_id}/items/{item_id}", remove_playlist_item
+    )
+    web_app.router.add_get("/api/v1/playlists/{playlist_id}", get_playlist)
+    web_app.router.add_patch("/api/v1/playlists/{playlist_id}", patch_playlist)
+    web_app.router.add_delete("/api/v1/playlists/{playlist_id}", archive_playlist)
+    web_app.router.add_get("/api/v1/playlist-runs", list_playlist_runs)
+    web_app.router.add_post("/api/v1/playlist-runs", start_playlist_run)
+    web_app.router.add_get("/api/v1/playlist-runs/{run_id}", get_playlist_run)
+    web_app.router.add_post(
+        "/api/v1/playlist-runs/{run_id}/control", control_playlist_run
+    )
+    web_app.router.add_get("/api/v1/playback/history", get_playback_history)
     web_app.router.add_post("/api/v1/playback/url", play_url)
     web_app.router.add_get("/api/v1/playback/{target_id:.+}", playback_status)
     web_app.router.add_post(

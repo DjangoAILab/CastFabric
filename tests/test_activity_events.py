@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from miair.runtime.events import ActivityEventJournal
 from miair.runtime.models import EventOutcome, IngressProtocol
+from miair.content.repository import ContentRepository
 
 
 NOW = datetime(2026, 8, 30, 9, 0, tzinfo=timezone.utc)
@@ -66,3 +67,30 @@ def test_event_cursor_returns_older_items_in_stable_order():
     assert [event.id for event in first_page] == ["event-4", "event-3"]
     assert [event.id for event in second_page] == ["event-2", "event-1"]
     assert journal.get("event-2").id == "event-2"
+
+
+def test_new_events_persist_to_sqlite_and_never_append_legacy_jsonl(tmp_path):
+    repository = ContentRepository(tmp_path / "castfabric.sqlite3", clock=lambda: NOW)
+    legacy = tmp_path / "activity.jsonl"
+    legacy.write_text('{"legacy":true}\n', encoding="utf-8")
+    journal = ActivityEventJournal(
+        repository=repository,
+        path=legacy,
+        clock=lambda: NOW,
+        id_factory=lambda: "event-sqlite",
+    )
+
+    journal.append(
+        target_id="uuid:living",
+        protocol=IngressProtocol.MCP,
+        type="session.started",
+        outcome=EventOutcome.SUCCESS,
+        summary_key="activity.session_started",
+        details={"url": "https://example.test/audio?token=secret"},
+    )
+
+    assert legacy.read_text(encoding="utf-8") == '{"legacy":true}\n'
+    persisted = repository.query_events(limit=10)
+    assert persisted[0]["id"] == "event-sqlite"
+    assert "secret" not in repr(persisted)
+    repository.close()

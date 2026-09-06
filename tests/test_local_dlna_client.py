@@ -7,7 +7,7 @@ import aiohttp
 
 from miair.config import Speaker
 from miair.const import AVTRANSPORT_URN, RENDERING_CONTROL_URN
-from miair.dlna.client import LocalDLNAClient, _parse_ssdp_headers
+from miair.dlna.client import LocalDLNAClient, _parse_ssdp_headers, _parse_transport_time
 from miair.speaker import SpeakerController
 
 
@@ -49,7 +49,7 @@ class LocalDLNAClientTests(unittest.IsolatedAsyncioTestCase):
         )
         client.get_volume = AsyncMock(return_value=16)
 
-        self.assertEqual(await client.get_status(), {"status": 2, "volume": 16})
+        self.assertEqual(await client.get_status(), {"status": 2, "volume": 16, "seek_supported": False})
 
     async def test_seek_uses_dlna_relative_time(self):
         client = self.make_client()
@@ -62,6 +62,37 @@ class LocalDLNAClientTests(unittest.IsolatedAsyncioTestCase):
             "Seek",
             {"InstanceID": 0, "Unit": "REL_TIME", "Target": "00:02:05"},
         )
+
+    async def test_status_includes_real_renderer_position(self):
+        client = self.make_client()
+        async def soap(urn, action, arguments):
+            if action == "GetPositionInfo":
+                return {"RelTime": "00:01:02.5", "TrackDuration": "01:02:03"}
+            if action == "GetCurrentTransportActions":
+                return {"Actions": "Play, Pause, Seek"}
+            return {"CurrentTransportState": "PLAYING"}
+        client._soap = AsyncMock(side_effect=soap)
+        client.get_volume = AsyncMock(return_value=16)
+        self.assertEqual(await client.get_status(), {
+            "status": 1, "volume": 16, "seek_supported": True,
+            "position_seconds": 62.5, "duration_seconds": 3723,
+        })
+
+    async def test_unsupported_position_does_not_break_status(self):
+        client = self.make_client()
+        async def soap(urn, action, arguments):
+            if action == "GetPositionInfo":
+                raise aiohttp.ClientError("Unsupported action")
+            return {"CurrentTransportState": "PLAYING"}
+        client._soap = AsyncMock(side_effect=soap)
+        client.get_volume = AsyncMock(return_value=16)
+        self.assertEqual(await client.get_status(), {"status": 1, "volume": 16, "seek_supported": False})
+
+    def test_transport_time_rejects_unknown_and_malformed_values(self):
+        for value in ("", "NOT_IMPLEMENTED", "-1:00:00", "00:60:00", "NaN", "00:00:inf"):
+            self.assertIsNone(_parse_transport_time(value))
+        self.assertEqual(_parse_transport_time("100:00:00"), 360000)
+        self.assertEqual(_parse_transport_time("00:00:00"), 0)
 
     async def test_soap_rediscovers_renderer_after_control_port_changes(self):
         client = LocalDLNAClient(

@@ -60,6 +60,11 @@ def _redact_url(value: str) -> str:
         return "<redacted>"
 
 
+def redact_url(value: str) -> str:
+    """Return a URL-safe public summary without query, fragment, or literal IP."""
+    return _redact_url(value)
+
+
 def redact_network_addresses(value: str) -> str:
     """Remove valid IPv4 and IPv6 literals from arbitrary diagnostic text."""
     text = _IPV4_RE.sub("<local-address>", str(value))

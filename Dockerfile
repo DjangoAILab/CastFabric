@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir \
 
 # Verify the installed wheel contains the complete production console. Run
 # away from /app so the source tree cannot accidentally mask package defects.
-RUN cd /tmp && python -c "from importlib.resources import files; root = files('miair.web').joinpath('static'); html = root.joinpath('index.html').read_text(encoding='utf-8'); assert html.lstrip().lower().startswith('<!doctype html>'); assert root.joinpath('console.css').is_file(); assert root.joinpath('console.js').is_file()"
+RUN cd /tmp && python -c "from importlib.resources import files; root = files('miair.web').joinpath('static'); html = root.joinpath('index.html').read_text(encoding='utf-8'); assert html.lstrip().lower().startswith('<!doctype html>'); assert all(root.joinpath(name).is_file() for name in ('console.css', 'console.js', 'castfabric-mark.svg', 'github-mark.svg', 'THIRD_PARTY_NOTICES.md'))"
 
 COPY config-example.json .env.example ./
 RUN mkdir -p /app/conf

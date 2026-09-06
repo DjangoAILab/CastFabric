@@ -1,18 +1,144 @@
 # CastFabric Home Server verification
 
-Latest verification: 2026-09-02
+Latest verification: 2026-09-05
 
 Published baseline: `v0.11.0-alpha.3`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: `v0.11.0-alpha.3`
+Deployment baseline: server-playlists candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`.
 
 Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
 Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
+
+Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-playlists`
+
+## Accepted server-playlists chain (2026-09-05)
+
+- Branch: `codex/server-playlists`; deployed code commit:
+  `94e993e4ec8abf8200e577dfc3ffb97586529320`. Later handoff-document commits do not change the image.
+- Local gates: 225 Python tests, five Node helper tests, offline MiPlay self-test and Docker build.
+  Feature CI `33944065999` and multi-architecture publish run `33944066270` passed. No main merge,
+  tag or release was created.
+- Published tag: `ghcr.io/djangoailab/castfabric:sha-94e993e`; deployed immutable OCI index:
+  `sha256:9adaac8ead99c8e210a8e7644077db26795acc2d58275286b3b1cd888e781b74`.
+  AMD64 manifest: `sha256:e2aa6283bd6a5f62b5a1bdc360a35e7930490e521cefb644e6fceb248b929627`.
+  Home Server image ID: `sha256:dc41f6a5e41b523945b575e67d2b89ca2dc20e3318f549b76a1f8c091c838fed`.
+  GHCR pull succeeded directly; image revision and architecture were checked before replacement.
+- Final persistence-check restart: `2026-09-05T04:25:09Z` (`12:25` Asia/Shanghai). Original host
+  network, config mount, target identity, enabled state, protocol ports and environment were kept.
+- [x] Isolated cold-start, six-table/delete-journal storage, upload, CRUD, MCP and restart persistence.
+  Temporary isolated containers and their named test volumes were removed after acceptance.
+- [x] Production TLS page, JS/CSS, 32 MCP tools, upload, diagnostic privacy and restart persistence.
+  Prior bilingual desktop/mobile visual acceptance remains applicable; these fixes changed no UI.
+- [x] Same-byte deletion/re-upload succeeds via HTTP without reviving the old asset or its history.
+- [x] Two distinct 12-second managed WAVs completed sequentially without a client-side runner.
+  Both sessions persisted `completed`, position `12`, duration `12`; renderer-facing observation
+  independently confirmed GETs for both asset paths. Only hashed path identifiers were retained.
+- [x] Actual renderer state changed to paused and back to playing. Seek to second `2` was confirmed
+  by device position, not just command success; previous/next/select changed the active item.
+- [x] Replacing the currently playing asset returns `CONFLICT / ACTIVE_PLAYBACK_CONFLICT` with
+  keep/reload/stop choices. Reordering preserves the active session. Title-only edits do not alter
+  the physical source and do not require a playback conflict.
+- [x] MCP history returned two completed items for the natural run. A separate stopped session
+  preserved second `3`; `get_playlist_progress` exposed it, and explicit start with the saved item,
+  session ID and position resumed on the physical renderer at second `3`.
+- [x] Tests ended at approximately `04:28:37Z`. Playback was stopped, volume remained the original
+  `33`, and the service was healthy with zero active runs/sessions and DLNA/AirPlay/MiPlay `1/1`.
+  Test playlist items were unlinked, playlists archived and test assets deleted; factual historical
+  sessions remain as designed.
+- [ ] Audible listening: not verified. The user authorized sound but nobody was home and explicitly
+  accepted chain-only verification. A renderer GET is not a claim that somebody heard sound.
+- [ ] Two simultaneous physical speakers: not tested because only one target was authorized.
+  Independent-target progress remains covered by automated tests, not a two-device claim.
+
+Verified rollback remains `castfabric-rollback-20260905-3563c5b-pre-playlists` and its matching image
+tag, preserving alpha.3 and the existing config mount. To restore: stop and rename the candidate,
+rename the rollback container to `castfabric`, start it, then verify domain health and all three
+protocol readiness counters. Never run both host-network containers together. Previous failed
+candidates remain stopped for inspection; the following sections retain their evidence.
+
+## Initial server playlists candidate (superseded, 2026-09-05)
+
+- Branch: `codex/server-playlists`; deployed implementation commit:
+  `0e68e9f668053dbd2b5e0e6edb5ae853e3595d09`.
+- Feature CI run `33933686147` passed Python/integration, Agent Skill, offline MiPlay and Docker
+  jobs. Publish run `33933891530` passed the same gates and published `linux/amd64` and
+  `linux/arm64` images.
+- Candidate tag: `ghcr.io/djangoailab/castfabric:sha-0e68e9f`; OCI index digest:
+  `sha256:d6e1dc34d98137cb413ac42cfa3f2ee558f095679319d7268632a8857a92ff66`;
+  deployed AMD64 manifest:
+  `sha256:e8a475a48e66146aad0a6fc62fa88e65f67efff8ec37de180bcee163f2cdc5fc`.
+- GHCR pulls from the Home Server returned EOF, so the already-published AMD64 manifest was pulled
+  and revision-verified locally, then imported through the existing SSH channel. The deployed image
+  label still resolves exactly to the candidate commit.
+- Deployment completed at `2026-09-05T01:03:00Z` (`09:03` Asia/Shanghai). Host networking,
+  `unless-stopped`, the existing `/app/conf` bind mount, target identity and enabled state were
+  preserved.
+- The pre-deployment `v0.11.0-alpha.3` image was tagged
+  `castfabric:rollback-20260905-3563c5b-pre-playlists`; its stopped container uses the same rollback
+  name. Full container and image inspection snapshots are stored mode `0600` in the deployment
+  directory's dated `rollback/20260905-3563c5b-pre-playlists/` folder.
+
+### Silent acceptance
+
+- [x] Preflight found the production container healthy, one enabled/online target, one ready suite,
+  DLNA/AirPlay/MiPlay each `1/1`, zero active/playing sessions, stopped playback and volume `33`.
+- [x] An isolated bridge-network candidate exposed only a loopback Web port. Receiver protocols and
+  Xiaomi extension were disabled; no production protocol port or registration was used.
+- [x] Isolated cold start created exactly the six approved business tables. Asset/playlist CRUD,
+  raw WAV upload, URL redaction, MCP initialize/list/call and restart persistence passed.
+- [x] Production TLS page and static resources load. Browser checks passed Chinese and English,
+  desktop and mobile layouts, the empty content workbench and the playback-history no-resume copy.
+- [x] Production MCP initializes and exposes 32 tools. Every new media/playlist/progress/history tool
+  and input schema is discoverable, and a read-only playlist call succeeds.
+- [x] A temporary managed WAV, redacted external URL and playlist survived a formal-container
+  restart from persistent `/app/conf`; the temporary playlist was then unlinked/archived and both
+  visible test assets were deleted.
+- [x] Diagnostic export omitted the test URL secret, an active upload ticket and complete LAN
+  addresses. SQLite and the managed-media directory are on the existing persistent mount.
+- [x] After cleanup and restart, the service is healthy, the original target remains online, all
+  three receiver protocols remain `1/1`, playback is stopped, volume remains `33`, and active
+  session/run counts are zero.
+- [x] This silent gate issued no play, seek, pause, stop or set-volume commands. The user subsequently
+  authorized real-speaker tests, accepting chain evidence because nobody is home to listen.
+
+### Authorized device failure and rollback
+
+- The initial two-item test did not advance. The real adapter omitted `GetPositionInfo`, while the
+  integration fixture substituted synthetic status instead of exercising that SOAP path.
+- A separate short physical DMR probe confirmed a GET for a 384,044-byte, nonzero 12-second WAV;
+  reported position increased to 12 seconds, but transport remained PLAYING at EOF.
+- The candidate was stopped and retained as `castfabric-failed-playlists-0e68e9f-20260905`; the
+  verified alpha.3 rollback container was restored as `castfabric` at approximately `03:52Z`.
+  Domain health, original target and all three protocol readiness counters returned to `1/1`.
+- Test assets were removed after unlinking their archived test playlist. Device playback was
+  stopped, volume remained `33`, and no active session/run remained before rollback.
+- Local regression coverage now traverses actual SOAP status/position in the fake DMR, including
+  both STOPPED-at-EOF and PLAYING-at-EOF. Completion while PLAYING requires exact reported duration,
+  never elapsed wall time; optional timing/actions remain unknown when unsupported.
+- Full candidate redeployment and transport/conflict acceptance remain pending. Audible listening
+  and independent progress on two physical speakers are unverified (one authorized speaker).
+
+### Re-upload boundary found during the next acceptance attempt
+
+- Candidate `3bf15940f56403e8de3066eb6e00b72817499335` passed 224 local tests, feature CI
+  `33943547373`, publish run `33943547936`, isolated checks and domain-side silent/restart checks.
+- Re-uploading the exact previously deleted device-test WAV exposed a unique-hash collision with
+  its retained tombstone. No playlist started in this attempt. The candidate was retained stopped
+  as `castfabric-failed-playlists-3bf1594-20260905` and alpha.3 was restored again.
+- The fix releases only a deleted row's blob-hash reservation in the same transaction that creates
+  the new asset. The old asset ID and historical references remain deleted, while live-content
+  deduplication remains intact. No schema/table addition, historical revival or data deletion is
+  required; legacy tombstones are covered by the regression test.
+
+Rollback preserves the failed candidate for inspection: stop and rename the current `castfabric`
+container, rename `castfabric-rollback-20260905-3563c5b-pre-playlists` back to `castfabric`, then
+start it. Only one host-network service may run at a time; verify domain health and all three suite
+readiness counters after restoration.
 
 ## MiPlay field incident (2026-09-02)
 

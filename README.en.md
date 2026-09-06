@@ -14,8 +14,8 @@
 ![CastFabric console overview](docs/assets/console-overview.png)
 
 CastFabric routes audio from phones, computers, and AI agents to speakers on your LAN. Phones keep
-using DLNA, AirPlay, or MiPlay; agents use the embedded MCP endpoint for URLs, local files, and live
-PCM. The core output targets standard UPnP/DLNA MediaRenderers and does not depend on a Xiaomi
+using DLNA, AirPlay, or MiPlay; agents use the embedded MCP endpoint for URLs, local files, live
+PCM, persistent audio assets, and server-run playlists. The core output targets standard UPnP/DLNA MediaRenderers and does not depend on a Xiaomi
 account. Xiaomi cloud remains an explicitly enabled legacy compatibility extension.
 
 Every enabled output gets its own `CastFabric · <speaker name>` receiver suite. Different speakers
@@ -60,17 +60,19 @@ CastFabric `0.11` serves Streamable HTTP MCP from the existing Web listener. If 
 `http://192.168.1.10:8300`, the MCP endpoint is `http://192.168.1.10:8300/mcp`. It reuses the same
 `target_id`, playback state, and output adapters rather than introducing a second playback service.
 
-Twelve atomic tools are available:
+Thirty-two short-call tools are available:
 
 - management: system status, list and scan speakers, enable/disable or rename an output;
 - playback: HTTP(S) URL, agent-local file, and live `s16le / 48 kHz / stereo` PCM;
-- control: status, pause, stop, absolute-second seek, and volume.
+- content: persistent uploads and metadata, external URL assets, playlist definitions, explicit
+  resume candidates, and read-only history;
+- control: status, pause, resume, stop, absolute-second seek, playlist navigation, and volume.
 
 The bundled [CastFabric Agent Skill](skills/castfabric/SKILL.md) adds local-file upload, FFmpeg live
-conversion, positioned URL/file playback, current-session seek, and client-side sequential or
-looping playlists. A session ID is only an optional concurrency guard, never a reusable media ID.
-MCP stays thin: CastFabric **does not embed TTS, a media library, or a server-side queue**. The agent
-creates or selects audio; CastFabric delivers it to the chosen speaker.
+conversion, persistent file upload, and one-shot playlist-manifest import. Once started, playlists
+advance entirely on the server and survive helper exit. A session ID is a concurrency guard, never a
+reusable media ID. CastFabric **does not embed TTS, a general media library, or a queue**. Failures are
+recorded and stop the run; they do not trigger automatic skip, retry, or speaker fallback.
 
 > MCP currently targets trusted LANs and has no public-internet authentication. Do not expose
 > `/mcp` directly to the internet.
@@ -129,6 +131,8 @@ The repository also includes non-destructive management scripts:
 - **Overview:** current routes, verifiable sender information, protocol and destination. It keeps the
   desktop view within one screen and summarizes additional routes.
 - **Speakers:** manage multiple outputs, receiver aliases, suite enablement and protocol health.
+- **Playlists:** manage reusable audio, playlists, and read-only playback records in one content
+  workbench; play everything or start from an explicit item after choosing a speaker.
 - **Activity:** inspect structured sessions and typed failures with server-side redaction.
 - **AI Access:** copy the current MCP endpoint, client configuration, and verification prompt without
   managing another service port.
@@ -171,6 +175,7 @@ amd64/arm64 GHCR builds.
 - [MiPlay sources and independent implementation boundary](docs/research/miplay-protocol-sources.md)
 - [Home Server acceptance checklist](docs/testing/castfabric-home-server-checklist.md)
 - [MCP and Agent Skill design](docs/plans/2026-09-01-castfabric-mcp-agent-skill-design.md)
+- [Server-playlist architecture decision](docs/adr/0011-persist-media-assets-and-run-server-playlists.md)
 
 ## Compatibility and open source
 

@@ -82,6 +82,9 @@ class SpeakerController:
     async def pause(self) -> bool:
         return await self.output.pause()
 
+    async def resume(self) -> bool:
+        return await self.output.resume()
+
     async def stop(self) -> bool:
         return await self.output.stop()
 

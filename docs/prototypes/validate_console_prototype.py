@@ -62,7 +62,7 @@ def validate(prototype: Path, contract_path: Path) -> list[str]:
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
     prototype = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "docs/prototypes/castfabric-console-v6.html"
-    contract = root / "docs/design/contracts/castfabric-console-fields.json"
+    contract = Path(sys.argv[2]) if len(sys.argv) > 2 else root / "docs/design/contracts/castfabric-console-fields.json"
     errors = validate(prototype, contract)
     if errors:
         print("FAIL: console prototype data contract")

@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import zipfile
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -52,6 +53,7 @@ def _build_app(tmp_path):
             play_url=AsyncMock(return_value=True),
             seek=AsyncMock(return_value=True),
             pause=AsyncMock(return_value=True),
+            resume=AsyncMock(return_value=True),
             stop=AsyncMock(return_value=True),
             set_volume=AsyncMock(return_value=True),
             get_status=AsyncMock(return_value={"status": 1, "volume": 20}),
@@ -65,6 +67,75 @@ def _build_app(tmp_path):
             port=8200,
         )
     return config, app
+
+
+@pytest.mark.asyncio
+async def test_playlist_http_contract_uses_server_runner_and_revision_fencing(tmp_path):
+    config, app = _build_app(tmp_path)
+    app.playlist_runner.auto_monitor = False
+    client = await _client(config, app)
+    try:
+        asset_response = await client.post(
+            "/api/v1/media/assets/url",
+            json={
+                "url": "https://media.example.test/one.mp3?secret=hidden",
+                "display_name": "One",
+            },
+        )
+        asset = (await asset_response.json())["item"]
+        created_response = await client.post(
+            "/api/v1/playlists", json={"name": "Morning"}
+        )
+        playlist = (await created_response.json())["item"]
+        added_response = await client.post(
+            f"/api/v1/playlists/{playlist['id']}/items",
+            json={"asset_id": asset["id"], "expected_revision": playlist["revision"]},
+        )
+        item = (await added_response.json())["item"]
+        stale_response = await client.patch(
+            f"/api/v1/playlists/{playlist['id']}",
+            json={"expected_revision": 1, "name": "Stale"},
+        )
+        started_response = await client.post(
+            "/api/v1/playlist-runs",
+            json={"playlist_id": playlist["id"], "target_id": "uuid:living"},
+        )
+        started = await started_response.json()
+        paused_response = await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={"action": "pause", "if_session_id": started["session_id"]},
+        )
+        await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={
+                "action": "seek", "if_session_id": started["session_id"],
+                "position_seconds": 5,
+            },
+        )
+        stopped_response = await client.post(
+            f"/api/v1/playlist-runs/{started['run_id']}/control",
+            json={"action": "stop", "if_session_id": started["session_id"]},
+        )
+        progress_response = await client.get(
+            f"/api/v1/playlists/{playlist['id']}/progress"
+        )
+        progress = await progress_response.json()
+    finally:
+        await app.playlist_runner.close()
+        await client.close()
+        app.content_repository.close()
+
+    assert asset_response.status == 201
+    assert created_response.status == 201
+    assert added_response.status == 201
+    assert item["asset_id"] == asset["id"]
+    assert stale_response.status == 409
+    assert started_response.status == 201
+    assert paused_response.status == 200
+    assert stopped_response.status == 200
+    assert progress_response.status == 200
+    assert progress["items"][0]["end_reason"] == "stopped"
+    assert "secret" not in str(progress)
 
 
 async def _client(config, app):
@@ -715,3 +786,92 @@ async def test_settings_save_failure_restores_every_mutated_runtime_value(tmp_pa
     assert config.device_name_prefix == original_prefix
     assert config.default_volume == original_volume
     assert app.suite_registry.device_name_prefix == original_prefix
+
+
+@pytest.mark.asyncio
+async def test_persistent_media_asset_http_contract_is_searchable_redacted_and_deduplicated(tmp_path):
+    config, app = _build_app(tmp_path)
+    client = await _client(config, app)
+    wav = io.BytesIO()
+    with wave.open(wav, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b"\0\0" * 400)
+    body = wav.getvalue()
+    try:
+        created_url = await client.post(
+            "/api/v1/media/assets/url",
+            json={
+                "url": "https://audio.example.test/show.mp3?token=private",
+                "display_name": "Morning show",
+                "description": "Daily focus",
+                "tags": ["Radio"],
+            },
+        )
+        url_payload = await created_url.json()
+        asset_id = url_payload["item"]["id"]
+        listed = await client.get("/api/v1/media/assets?query=focus&sort=name")
+        list_payload = await listed.json()
+        updated = await client.patch(
+            f"/api/v1/media/assets/{asset_id}",
+            json={"display_name": "First light", "tags": ["Morning"]},
+        )
+        update_payload = await updated.json()
+
+        transaction = await client.post(
+            "/api/v1/media/uploads",
+            json={
+                "filename": "../../clip.wav",
+                "content_type": "application/octet-stream",
+                "size_bytes": len(body),
+            },
+        )
+        transaction_payload = await transaction.json()
+        uploaded = await client.put(
+            urlsplit(transaction_payload["upload_url"]).path,
+            data=body,
+            headers={"content-type": "application/octet-stream"},
+        )
+        upload_payload = await uploaded.json()
+        fetched = await client.get(
+            f"/api/v1/media/assets/{upload_payload['asset']['id']}/content"
+        )
+        fetched_body = await fetched.read()
+    finally:
+        await client.close()
+
+    assert created_url.status == 201
+    assert listed.status == 200
+    assert list_payload["total"] == 1
+    assert update_payload["item"]["display_name"] == "First light"
+    assert "private" not in json.dumps([url_payload, list_payload, update_payload])
+    assert transaction.status == 201
+    assert uploaded.status == 201
+    assert upload_payload["asset"]["original_filename"] == "clip.wav"
+    assert fetched.status == 200
+    assert fetched.content_type == "audio/wav"
+    assert fetched_body == body
+
+
+@pytest.mark.asyncio
+async def test_persistent_media_http_errors_use_stable_category_reason_and_details(tmp_path):
+    config, app = _build_app(tmp_path)
+    client = await _client(config, app)
+    try:
+        invalid = await client.post(
+            "/api/v1/media/assets/url",
+            json={"url": "file:///private/audio", "display_name": "Private"},
+        )
+        missing = await client.get("/api/v1/media/assets/missing")
+        invalid_payload = await invalid.json()
+        missing_payload = await missing.json()
+    finally:
+        await client.close()
+
+    assert invalid.status == 400
+    assert invalid_payload["error"]["code"] == "INVALID_INPUT"
+    assert invalid_payload["error"]["details"]["reason"] == "INVALID_URL"
+    assert missing.status == 404
+    assert missing_payload["error"]["code"] == "NOT_FOUND"
+    assert missing_payload["error"]["details"]["reason"] == "ASSET_NOT_FOUND"

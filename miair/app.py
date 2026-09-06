@@ -33,6 +33,8 @@ from miair.runtime.models import (
 from miair.runtime.sessions import MediaSessionCoordinator
 from miair.runtime.suites import ReceiverSuite, ReceiverSuiteRegistry
 from miair.playback import EphemeralMediaStore, PcmStreamRegistry, PlaybackService
+from miair.content import ContentRepository, MediaAssetService, PlaylistRunner, PlaylistService
+from miair.web.origin import speaker_media_origin
 
 log = logging.getLogger("miair")
 
@@ -51,14 +53,25 @@ class CastFabric:
         self.ssdp_server: SSDPServer | None = None
         self.device_server: DeviceServer | None = None
         self._web_runner: web.AppRunner | None = None
+        self._stop_lock = asyncio.Lock()
+        self._stopped = False
         self.dlna_running = False
         self.airplay_manager: AirPlayManager | None = None
         self.miplay_receivers: dict[str, MiPlayReceiver] = {}
+        self.content_repository = ContentRepository(
+            os.path.join(self.config.conf_path, "castfabric.sqlite3")
+        )
+        self.content_repository.interrupt_active_playback()
+        self.media_assets = MediaAssetService(
+            self.content_repository,
+            os.path.join(self.config.conf_path, "media"),
+        )
         self.activity_journal = ActivityEventJournal(
-            path=os.path.join(self.config.conf_path, "activity.jsonl")
+            repository=self.content_repository
         )
         self.session_coordinator = MediaSessionCoordinator(
-            journal=self.activity_journal
+            journal=self.activity_journal,
+            repository=self.content_repository,
         )
         self._miplay_session_ids: dict[str, str] = {}
         self.discovered_targets = {}
@@ -74,6 +87,16 @@ class CastFabric:
             self.suite_registry,
             self.session_coordinator,
         )
+        self.playlists = PlaylistService(self.content_repository)
+        self.playlist_runner = PlaylistRunner(
+            self.content_repository,
+            self.playlists,
+            self.media_assets,
+            self.playback_service,
+            media_origin=speaker_media_origin(self.config),
+        )
+        self.playlists.conflict_handler = self.playlist_runner.resolve_definition_conflict
+        self.playback_service.before_play = self.playlist_runner.preempt_target
         self.media_store = EphemeralMediaStore(self.playback_service)
         self.pcm_streams = PcmStreamRegistry(
             self.playback_service,
@@ -105,6 +128,9 @@ class CastFabric:
     async def stop_agent_playback(self, target_id: str) -> dict:
         """Stop one Agent route and release every associated local resource."""
         try:
+            active_run = self.content_repository.active_run(target_id)
+            if active_run is not None:
+                return await self.playlist_runner.control(active_run["id"], "stop")
             return await self.playback_service.stop(target_id)
         finally:
             cleanup_results = await asyncio.gather(
@@ -118,6 +144,23 @@ class CastFabric:
                         "Agent 播放资源清理失败: %s",
                         type(cleanup_error).__name__,
                     )
+
+    async def play_media_asset(
+        self, asset_id: str, target_id: str, *, start_position_seconds: int = 0
+    ) -> dict:
+        asset = self.media_assets.get_asset(asset_id)
+        source = self.media_assets.resolve_source(asset_id)
+        if asset["source_kind"] == "managed_file":
+            source = (
+                speaker_media_origin(self.config)
+                + f"/api/v1/media/assets/{asset_id}/content"
+            )
+        return await self.playback_service.play_url(
+            target_id,
+            source,
+            media_format=asset.get("content_type"),
+            start_position_seconds=start_position_seconds,
+        )
 
     async def _discover_output_targets(self):
         observed = await LocalDLNAClient.discover(self.config.hostname)
@@ -254,6 +297,11 @@ class CastFabric:
         web_site = web.TCPSite(self._web_runner, "0.0.0.0", self.config.web_port)
         await web_site.start()
         log.info(f"Web 管理界面: http://{self.config.hostname}:{self.config.web_port}")
+
+        # Metadata repair only: existing uploads keep their IDs, content and history.
+        repaired = await asyncio.to_thread(self.media_assets.backfill_durations)
+        if repaired:
+            log.info("Updated duration metadata for %d managed audio assets", repaired)
 
         # 2. 已选择过设备就可从本地缓存发布局域网投送入口；小米云
         # 认证只决定播放控制是否可用，不再决定设备能否被发现。
@@ -857,6 +905,14 @@ class CastFabric:
 
     async def stop(self):
         """停止所有服务"""
+        async with self._stop_lock:
+            if self._stopped:
+                return
+            await self._stop_once()
+            self._stopped = True
+
+    async def _stop_once(self):
+        """Run the shutdown sequence once; ``stop`` supplies idempotence."""
         log.info("%s 正在关闭...", PRODUCT_NAME)
 
         if hasattr(self, '_device_check_task') and self._device_check_task:
@@ -872,6 +928,7 @@ class CastFabric:
             self._auth_retry_task.cancel()
             self._auth_retry_task = None
 
+        await self.playlist_runner.close()
         await self.pcm_streams.close_all()
         await self.media_store.close()
         await self._stop_dlna_services()
@@ -885,6 +942,7 @@ class CastFabric:
             except asyncio.TimeoutError:
                 log.warning("Web 服务关闭超时")
         await self.auth.close()
+        self.content_repository.close()
 
         log.info("%s 已关闭", PRODUCT_NAME)
 
