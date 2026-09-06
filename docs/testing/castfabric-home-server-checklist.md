@@ -1,6 +1,6 @@
 # CastFabric Home Server verification
 
-Latest verification: 2026-09-05
+Latest verification: 2026-09-06 (read-only release preflight; production deployment remains September 5)
 
 Published baseline: `v0.11.0-alpha.3`
 
@@ -15,6 +15,23 @@ Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
 
 Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-playlists`
+
+## Approved header/dialog release preflight (2026-09-06)
+
+- Approved UI and managed-audio duration fixes are merged as
+  `d6e7a076ad325c4800562c27f9df400f79c8909c`; `v0.11.0-alpha.4` publication is in progress.
+- Real curated playlists remain present: Lu Xun *Call to Arms*, 16 sections, ID
+  `4lF1w0ieoEkE3lEDCqxE7ddP`, revision 17; sleep/ambient music, four tracks, ID
+  `JTmvUk79OwB3zzS2qK9VL76u`, revision 5. See the dated curation record for licensing and import checks.
+- The existing production container remains healthy at the pinned `94e993e` image below.
+  Read-only observation found actual chapter playback at volume 25, then Sleep at volume 30.
+  No playback/volume command or production restart was sent. These are current user state, not
+  this release's physical test results; do not restore older recorded volume settings.
+- Local final-source isolated container gates passed, including missing-MP3-duration backfill,
+  unchanged IDs/metadata/schema, restart persistence, 32 MCP tools and no automatic playback.
+- Production rollout, duration backfill and new-domain-UI acceptance are **pending**. Obtain
+  confirmation before an upgrade that would interrupt the observed playback. The older protocol
+  and physical-chain results below remain historical, not a new listening test.
 
 ## Accepted server-playlists chain (2026-09-05)
 

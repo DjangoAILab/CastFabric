@@ -123,12 +123,17 @@ live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
   Mandarin Lu Xun *Call to Arms* (16 sections) and Scott Buckley sleep/ambient music (4 tracks).
   Provenance and readback evidence: `docs/testing/2026-09-06-curated-playlists.md`.
   The user explicitly accepted the A header/dialog prototype and authorized implementation.
-  Local implementation and validation are in progress; no release/deployment changed yet. Active research:
+  Implementation is complete and merged to main as `d6e7a076ad325c4800562c27f9df400f79c8909c`;
+  annotated `v0.11.0-alpha.4` is pushed. Feature CI `34032135796` passed; publication run
+  `34032488040` passed its test gates on attempt 2 and is building the release image. The initial
+  existing MiPlay timing-test failure and unchanged-test retry are documented in
+  `docs/testing/2026-09-06-header-dialog-release.md`. No Home Server deployment changed yet. Active research:
   `docs/design/research/2026-09-06-header-dialog-study.md`; prototype:
   `docs/prototypes/castfabric-header-dialog-review-2026-09-06.html`.
   The candidate fixes MP3 duration extraction and unknown totals, with startup backfill limited to
   missing duration on existing managed files. Preserve the imported resource IDs and user metadata.
-  Deployment preflight currently sees actual speaker playback (volume 25); do not interrupt it
+  Deployment preflight currently sees actual speaker playback (most recently Sleep, volume 30);
+  do not interrupt it
   without user confirmation. Do not infer playback success from the earlier silent content import.
 
 - The server-playlist implementation and authorized single-speaker chain acceptance are complete.
