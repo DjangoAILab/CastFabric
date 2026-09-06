@@ -84,6 +84,7 @@ def test_content_dialog_centering_does_not_change_drawer_layout():
     assert 'data-modal-error' in JS
     assert '#contentModal .primary-button[data-content-modal-action]' in JS
     assert 'No enabled speakers' in JS
+    assert re.search(r"async function loadAll.*?if \(!quiet\).*?renderContent\(\);", JS, re.S)
 
 
 def test_ai_access_is_bilingual_and_uses_one_origin_mcp_setup():

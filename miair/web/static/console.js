@@ -643,6 +643,7 @@
       state.loading = true; state.error = null;
       setPageState(document.getElementById('page-speakers'), 'loading');
       setPageState(document.getElementById('page-activity'), 'loading');
+      renderContent();
     }
     try {
       const [system, targets, suites, sessions, events, settings, playlists, assets, history, runs] = await Promise.all([
