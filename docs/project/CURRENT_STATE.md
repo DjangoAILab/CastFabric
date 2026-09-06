@@ -73,16 +73,29 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 
 ## Verification and deployment baseline
 
-- Current released code commit: `3563c5bb549db67c4d4ad7b940db2e1babb660a7`.
-- Current published prerelease: `v0.11.0-alpha.3`.
+- Current released code commit: `d6e7a076ad325c4800562c27f9df400f79c8909c`.
+- Current published prerelease: `v0.11.0-alpha.4`.
 - Canonical repository: `https://github.com/DjangoAILab/CastFabric`.
-- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.3`, published for
+- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.4`, published for
   `linux/amd64` and `linux/arm64`.
 - Landing page: `https://djangoailab.github.io/CastFabric/`.
-- GitHub Actions publish run `33647910803` passed Python/integration tests, Agent Skill tests,
+- GitHub Actions publish run `34032488040` (attempt 2) passed Python/integration tests, Agent Skill tests,
   offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
   prerelease creation.
-- The Home Server runs feature-branch candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`,
+- The Home Server runs alpha.4, pinned to OCI index
+  `sha256:68c889784f2e0fc59ca3b11593f227a55122e6bebb5caf39e2b5235a63ecd38a`.
+  Final restart: `2026-09-06T14:24:25Z`. The container is healthy, all three protocols are `1/1`
+  ready, active/playing counts are zero, and actual renderer status is stopped at volume `0`
+  (the user's preflight setting, not changed by this release). Published-image isolated and
+  domain-side gates passed: canonical SVG/static bytes, bilingual desktop/mobile dialogs, 32 MCP
+  tools, 20 audio Range reads, diagnostics privacy, six-table integrity and restart persistence.
+  All 20 missing MP3 durations were backfilled without changing existing IDs, names, credits,
+  timestamps, playlist order or revisions. Rollback container:
+  `castfabric-rollback-20260906-94e993e-pre-alpha4`. The initial restart harness incorrectly
+  checked full protocol readiness at aggregate health before initialization completed and rolled
+  back; the corrected harness waits for all three ready counters. The same release passed both
+  redeployment and final restart. See `docs/testing/2026-09-06-header-dialog-release.md`.
+- The preceding physical-chain validation used candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`,
   image `sha-94e993e`, pinned to OCI index
   `sha256:9adaac8ead99c8e210a8e7644077db26795acc2d58275286b3b1cd888e781b74`.
   Feature CI `33944065999` and multi-architecture publish run `33944066270` passed.
@@ -90,8 +103,9 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
   MCP discovery/call, six-table persistence across restart, privacy and unchanged target/readiness.
   Authorized physical-speaker checks passed two-item server-driven completion, actual media GETs,
   pause/resume/seek/navigation, active-resource conflict, uninterrupted reorder, persisted progress
-  and explicit positioned resume. Final playback is stopped, volume is `33`, and active counts are
-  zero. Nobody was home to listen: audible output is explicitly unverified, as accepted by the user.
+  and explicit positioned resume. At the end of that September 5 test playback was stopped, volume
+  was `33`, and active counts were zero. Nobody was home to listen: audible output is explicitly
+  unverified, as accepted by the user. Alpha.4 acceptance did not repeat a physical listening test.
   Earlier candidates were rolled back before local fixes for real DLNA timing/EOF and deleted-file
   re-upload; their incident evidence and the verified alpha.3 rollback point remain in the checklist.
 - The repository was recreated after accidental remote deletion. Seven branches and nineteen tags
@@ -117,24 +131,23 @@ live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
 
 ## Remaining work and explicit non-goals
 
-- **Active follow-up (2026-09-06):** The user authorized two populated playlists, a centered create
+- **Completed follow-up (2026-09-06):** The user authorized two populated playlists, a centered create
   dialog, canonical project SVG branding, an open-source link, refined language/connection controls,
   then merge/push/release once verified. Both real Home Server playlists are now populated: complete
   Mandarin Lu Xun *Call to Arms* (16 sections) and Scott Buckley sleep/ambient music (4 tracks).
   Provenance and readback evidence: `docs/testing/2026-09-06-curated-playlists.md`.
   The user explicitly accepted the A header/dialog prototype and authorized implementation.
   Implementation is complete and merged to main as `d6e7a076ad325c4800562c27f9df400f79c8909c`;
-  annotated `v0.11.0-alpha.4` is pushed. Feature CI `34032135796` passed; publication run
-  `34032488040` passed its test gates on attempt 2 and is building the release image. The initial
+  annotated `v0.11.0-alpha.4` is published and deployed. Feature CI `34032135796` and publication run
+  `34032488040` passed (publication attempt 2). The initial
   existing MiPlay timing-test failure and unchanged-test retry are documented in
-  `docs/testing/2026-09-06-header-dialog-release.md`. No Home Server deployment changed yet. Active research:
+  `docs/testing/2026-09-06-header-dialog-release.md`. Design evidence:
   `docs/design/research/2026-09-06-header-dialog-study.md`; prototype:
   `docs/prototypes/castfabric-header-dialog-review-2026-09-06.html`.
-  The candidate fixes MP3 duration extraction and unknown totals, with startup backfill limited to
-  missing duration on existing managed files. Preserve the imported resource IDs and user metadata.
-  Deployment preflight currently sees actual speaker playback (most recently Sleep, volume 30);
-  do not interrupt it
-  without user confirmation. Do not infer playback success from the earlier silent content import.
+  The released implementation fixes MP3 duration extraction and unknown totals, with startup backfill
+  limited to missing duration on existing managed files. The later user confirmation released the
+  deployment gate; final silent acceptance passed. Preserve the imported resource IDs and metadata.
+  No new sound or volume command was issued. Do not infer audible playback from content import.
 
 - The server-playlist implementation and authorized single-speaker chain acceptance are complete.
   Audible listening and simultaneous progress on two physical speakers remain unverified; only one

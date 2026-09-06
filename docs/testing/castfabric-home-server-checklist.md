@@ -1,14 +1,14 @@
 # CastFabric Home Server verification
 
-Latest verification: 2026-09-06 (read-only release preflight; production deployment remains September 5)
+Latest verification: 2026-09-06 (alpha.4 deployment and silent acceptance complete)
 
-Published baseline: `v0.11.0-alpha.3`
+Published baseline: `v0.11.0-alpha.4`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: server-playlists candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`.
+Deployment baseline: `v0.11.0-alpha.4`, commit `d6e7a076ad325c4800562c27f9df400f79c8909c`.
 
-Validated candidate image: `castfabric:proxy-origin-fix` (`linux/amd64`)
+Deployed image index: `sha256:68c889784f2e0fc59ca3b11593f227a55122e6bebb5caf39e2b5235a63ecd38a` (`linux/amd64` host).
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
@@ -16,22 +16,37 @@ Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
 
 Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-playlists`
 
-## Approved header/dialog release preflight (2026-09-06)
+Alpha.4 rollback container: `castfabric-rollback-20260906-94e993e-pre-alpha4`
+
+## Approved header/dialog release acceptance (2026-09-06)
 
 - Approved UI and managed-audio duration fixes are merged as
-  `d6e7a076ad325c4800562c27f9df400f79c8909c`; `v0.11.0-alpha.4` publication is in progress.
+  `d6e7a076ad325c4800562c27f9df400f79c8909c`; `v0.11.0-alpha.4` is published and deployed.
+  Publish runs `34032488040` (attempt 2) and `34032487886` both succeeded; tag image revision verified.
 - Real curated playlists remain present: Lu Xun *Call to Arms*, 16 sections, ID
   `4lF1w0ieoEkE3lEDCqxE7ddP`, revision 17; sleep/ambient music, four tracks, ID
   `JTmvUk79OwB3zzS2qK9VL76u`, revision 5. See the dated curation record for licensing and import checks.
-- The existing production container remains healthy at the pinned `94e993e` image below.
-  Read-only observation found actual chapter playback at volume 25, then Sleep at volume 30.
-  No playback/volume command or production restart was sent. These are current user state, not
-  this release's physical test results; do not restore older recorded volume settings.
-- Local final-source isolated container gates passed, including missing-MP3-duration backfill,
-  unchanged IDs/metadata/schema, restart persistence, 32 MCP tools and no automatic playback.
-- Production rollout, duration backfill and new-domain-UI acceptance are **pending**. Obtain
-  confirmation before an upgrade that would interrupt the observed playback. The older protocol
-  and physical-chain results below remain historical, not a new listening test.
+- Earlier read-only observation found chapter playback at volume 25, then Sleep at volume 30;
+  rollout paused. The user subsequently confirmed deployment/acceptance. Immediately before actual
+  replacement the renderer reported stopped at volume 0. No playback or volume command was needed.
+- [x] Exact published image passed isolated Home Server cold start, old MP3 duration backfill,
+  unchanged IDs/revision, restart, 32 MCP tools and offline MiPlay checks. Disposable QA container
+  and volume were removed; no user audio was deleted.
+- [x] Original host network, environment values, config mount, target identities and restart policy
+  preserved. Prior `94e993e` container/image retained with protected inspection records only on server.
+- [x] Domain TLS, exact tested HTML/JS/CSS/SVG hashes, bilingual desktop/mobile/short-screen dialogs,
+  focus restoration and no browser page errors. 32 MCP tools/list call and diagnostic privacy pass.
+- [x] All 20 managed files now have durations and pass 128-byte Range reads. Audiobook total
+  16696.4506 seconds; music total 1141.1513 seconds. Complete metadata hashes excluding duration
+  match pre-upgrade media, playlists and item tables; exactly six business tables remain.
+- [x] Final restart `2026-09-06T14:24:25.129606880Z`: Docker healthy; DLNA, AirPlay and MiPlay each
+  `1/1`; zero active/playing sessions; SQLite integrity and foreign keys pass. Actual renderer
+  stopped, volume 0, unchanged. Post-restart domain/MCP/static/media/privacy checks passed again.
+- An initial restart harness prematurely asserted protocol readiness on aggregate healthy and
+  automatically rolled back. It was corrected to await all three ready counters before assertion;
+  the same immutable image then passed redeployment and restart. No runtime code or standard was
+  changed. Detailed incident evidence: `docs/testing/2026-09-06-header-dialog-release.md`.
+- No new audible listening or two-physical-speaker test is claimed. Historical device results follow.
 
 ## Accepted server-playlists chain (2026-09-05)
 
