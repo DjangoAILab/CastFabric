@@ -1,6 +1,6 @@
 # CastFabric current state and session handoff
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
 
 This is the canonical starting point for a new development session. Read it together with
 `AGENTS.md` before using older plans or prototypes: those files preserve design history and may
@@ -116,6 +116,20 @@ different physical renderer or a native/low-latency output adapter that bypasses
 live-stream boundary. See `docs/architecture/live-bridge-latency.md`.
 
 ## Remaining work and explicit non-goals
+
+- **Active follow-up (2026-09-06):** The user authorized two populated playlists, a centered create
+  dialog, canonical project SVG branding, an open-source link, refined language/connection controls,
+  then merge/push/release once verified. Both real Home Server playlists are now populated: complete
+  Mandarin Lu Xun *Call to Arms* (16 sections) and Scott Buckley sleep/ambient music (4 tracks).
+  Provenance and readback evidence: `docs/testing/2026-09-06-curated-playlists.md`.
+  The user explicitly accepted the A header/dialog prototype and authorized implementation.
+  Local implementation and validation are in progress; no release/deployment changed yet. Active research:
+  `docs/design/research/2026-09-06-header-dialog-study.md`; prototype:
+  `docs/prototypes/castfabric-header-dialog-review-2026-09-06.html`.
+  The candidate fixes MP3 duration extraction and unknown totals, with startup backfill limited to
+  missing duration on existing managed files. Preserve the imported resource IDs and user metadata.
+  Deployment preflight currently sees actual speaker playback (volume 25); do not interrupt it
+  without user confirmation. Do not infer playback success from the earlier silent content import.
 
 - The server-playlist implementation and authorized single-speaker chain acceptance are complete.
   Audible listening and simultaneous progress on two physical speakers remain unverified; only one

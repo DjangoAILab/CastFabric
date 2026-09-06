@@ -64,6 +64,28 @@ def test_console_has_language_persistence_and_mobile_overflow_rules():
     assert "prefers-reduced-motion:reduce" in HTML
 
 
+def test_approved_header_reuses_canonical_mark_and_preserves_labeled_utilities():
+    assert (STATIC / 'castfabric-mark.svg').read_bytes() == (
+        STATIC.parents[2] / 'docs/assets/castfabric-mark.svg'
+    ).read_bytes()
+    assert 'href="https://github.com/DjangoAILab/CastFabric"' in HTML
+    assert 'id="languageMenu"' in HTML
+    assert 'id="currentLanguage"' in HTML
+    assert "getElementById('languageButton').textContent=" not in HTML
+    assert 'data-language="zh"' in HTML and 'data-language="en"' in HTML
+    assert 'header-tool' in HTML and 'github-mark.svg' in HTML
+
+
+def test_content_dialog_centering_does_not_change_drawer_layout():
+    assert '#contentModal.open' in CSS
+    assert 'justify-content:center' in CSS
+    assert '#contentModal .content-dialog-body{min-height:0' in CSS
+    assert 'data-content-form' in JS
+    assert 'data-modal-error' in JS
+    assert '#contentModal .primary-button[data-content-modal-action]' in JS
+    assert 'No enabled speakers' in JS
+
+
 def test_ai_access_is_bilingual_and_uses_one_origin_mcp_setup():
     assert 'data-page-target="ai"' in HTML
     assert 'id="page-ai"' in HTML

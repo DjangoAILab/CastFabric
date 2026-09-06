@@ -77,8 +77,9 @@ class PlaylistService:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "item_count": len(items),
-            "total_duration_seconds": sum(
-                item["duration_seconds"] or 0 for item in items
+            "total_duration_seconds": (
+                None if any(item["duration_seconds"] is None for item in items)
+                else sum(item["duration_seconds"] for item in items)
             ),
             "items": items,
         }

@@ -73,6 +73,20 @@ def test_revision_conflict_never_changes_definition(tmp_path):
         repository.close()
 
 
+def test_unknown_item_duration_does_not_masquerade_as_zero_total(tmp_path):
+    repository, _assets, service = _services(tmp_path)
+    try:
+        assert service.create_playlist('Duration')['total_duration_seconds'] == 0
+        service.add_item('playlist', 'asset-one', expected_revision=1)
+        assert service.get_playlist('playlist')['total_duration_seconds'] is None
+        repository.fill_media_duration('asset-one', 42.5)
+        assert service.get_playlist('playlist')['total_duration_seconds'] == 42.5
+        service.add_item('playlist', 'asset-two', expected_revision=2)
+        assert service.get_playlist('playlist')['total_duration_seconds'] is None
+    finally:
+        repository.close()
+
+
 @pytest.mark.asyncio
 async def test_only_current_item_mutations_raise_one_structured_active_conflict(tmp_path):
     repository, _assets, service = _services(tmp_path)

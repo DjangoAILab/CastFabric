@@ -336,6 +336,27 @@ class ContentRepository:
         ).fetchall()
         return {"items": [dict(row) for row in rows], "total": total}
 
+    def media_missing_durations(self, *, after_id: str = "") -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT id, source_value FROM media_assets WHERE id > ? "
+                "AND source_kind = 'managed_file' AND status = 'available' "
+                "AND duration_seconds IS NULL ORDER BY id LIMIT 200", (after_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def fill_media_duration(self, asset_id: str, duration: float) -> int:
+        import math
+
+        if not math.isfinite(duration) or duration <= 0:
+            return 0
+        with self.transaction() as connection:
+            return connection.execute(
+                "UPDATE media_assets SET duration_seconds = ? WHERE id = ? "
+                "AND duration_seconds IS NULL AND status = 'available'",
+                (duration, asset_id),
+            ).rowcount
+
     def media_asset_references(self, asset_id: str) -> dict[str, int]:
         row = self._connection.execute(
             "SELECT "

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">CastFabric</title>
+  <desc id="desc">A warm signal line woven through a circular local audio fabric.</desc>
+  <rect width="128" height="128" rx="28" fill="#f6eee4"/>
+  <circle cx="64" cy="64" r="44" fill="#fffaf4" stroke="#252824" stroke-width="3"/>
+  <path d="M28 73c14 0 18-17 31-17s17 17 30 17c5 0 9-2 13-6" fill="none" stroke="#ff654f" stroke-width="5" stroke-linecap="round"/>
+  <path d="M28 58h20M80 58h20" fill="none" stroke="#cb7a18" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+  <circle cx="28" cy="73" r="4" fill="#ff654f"/>
+  <circle cx="102" cy="67" r="4" fill="#ff654f"/>
+</svg>

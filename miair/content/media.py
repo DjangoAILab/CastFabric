@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import secrets
 import time
 import wave
@@ -279,14 +280,55 @@ class MediaAssetService:
         return None
 
     @staticmethod
-    def _duration(path: Path, format_name: str) -> float | None:
-        if format_name != "wav":
+    def _duration(path: Path, format_name: str | None) -> float | None:
+        if format_name not in MediaAssetService._CONTENT_TYPES:
             return None
+        if format_name == "wav":
+            try:
+                with wave.open(str(path), "rb") as audio:
+                    return audio.getnframes() / float(audio.getframerate())
+            except (wave.Error, EOFError, OSError, ZeroDivisionError):
+                return None
+        import av
+
         try:
-            with wave.open(str(path), "rb") as audio:
-                return audio.getnframes() / float(audio.getframerate())
-        except (wave.Error, OSError, ZeroDivisionError):
+            # A file object plus a known demuxer prevents URL/playlist protocol probing.
+            demuxer = {"m4a": "mov", "wma": "asf"}.get(format_name, format_name)
+            with path.open("rb") as source, av.open(source, format=demuxer) as audio:
+                stream = next(iter(audio.streams.audio), None)
+                if stream is None:
+                    return None
+                if stream.duration is not None and stream.time_base is not None:
+                    duration = float(stream.duration * stream.time_base)
+                elif audio.duration is not None:
+                    duration = audio.duration / float(av.time_base)
+                else:
+                    return None
+                return duration if math.isfinite(duration) and duration > 0 else None
+        except (av.error.FFmpegError, OSError, ValueError, OverflowError):
             return None
+
+    def backfill_durations(self) -> int:
+        """Repair old local uploads, without altering identities or user metadata."""
+        updated = 0
+        cursor = ""
+        while rows := self.repository.media_missing_durations(after_id=cursor):
+            for row in rows:
+                cursor = row["id"]
+                path = (self.directory / row["source_value"]).resolve()
+                if not path.is_relative_to(self.blob_directory.resolve()):
+                    continue
+                try:
+                    if path.stat().st_size > self.max_bytes:
+                        continue
+                    with path.open("rb") as source:
+                        format_name = self._detect_format(source.read(32))
+                    duration = self._duration(path, format_name)
+                except OSError:
+                    continue
+                if duration is not None:
+                    updated += self.repository.fill_media_duration(row["id"], duration)
+        return updated
 
     async def accept_upload(self, upload_id: str, chunks: AsyncIterable[bytes]) -> dict[str, Any]:
         self._expire_uploads()

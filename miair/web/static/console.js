@@ -65,6 +65,8 @@
     playlists: ['播放列表', 'Playlists'], assets: ['音频资源', 'Audio resources'], history: ['播放记录', 'Playback record'],
     historyNote: ['这里只记录已经发生的播放，不提供“继续播放”。需要续播时，请回到对应播放列表选择明确的位置。', 'This is a factual playback record, not a resume queue. To resume, return to the playlist and choose an explicit position.'],
     newPlaylist: ['新建播放列表', 'New playlist'], upload: ['上传', 'Upload'], addUrl: ['添加 URL', 'Add URL'],
+    allSources: ['全部来源', 'All sources'], uploadedFile: ['上传文件', 'Uploaded file'], externalUrl: ['外部 URL', 'External URL'],
+    retry: ['重试', 'Retry'],
   };
   const ct = key => contentCopy[key]?.[language === 'zh' ? 0 : 1] || key;
   const playIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6Z"/></svg>';
@@ -178,15 +180,15 @@
   }
 
   function formHtml(fields) {
-    return `<form class="content-form" data-content-form>${fields}</form>`;
+    return `<form id="contentForm" class="content-form" data-content-form novalidate>${fields}</form>`;
   }
 
   function field(label, name, value = '', type = 'text') {
-    return `<label>${esc(label)}<input type="${type}" name="${name}" value="${esc(value)}"></label>`;
+    return `<label>${esc(label)}<input type="${type}" name="${name}" value="${esc(value)}" ${name === 'name' ? 'required maxlength="200" aria-describedby="playlistNameError"' : ''}>${name === 'name' ? '<span id="playlistNameError" class="field-error" hidden></span>' : ''}</label>`;
   }
 
   function dialogButtons(primary, action, extra = '') {
-    return `${extra}<button class="secondary-button" data-content-cancel>${language === 'zh' ? '取消' : 'Cancel'}</button><button class="primary-button" data-content-modal-action="${action}">${esc(primary)}</button>`;
+    return `${extra}<button class="secondary-button" data-content-cancel>${language === 'zh' ? '取消' : 'Cancel'}</button><button class="primary-button" type="submit" form="contentForm" data-content-modal-action="${action}">${esc(primary)}</button>`;
   }
 
   function openPlaylistForm(playlist = null) {
@@ -194,8 +196,8 @@
     modal(
       playlist ? (language === 'zh' ? '编辑播放列表' : 'Edit playlist') : ct('newPlaylist'),
       language === 'zh' ? '名称与默认播放方式会用于下一次启动。' : 'Name and playback defaults apply to the next run.',
-      formHtml(`${field(language === 'zh' ? '名称' : 'Name', 'name', playlist?.name || '')}<label>${language === 'zh' ? '说明' : 'Description'}<textarea name="description">${esc(playlist?.description || '')}</textarea></label><label>${language === 'zh' ? '默认顺序' : 'Default order'}<select name="default_order"><option value="sequential" ${playlist?.default_order !== 'random' ? 'selected' : ''}>${language === 'zh' ? '顺序播放' : 'Sequential'}</option><option value="random" ${playlist?.default_order === 'random' ? 'selected' : ''}>${language === 'zh' ? '随机播放' : 'Random'}</option></select></label><label>${language === 'zh' ? '播放结束' : 'At the end'}<select name="default_repeat"><option value="none" ${playlist?.default_repeat !== 'all' ? 'selected' : ''}>${language === 'zh' ? '停止' : 'Stop'}</option><option value="all" ${playlist?.default_repeat === 'all' ? 'selected' : ''}>${language === 'zh' ? '列表循环' : 'Repeat all'}</option></select></label>`),
-      dialogButtons(language === 'zh' ? '保存' : 'Save', 'save-playlist'),
+      formHtml(`${field(language === 'zh' ? '名称' : 'Name', 'name', playlist?.name || '')}<label>${language === 'zh' ? '说明（可选）' : 'Description (optional)'}<textarea name="description">${esc(playlist?.description || '')}</textarea></label><div class="content-form-pair"><label>${language === 'zh' ? '默认顺序' : 'Default order'}<select name="default_order"><option value="sequential" ${playlist?.default_order !== 'random' ? 'selected' : ''}>${language === 'zh' ? '顺序播放' : 'Sequential'}</option><option value="random" ${playlist?.default_order === 'random' ? 'selected' : ''}>${language === 'zh' ? '随机播放' : 'Random'}</option></select></label><label>${language === 'zh' ? '播放结束' : 'At the end'}<select name="default_repeat"><option value="none" ${playlist?.default_repeat !== 'all' ? 'selected' : ''}>${language === 'zh' ? '停止' : 'Stop'}</option><option value="all" ${playlist?.default_repeat === 'all' ? 'selected' : ''}>${language === 'zh' ? '列表循环' : 'Repeat all'}</option></select></label></div>`),
+      dialogButtons(playlist ? (language === 'zh' ? '保存更改' : 'Save changes') : (language === 'zh' ? '创建播放列表' : 'Create playlist'), 'save-playlist'),
     );
   }
 
@@ -231,6 +233,12 @@
   function openOutputPicker(intent) {
     const targets = state.targets.filter(item => item.enabled);
     contentIntent = {...intent, targetId: targets[0]?.id || null};
+    if (!targets.length) {
+      modal(language === 'zh' ? '还没有可用的音响' : 'No enabled speakers',
+        language === 'zh' ? '请先在“音响”页面添加并启用一台音响。内容已保存，不会开始播放。' : 'Add and enable a speaker on the Speakers page first. Your content is saved; playback has not started.',
+        '', `<button class="secondary-button" data-content-cancel>${language === 'zh' ? '关闭' : 'Close'}</button>`);
+      return;
+    }
     modal(language === 'zh' ? '播放到哪台音响？' : 'Choose a speaker', language === 'zh' ? '开始后由 CastFabric 服务端继续播放。' : 'CastFabric continues playback on the server.', `<div class="output-options">${targets.map((target, index) => `<button class="choice-row ${index === 0 ? 'selected' : ''}" data-picker-target="${esc(target.id)}"><i></i><span><strong>${esc(target.name)}</strong><span>${esc(target.online === false ? (language === 'zh' ? '本次扫描离线' : 'Offline in latest scan') : (language === 'zh' ? '已启用' : 'Enabled'))}</span></span><span>${target.online === false ? (language === 'zh' ? '离线' : 'Offline') : (language === 'zh' ? '就绪' : 'Ready')}</span></button>`).join('')}</div>`, dialogButtons(language === 'zh' ? '播放' : 'Play', 'confirm-play'));
   }
 
@@ -709,6 +717,10 @@
   }
 
   document.addEventListener('input', event => {
+    if (event.target.matches('#contentModal [name="name"]')) {
+      event.target.removeAttribute('aria-invalid');
+      document.getElementById('playlistNameError').hidden = true;
+    }
     if (event.target.matches('[data-playlist-search]')) renderContent();
     if (event.target.matches('[data-asset-search]')) renderAssets();
     if (event.target.matches('[data-picker-search]')) {
@@ -774,6 +786,14 @@
         const operation = modalAction.dataset.contentModalAction;
         modalAction.disabled = true;
         if (operation === 'save-playlist') {
+          if (!formValue('name').trim()) {
+            const input = document.querySelector('#contentModal [name="name"]');
+            const error = document.getElementById('playlistNameError');
+            error.textContent = language === 'zh' ? '请填写播放列表名称。' : 'Enter a playlist name.';
+            error.hidden = false; input.setAttribute('aria-invalid', 'true'); input.focus();
+            modalAction.disabled = false;
+            return;
+          }
           const payload = {name: formValue('name'), description: formValue('description'), default_order: formValue('default_order'), default_repeat: formValue('default_repeat')};
           if (contentIntent.playlist) {
             payload.expected_revision = contentIntent.playlist.revision;
@@ -821,7 +841,11 @@
       }
     } catch (error) {
       const body = document.querySelector('[data-content-modal-body]');
-      if (body && document.getElementById('contentModal').classList.contains('open')) body.insertAdjacentHTML('afterbegin', `<div class="dialog-error">${esc(error.payload?.error?.details?.reason || error.message || tr('actionFailed'))}</div>`);
+      if (body && document.getElementById('contentModal').classList.contains('open')) {
+        body.querySelector('[data-modal-error]')?.remove();
+        body.insertAdjacentHTML('afterbegin', `<div class="dialog-error" role="alert" data-modal-error>${language === 'zh' ? '操作未完成，填写内容已保留，请检查后重试。' : 'Could not complete the action. Your entries are preserved; please check and retry.'} <span>${esc(error.payload?.error?.details?.reason || error.message || '')}</span></div>`);
+        body.scrollTop = 0;
+      }
       else toast('actionFailed');
       if (modalAction) modalAction.disabled = false;
     }
@@ -882,8 +906,11 @@
   renderAI();
   translate();
   localStorage.getItem('castfabric.language') === 'en' && applyLanguage('en');
-  document.getElementById('languageButton').addEventListener('click', () => localStorage.setItem('castfabric.language', language));
-  document.querySelector('[data-field="system.language"]').addEventListener('change', () => localStorage.setItem('castfabric.language', language));
+  document.addEventListener('submit', event => {
+    if (!event.target.matches('[data-content-form]')) return;
+    event.preventDefault();
+    document.querySelector('#contentModal .primary-button[data-content-modal-action]')?.click();
+  });
   new MutationObserver(() => renderAll()).observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
 
   loadAll();

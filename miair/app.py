@@ -298,6 +298,11 @@ class CastFabric:
         await web_site.start()
         log.info(f"Web 管理界面: http://{self.config.hostname}:{self.config.web_port}")
 
+        # Metadata repair only: existing uploads keep their IDs, content and history.
+        repaired = await asyncio.to_thread(self.media_assets.backfill_durations)
+        if repaired:
+            log.info("Updated duration metadata for %d managed audio assets", repaired)
+
         # 2. 已选择过设备就可从本地缓存发布局域网投送入口；小米云
         # 认证只决定播放控制是否可用，不再决定设备能否被发现。
         if self.config.get_enabled_targets():

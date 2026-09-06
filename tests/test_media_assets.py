@@ -186,3 +186,68 @@ def test_delete_refuses_live_references_then_keeps_a_tombstone(tmp_path):
         assert unavailable.value.code == "UNAVAILABLE"
     finally:
         repository.close()
+
+
+def _mp3_bytes():
+    import av
+
+    output = io.BytesIO()
+    with av.open(output, 'w', format='mp3') as container:
+        stream = container.add_stream('libmp3lame', rate=44100)
+        stream.layout = 'mono'
+        frame = av.AudioFrame(format='s16p', layout='mono', samples=44100)
+        frame.sample_rate = 44100
+        for plane in frame.planes:
+            plane.update(bytes(plane.buffer_size))
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode(None):
+            container.mux(packet)
+    return output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_mp3_upload_extracts_duration_without_filename_extension(tmp_path):
+    repository, service = _service(tmp_path)
+    try:
+        payload = _mp3_bytes()
+        ticket = service.begin_upload('recording.mp3', 'audio/mpeg', len(payload))
+        asset = (await service.accept_upload(ticket['upload_id'], _chunks(payload)))['asset']
+        assert asset['duration_seconds'] == pytest.approx(1, abs=0.15)
+    finally:
+        repository.close()
+
+
+def test_duration_backfill_is_local_idempotent_and_preserves_metadata(tmp_path):
+    repository, service = _service(tmp_path)
+    try:
+        path = service.blob_directory / 'old-mp3'
+        path.write_bytes(_mp3_bytes())
+        original = repository.create_media_asset(dict(
+            id='old', source_kind='managed_file', display_name='Original title',
+            source_value='blobs/old-mp3', content_type='audio/mpeg', description='Credit',
+        ))
+        service.create_external_url('https://example.invalid/not-fetched.mp3', display_name='URL')
+        missing = repository.create_media_asset(dict(
+            id='missing', source_kind='managed_file', display_name='Missing', source_value='blobs/missing',
+        ))
+        assert service.backfill_durations() == 1
+        updated = repository.get_media_asset('old')
+        assert updated['duration_seconds'] == pytest.approx(1, abs=0.15)
+        assert {k: v for k, v in updated.items() if k != 'duration_seconds'} == {
+            k: v for k, v in original.items() if k != 'duration_seconds'
+        }
+        assert repository.get_media_asset('missing') == missing
+        assert service.backfill_durations() == 0
+        assert repository.business_tables() == {
+            'media_assets', 'playlists', 'playlist_items', 'playback_runs', 'media_sessions', 'activity_events'
+        }
+    finally:
+        repository.close()
+
+
+def test_duration_probe_leaves_invalid_audio_unknown(tmp_path):
+    path = tmp_path / 'invalid'
+    path.write_bytes(b'ID3invalid')
+    assert MediaAssetService._duration(path, 'mp3') is None
+    assert MediaAssetService._duration(path, 'unsupported') is None
