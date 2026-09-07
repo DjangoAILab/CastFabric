@@ -26,6 +26,8 @@ class CastFabricLiveAudioSink:
         output_pull_timeout: float = 5.0,
         lifecycle_callback: Callable[[str, dict], Awaitable[object] | object]
         | None = None,
+        output_owner: Callable[[], Awaitable[bool] | bool] | None = None,
+        operation_lock: Callable[[], object] | None = None,
     ):
         self.hostname = hostname
         self.controller = controller
@@ -35,6 +37,8 @@ class CastFabricLiveAudioSink:
         self.content_type = content_type
         self.output_pull_timeout = max(0.05, float(output_pull_timeout))
         self.lifecycle_callback = lifecycle_callback
+        self.output_owner = output_owner
+        self.operation_lock = operation_lock
         self.stream_server: AudioStreamServer | None = None
         self._play_started = False
         self._pull_confirmed = False
@@ -42,6 +46,12 @@ class CastFabricLiveAudioSink:
         self._pcm_bytes = 0
         self._started_at: float | None = None
         self._first_pcm_at: float | None = None
+        self._route_lock = asyncio.Lock()
+
+    def _physical_command_lock(self):
+        if self.operation_lock is not None:
+            return self.operation_lock()
+        return self._route_lock
 
     async def _emit_lifecycle(self, event: str, details: dict | None = None) -> None:
         if self.lifecycle_callback is None:
@@ -55,6 +65,31 @@ class CastFabricLiveAudioSink:
         except Exception as exc:
             # The output stream is the product path; diagnostics are best-effort.
             log.debug("MiPlay 输出生命周期回调失败 (%s): %s", event, type(exc).__name__)
+
+    async def _owns_output(self) -> bool:
+        """Return whether this sink may still mutate the physical renderer."""
+        if self.output_owner is None:
+            return True
+        try:
+            result = self.output_owner()
+            if inspect.isawaitable(result):
+                result = await result
+            return bool(result)
+        except asyncio.CancelledError:
+            return False
+        except Exception as exc:
+            # Ownership cannot be proven, so a stale cleanup must fail closed.
+            log.warning("无法确认实时流输出所有权，跳过音箱控制: %s", type(exc).__name__)
+            return False
+
+    async def _stop_output_if_owned(self) -> None:
+        async with self._physical_command_lock():
+            if not await self._owns_output():
+                return
+            try:
+                await self.controller.stop()
+            except Exception as exc:
+                log.debug("停止实时流音箱播放失败: %s", type(exc).__name__)
 
     async def start(
         self, sample_rate: int, channels: int, sample_width: int
@@ -80,9 +115,13 @@ class CastFabricLiveAudioSink:
             server.set_audio_params(sample_rate, channels, sample_width)
             server.start_streaming()
             self._active = True
-            accepted = await self.controller.play_url(
-                server.stream_url, play_type=self.play_type
-            )
+            async with self._physical_command_lock():
+                if not await self._owns_output():
+                    failure_reason = "OUTPUT_OWNERSHIP_LOST"
+                    raise RuntimeError("live audio session no longer owns the output")
+                accepted = await self.controller.play_url(
+                    server.stream_url, play_type=self.play_type
+                )
             if not accepted:
                 failure_reason = "OUTPUT_PLAY_URL_REJECTED"
                 raise RuntimeError("Xiaomi speaker rejected the MiPlay live URL")
@@ -93,6 +132,9 @@ class CastFabricLiveAudioSink:
                     "physical renderer accepted playback but did not pull "
                     "the MiPlay live URL"
                 )
+            if not await self._owns_output():
+                failure_reason = "OUTPUT_OWNERSHIP_LOST"
+                raise RuntimeError("live audio session lost output ownership")
             self._pull_confirmed = True
             await self._emit_lifecycle(
                 "output_started",
@@ -116,10 +158,7 @@ class CastFabricLiveAudioSink:
             )
             self._active = False
             if self._play_started:
-                try:
-                    await self.controller.stop()
-                except Exception as exc:
-                    log.debug("回滚 MiPlay 音箱播放失败: %s", type(exc).__name__)
+                await self._stop_output_if_owned()
                 self._play_started = False
             server.stop_streaming()
             await server.stop()
@@ -155,10 +194,7 @@ class CastFabricLiveAudioSink:
         if self._play_started:
             self._play_started = False
             if stop_output:
-                try:
-                    await self.controller.stop()
-                except Exception as exc:
-                    log.debug("停止 MiPlay 音箱播放失败: %s", exc)
+                await self._stop_output_if_owned()
         self._pull_confirmed = False
         await self._emit_lifecycle("output_stopped")
 

@@ -74,6 +74,8 @@ class CastFabric:
             repository=self.content_repository,
         )
         self._miplay_session_ids: dict[str, str] = {}
+        self._airplay_session_ids: dict[str, str] = {}
+        self._dlna_session_ids: dict[str, str] = {}
         self.discovered_targets = {}
         self._auth_retry_task: asyncio.Task | None = None
         self._target_discovery_task: asyncio.Task | None = None
@@ -86,6 +88,7 @@ class CastFabric:
         self.playback_service = PlaybackService(
             self.suite_registry,
             self.session_coordinator,
+            before_session_begin=self._demote_current_ingress,
         )
         self.playlists = PlaylistService(self.content_repository)
         self.playlist_runner = PlaylistRunner(
@@ -417,12 +420,19 @@ class CastFabric:
 
         except Exception as e:
             log.error(f"启动 DLNA 服务失败: {e}")
-            # 确保 dlna_running 为 False
-            self.dlna_running = False
-            # 清空渲染器和控制器，避免显示旧设备
-            self.renderers.clear()
-            self._did_to_udn.clear()
-            self.suite_registry.clear()
+            # A failed shared-server start may already have bound sockets or
+            # advertised receivers. Roll every partial resource back before a
+            # retry; clearing Python references alone leaks those resources.
+            if self.airplay_manager is not None:
+                try:
+                    await self.airplay_manager.stop()
+                except Exception as cleanup_exc:
+                    log.warning(
+                        "清理部分启动的 AirPlay 服务失败: %s",
+                        type(cleanup_exc).__name__,
+                    )
+                self.airplay_manager = None
+            await self._stop_dlna_services()
             if hasattr(self, 'speaker_manager'):
                 self.speaker_manager.controllers.clear()
             self._schedule_auth_retry()
@@ -434,7 +444,7 @@ class CastFabric:
                 log.warning("没有可用的音箱，无法启动 AirPlay 服务")
                 return
 
-            self.airplay_manager = AirPlayManager(self.config.hostname, config=self.config)
+            self.airplay_manager = self._new_airplay_manager()
             await self.airplay_manager.start_for_speakers(self.speaker_manager.controllers)
             for did, controller in self.speaker_manager.controllers.items():
                 wrapper = self.airplay_manager.speaker_airplays.get(did)
@@ -475,6 +485,18 @@ class CastFabric:
             suite.controller,
             self.config.default_volume,
             config=self.config,
+            lifecycle_callback=lambda event, details: self._handle_dlna_lifecycle(
+                suite.target.id, event, details
+            ),
+            output_owner=lambda session_id: (
+                session_id is not None
+                and session_id == getattr(
+                    self.session_coordinator.current(suite.target.id), "id", None
+                )
+            ),
+            operation_lock=lambda: self.playback_service.operation_lock(
+                suite.target.id
+            ),
         )
         try:
             self.renderers[renderer.udn] = renderer
@@ -515,7 +537,7 @@ class CastFabric:
             if self.ssdp_server:
                 await self.ssdp_server.announce_renderer(renderer.udn)
         if self.airplay_manager is None:
-            self.airplay_manager = AirPlayManager(self.config.hostname, config=self.config)
+            self.airplay_manager = self._new_airplay_manager()
         try:
             wrapper = await self.airplay_manager.start_for_speaker(
                 suite.controller_id,
@@ -542,6 +564,8 @@ class CastFabric:
             await self._start_miplay_for_target(suite, port)
 
     async def _stop_receiver_suite(self, suite: ReceiverSuite) -> None:
+        await self.playlist_runner.preempt_target(suite.target.id)
+        await self.pcm_streams.stop_target(suite.target.id)
         miplay = self.miplay_receivers.pop(suite.target.id, None)
         if miplay is not None:
             await miplay.stop()
@@ -578,6 +602,52 @@ class CastFabric:
             IngressState.STOPPED,
             handle=None,
             port=self.config.dlna_port,
+        )
+        # Disabling an output is a hard lifecycle boundary. No ingress remains
+        # able to create a replacement session after this point, so finish any
+        # standalone URL/DLNA session and leave the renderer physically idle.
+        async with self.playback_service.operation_lock(suite.target.id):
+            try:
+                await suite.controller.stop()
+            except Exception as exc:
+                log.warning(
+                    "停用输出时停止物理音箱失败: target=%s error=%s",
+                    suite.target.id,
+                    type(exc).__name__,
+                )
+            current = self.session_coordinator.current(suite.target.id)
+            if current is not None:
+                await self.session_coordinator.end(current.id, reason="target_disabled")
+            suite.current_session_id = None
+
+    def _new_airplay_manager(self) -> AirPlayManager:
+        return AirPlayManager(
+            self.config.hostname,
+            config=self.config,
+            lifecycle_callback=self._handle_airplay_lifecycle,
+            output_owner=lambda target_id, session_id: (
+                session_id is not None
+                and session_id == getattr(
+                    self.session_coordinator.current(target_id), "id", None
+                )
+            ),
+            operation_lock=self.playback_service.operation_lock,
+        )
+
+    async def _demote_current_ingress(self, target_id: str) -> None:
+        """Project preemption into the old receiver's ingress read model."""
+        suite = self.suite_registry.get(target_id)
+        current = self.session_coordinator.current(target_id)
+        if suite is None or current is None or current.protocol is IngressProtocol.MCP:
+            return
+        runtime = suite.get_ingress(current.protocol)
+        if runtime is None:
+            return
+        suite.set_ingress(
+            current.protocol,
+            IngressState.READY if suite.target.enabled else IngressState.STOPPED,
+            handle=runtime.handle,
+            port=runtime.port,
         )
 
     async def set_target_enabled(
@@ -698,8 +768,16 @@ class CastFabric:
                     event,
                     details,
                 ),
+                output_owner=lambda: (
+                    self._miplay_session_ids.get(target_id) is not None
+                    and self._miplay_session_ids.get(target_id)
+                    == getattr(self.session_coordinator.current(target_id), "id", None)
+                ),
+                operation_lock=lambda: self.playback_service.operation_lock(target_id),
             ),
-            volume_setter=controller.set_volume,
+            volume_setter=lambda volume: self._set_miplay_volume(
+                target_id, controller, volume
+            ),
             identity=identity,
             advertise_address=self.config.hostname,
             lifecycle_callback=lambda event, details: self._handle_miplay_lifecycle(
@@ -734,7 +812,14 @@ class CastFabric:
                 type(exc).__name__,
                 error_code,
             )
-            await receiver.stop()
+            try:
+                await receiver.stop()
+            except Exception as cleanup_exc:
+                log.warning(
+                    "清理启动失败的 MiPlay 接收器失败: target=%s error=%s",
+                    target_id,
+                    type(cleanup_exc).__name__,
+                )
             self.suite_registry.set_ingress(
                 target_id,
                 IngressProtocol.MIPLAY,
@@ -760,6 +845,15 @@ class CastFabric:
         )
         return receiver
 
+    async def _set_miplay_volume(self, target_id: str, controller, volume: int):
+        async with self.playback_service.operation_lock(target_id):
+            session_id = self._miplay_session_ids.get(target_id)
+            if session_id is None or session_id != getattr(
+                self.session_coordinator.current(target_id), "id", None
+            ):
+                return False
+            return await controller.set_volume(volume)
+
     async def _handle_miplay_output_lifecycle(
         self,
         target_id: str,
@@ -781,7 +875,7 @@ class CastFabric:
         )
         self.activity_journal.append(
             target_id=target_id,
-            session_id=suite.current_session_id,
+            session_id=self._miplay_session_ids.get(target_id),
             protocol=IngressProtocol.MIPLAY,
             type=f"miplay.{event}",
             outcome=outcome,
@@ -831,6 +925,7 @@ class CastFabric:
         if suite is None:
             return
         if event == "session_started":
+            await self._demote_current_ingress(target_id)
             session = await self.session_coordinator.begin(
                 target_id,
                 IngressProtocol.MIPLAY,
@@ -850,12 +945,15 @@ class CastFabric:
             suite.last_activity_at = datetime.now(timezone.utc)
             return
         if event == "session_ended" and session_id:
-            await self.session_coordinator.end(
+            ended_current = await self.session_coordinator.end(
                 session_id,
                 failed=bool(details.get("failed")),
+                error_code=details.get("error_code"),
             )
-            self._miplay_session_ids.pop(target_id, None)
-            suite.current_session_id = None
+            if self._miplay_session_ids.get(target_id) == session_id:
+                self._miplay_session_ids.pop(target_id, None)
+            if ended_current and suite.current_session_id == session_id:
+                suite.current_session_id = None
             suite.last_activity_at = datetime.now(timezone.utc)
             runtime = suite.get_ingress(IngressProtocol.MIPLAY)
             suite.set_ingress(
@@ -865,6 +963,102 @@ class CastFabric:
                 port=runtime.port if runtime else None,
             )
 
+    async def _handle_airplay_lifecycle(
+        self,
+        target_id: str,
+        event: str,
+        details: dict,
+    ):
+        """Apply the same target ownership and stale-callback rules to AirPlay."""
+        suite = self.suite_registry.get(target_id)
+        if suite is None:
+            return None
+        if event == "session_started":
+            await self._demote_current_ingress(target_id)
+            session = await self.session_coordinator.begin(
+                target_id,
+                IngressProtocol.AIRPLAY,
+                media_format=details.get("media_format"),
+            )
+            self._airplay_session_ids[target_id] = session.id
+            suite.current_session_id = session.id
+            suite.last_activity_at = datetime.now(timezone.utc)
+            suite.set_ingress(IngressProtocol.AIRPLAY, IngressState.ACTIVE)
+            return session.id
+        session_id = details.get("session_id") or self._airplay_session_ids.get(target_id)
+        if event == "media_started" and session_id:
+            await self.session_coordinator.transition(session_id, SessionState.PLAYING)
+            suite.last_activity_at = datetime.now(timezone.utc)
+            return session_id
+        if event == "session_ended" and session_id:
+            ended_current = await self.session_coordinator.end(
+                session_id,
+                failed=bool(details.get("failed")),
+                error_code=details.get("error_code"),
+            )
+            if self._airplay_session_ids.get(target_id) == session_id:
+                self._airplay_session_ids.pop(target_id, None)
+            if ended_current and suite.current_session_id == session_id:
+                suite.current_session_id = None
+            suite.last_activity_at = datetime.now(timezone.utc)
+            runtime = suite.get_ingress(IngressProtocol.AIRPLAY)
+            suite.set_ingress(
+                IngressProtocol.AIRPLAY,
+                IngressState.READY if suite.target.enabled else IngressState.STOPPED,
+                handle=runtime.handle if runtime else None,
+                port=runtime.port if runtime else None,
+            )
+            return ended_current
+        return None
+
+    async def _handle_dlna_lifecycle(
+        self,
+        target_id: str,
+        event: str,
+        details: dict,
+    ):
+        """Coordinate DLNA control points with every other target ingress."""
+        suite = self.suite_registry.get(target_id)
+        if suite is None:
+            return None
+        if event == "session_started":
+            await self._demote_current_ingress(target_id)
+            session = await self.session_coordinator.begin(
+                target_id,
+                IngressProtocol.DLNA,
+                media_format=details.get("media_format"),
+            )
+            self._dlna_session_ids[target_id] = session.id
+            suite.current_session_id = session.id
+            suite.last_activity_at = datetime.now(timezone.utc)
+            suite.set_ingress(IngressProtocol.DLNA, IngressState.ACTIVE)
+            return session.id
+        session_id = details.get("session_id") or self._dlna_session_ids.get(target_id)
+        if event == "media_started" and session_id:
+            await self.session_coordinator.transition(session_id, SessionState.PLAYING)
+            suite.last_activity_at = datetime.now(timezone.utc)
+            return session_id
+        if event == "session_ended" and session_id:
+            ended_current = await self.session_coordinator.end(
+                session_id,
+                failed=bool(details.get("failed")),
+                error_code=details.get("error_code"),
+            )
+            if self._dlna_session_ids.get(target_id) == session_id:
+                self._dlna_session_ids.pop(target_id, None)
+            if ended_current and suite.current_session_id == session_id:
+                suite.current_session_id = None
+            suite.last_activity_at = datetime.now(timezone.utc)
+            runtime = suite.get_ingress(IngressProtocol.DLNA)
+            suite.set_ingress(
+                IngressProtocol.DLNA,
+                IngressState.READY if suite.target.enabled else IngressState.STOPPED,
+                handle=runtime.handle if runtime else None,
+                port=runtime.port if runtime else None,
+            )
+            return ended_current
+        return None
+
     async def restart_dlna_services(self):
         """重启 DLNA 服务 (用户通过 Web 修改配置后调用)"""
         if self.airplay_manager:
@@ -873,7 +1067,7 @@ class CastFabric:
         await self.pcm_streams.close_all()
         await self.media_store.cleanup_all()
         # 先停止现有服务
-        await self._stop_dlna_services()
+        await self._stop_dlna_services(stop_outputs=True)
         # 关闭并重新初始化 auth，确保账号切换生效
         await self.auth.close()
         self.auth = AuthManager(self.config)
@@ -882,7 +1076,7 @@ class CastFabric:
         # 启动
         await self._start_dlna_services()
 
-    async def _stop_dlna_services(self):
+    async def _stop_dlna_services(self, *, stop_outputs: bool = False):
         """停止 DLNA 服务"""
         if self.miplay_receivers:
             receivers = list(self.miplay_receivers.values())
@@ -892,12 +1086,41 @@ class CastFabric:
                 return_exceptions=True,
             )
         self._miplay_session_ids.clear()
-        if self.ssdp_server:
-            await self.ssdp_server.stop()
-            self.ssdp_server = None
-        if self.device_server:
-            await self.device_server.stop()
-            self.device_server = None
+        self._airplay_session_ids.clear()
+        self._dlna_session_ids.clear()
+        if stop_outputs:
+            for suite in self.suite_registry.values():
+                async with self.playback_service.operation_lock(suite.target.id):
+                    try:
+                        await suite.controller.stop()
+                    except Exception as exc:
+                        log.warning(
+                            "关闭服务时停止物理音箱失败: target=%s error=%s",
+                            suite.target.id,
+                            type(exc).__name__,
+                        )
+                    current = self.session_coordinator.current(suite.target.id)
+                    if current is not None:
+                        await self.session_coordinator.end(
+                            current.id, reason="interrupted"
+                        )
+                    suite.current_session_id = None
+        shared_servers = [
+            server for server in (self.ssdp_server, self.device_server)
+            if server is not None
+        ]
+        self.ssdp_server = None
+        self.device_server = None
+        if shared_servers:
+            results = await asyncio.gather(
+                *(server.stop() for server in shared_servers),
+                return_exceptions=True,
+            )
+            for result in results:
+                if isinstance(result, Exception):
+                    log.warning(
+                        "停止共享接收服务失败: %s", type(result).__name__
+                    )
         self.renderers.clear()
         self._did_to_udn.clear()
         self.suite_registry.clear()
@@ -931,10 +1154,10 @@ class CastFabric:
         await self.playlist_runner.close()
         await self.pcm_streams.close_all()
         await self.media_store.close()
-        await self._stop_dlna_services()
         if self.airplay_manager:
             await self.airplay_manager.stop()
             self.airplay_manager = None
+        await self._stop_dlna_services(stop_outputs=True)
         if self._web_runner:
             # 添加超时，避免卡住
             try:

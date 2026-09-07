@@ -60,7 +60,7 @@ class MediaSessionCoordinator:
                     outcome=EventOutcome.INFO, summary_key="activity.session_preempted")
             if old:
                 if self.repository is not None:
-                    self.repository.end_session(old.id, "preempted")
+                    self.repository.preempt_session_and_run(old.id)
                 self._session_targets.pop(old.id, None)
                 self._recent.append(
                     replace(old, state=SessionState.STOPPED, ended_at=self.clock())
@@ -143,5 +143,6 @@ class MediaSessionCoordinator:
                     protocol=current.protocol,
                     type="session.failed" if failed else "session.ended",
                     outcome=EventOutcome.FAILED if failed else EventOutcome.SUCCESS,
-                    summary_key="activity.session_failed" if failed else "activity.session_ended")
+                    summary_key="activity.session_failed" if failed else "activity.session_ended",
+                    reason_code=error_code if failed else None)
             return True

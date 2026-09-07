@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import inspect
 import logging
 import time
 
@@ -20,7 +21,9 @@ class SpeakerAirPlay:
     """单个音箱的 AirPlay 接收器包装"""
 
     def __init__(self, hostname: str, controller: SpeakerController,
-                 shared_zeroconf: Zeroconf | None = None, config=None):
+                 shared_zeroconf: Zeroconf | None = None, config=None,
+                 *, target_id: str | None = None, lifecycle_callback=None,
+                 output_owner=None, operation_lock=None):
         self.hostname = hostname
         self.controller = controller
         self.speaker = controller.speaker
@@ -30,6 +33,10 @@ class SpeakerAirPlay:
         )
         self.shared_zeroconf = shared_zeroconf
         self.config = config
+        self.target_id = target_id
+        self.lifecycle_callback = lifecycle_callback
+        self.output_owner = output_owner
+        self.operation_lock = operation_lock
         self.airplay_server: AirPlayServer | None = None
         self._loop: asyncio.AbstractEventLoop | None = None  # 保存事件循环引用
         # AirPlay 状态轮询（打断续播）
@@ -37,6 +44,39 @@ class SpeakerAirPlay:
         self._airplay_active: bool = False  # AirPlay 是否活跃
         self._poll_task: asyncio.Task | None = None  # 状态轮询任务
         self._play_grace_until: float = 0.0  # play 后宽限期
+        self._session_id: str | None = None
+        self._source_token = None
+        self._route_lock = asyncio.Lock()
+
+    def _physical_command_lock(self):
+        if self.operation_lock is not None:
+            return self.operation_lock()
+        return self._route_lock
+
+    async def _emit_lifecycle(self, event: str, details: dict | None = None):
+        if self.lifecycle_callback is None:
+            return None
+        result = self.lifecycle_callback(event, dict(details or {}))
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    async def _owns_output(self, session_id: str | None = None) -> bool:
+        if self.output_owner is None:
+            return True
+        try:
+            result = self.output_owner(session_id or self._session_id)
+            if inspect.isawaitable(result):
+                result = await result
+            return bool(result)
+        except asyncio.CancelledError:
+            return False
+        except Exception as exc:
+            log.warning(
+                "AirPlay 无法确认输出所有权，跳过音箱控制: %s",
+                type(exc).__name__,
+            )
+            return False
 
     async def start(self):
         """启动该音箱的 AirPlay 服务"""
@@ -62,20 +102,14 @@ class SpeakerAirPlay:
 
     async def stop(self):
         """停止该音箱的 AirPlay 服务"""
-        self._airplay_active = False
-        if self._poll_task:
-            self._poll_task.cancel()
-            try:
-                await self._poll_task
-            except asyncio.CancelledError:
-                pass
-            self._poll_task = None
+        if self._airplay_active or self._session_id is not None:
+            await self._stop_speaker()
         if self.airplay_server:
             await self.airplay_server.stop()
             self.airplay_server = None
             log.info(f"音箱 {self.device_name} 的 AirPlay 服务已停止")
 
-    def _on_play_start(self, stream_url: str):
+    def _on_play_start(self, stream_url: str, source_token=None):
         """AirPlay 开始播放 - 直接推送到这个音箱
 
         注意: 这个回调从 RTSP 线程调用，不在 asyncio 事件循环中。
@@ -83,41 +117,76 @@ class SpeakerAirPlay:
         """
         log.info(f"AirPlay 音频推送到 {self.device_name}: {stream_url}")
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._play_on_speaker(stream_url), self._loop)
+            asyncio.run_coroutine_threadsafe(
+                self._play_on_speaker(stream_url, source_token), self._loop
+            )
         else:
             log.warning(f"AirPlay: 事件循环未运行，无法播放到 {self.device_name}")
 
-    async def _play_on_speaker(self, stream_url: str):
+    async def _play_on_speaker(self, stream_url: str, source_token=None):
         """在对应音箱上播放"""
-        try:
-            self._stream_url = stream_url
-            self._airplay_active = True
-            self._play_grace_until = time.time() + 10.0  # 10秒宽限期
-            success = await self.controller.play_url(stream_url)
-            if success:
-                log.info(f"AirPlay 音频已在 {self.device_name} 开始播放: {stream_url}")
-                self._start_poll()
-                if self.config:
-                    default_vol = getattr(self.config, 'default_volume', 0)
-                    follow_dev_vol = getattr(self.config, 'follow_device_volume', False)
-                    if follow_dev_vol:
-                        try:
-                            current_vol = await self.controller.get_volume()
+        async with self._physical_command_lock():
+            session_id = None
+            try:
+                session_id = await self._emit_lifecycle(
+                    "session_started", {"media_format": "AirPlay PCM"}
+                )
+                self._session_id = session_id
+                self._source_token = source_token
+                self._stream_url = stream_url
+                self._airplay_active = True
+                self._play_grace_until = time.time() + 10.0  # 10秒宽限期
+                success = await self.controller.play_url(stream_url)
+                if success:
+                    await self._emit_lifecycle(
+                        "media_started", {"session_id": session_id}
+                    )
+                    log.info(f"AirPlay 音频已在 {self.device_name} 开始播放: {stream_url}")
+                    self._start_poll()
+                    if self.config:
+                        default_vol = getattr(self.config, 'default_volume', 0)
+                        follow_dev_vol = getattr(self.config, 'follow_device_volume', False)
+                        if follow_dev_vol:
+                            try:
+                                current_vol = await self.controller.get_volume()
+                                if self.airplay_server:
+                                    self.airplay_server._last_volume_db = self._vol_pct_to_db(current_vol)
+                                log.info(f"AirPlay 已跟随设备当前音量到 {self.device_name}: {current_vol}%")
+                            except Exception as e:
+                                log.error(f"AirPlay 获取当前音量失败: {e}")
+                        elif default_vol > 0:
+                            await asyncio.sleep(0.5)
+                            if await self._owns_output(session_id):
+                                await self.controller.set_volume(default_vol)
                             if self.airplay_server:
-                                self.airplay_server._last_volume_db = self._vol_pct_to_db(current_vol)
-                            log.info(f"AirPlay 已跟随设备当前音量到 {self.device_name}: {current_vol}%")
-                        except Exception as e:
-                            log.error(f"AirPlay 获取当前音量失败: {e}")
-                    elif default_vol > 0:
-                        await asyncio.sleep(0.5)
-                        await self.controller.set_volume(default_vol)
-                        if self.airplay_server:
-                            self.airplay_server._last_volume_db = self._vol_pct_to_db(default_vol)
-                        log.info(f"AirPlay 已应用默认音量到 {self.device_name}: {default_vol}%")
-            else:
-                log.warning(f"AirPlay 音频在 {self.device_name} 播放失败")
-        except Exception as e:
-            log.error(f"AirPlay 播放到 {self.device_name} 失败: {e}")
+                                self.airplay_server._last_volume_db = self._vol_pct_to_db(default_vol)
+                            log.info(f"AirPlay 已应用默认音量到 {self.device_name}: {default_vol}%")
+                else:
+                    await self._emit_lifecycle(
+                        "session_ended",
+                        {
+                            "session_id": session_id,
+                            "failed": True,
+                            "error_code": "OUTPUT_PLAY_URL_REJECTED",
+                        },
+                    )
+                    self._airplay_active = False
+                    self._stream_url = ""
+                    self._session_id = None
+                    log.warning(f"AirPlay 音频在 {self.device_name} 播放失败")
+            except Exception as e:
+                await self._emit_lifecycle(
+                    "session_ended",
+                    {
+                        "session_id": session_id,
+                        "failed": True,
+                        "error_code": "OUTPUT_PLAY_URL_FAILED",
+                    },
+                )
+                self._airplay_active = False
+                self._stream_url = ""
+                self._session_id = None
+                log.error(f"AirPlay 播放到 {self.device_name} 失败: {e}")
 
     @staticmethod
     def _vol_pct_to_db(volume: int) -> float:
@@ -135,19 +204,26 @@ class SpeakerAirPlay:
             return -28.125
         return (volume - 6) / 94.0 * 28.125 - 28.125
 
-    def _on_play_stop(self):
+    def _on_play_stop(self, source_token=None):
         """AirPlay 停止播放
 
         注意: 这个回调从 RTSP 线程调用，不在 asyncio 事件循环中。
         """
         log.info(f"AirPlay 停止播放到 {self.device_name}")
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._stop_speaker(), self._loop)
+            asyncio.run_coroutine_threadsafe(
+                self._stop_speaker(source_token), self._loop
+            )
         else:
             log.warning(f"AirPlay: 事件循环未运行，无法停止 {self.device_name}")
 
-    async def _stop_speaker(self):
+    async def _stop_speaker(self, source_token=None):
         """停止音箱播放"""
+        if source_token is not None and source_token is not self._source_token:
+            return
+        self._source_token = None
+        session_id = self._session_id
+        self._session_id = None
         self._airplay_active = False
         self._stream_url = ""
         if self._poll_task:
@@ -157,10 +233,15 @@ class SpeakerAirPlay:
             except asyncio.CancelledError:
                 pass
             self._poll_task = None
-        try:
-            await self.controller.stop()
-        except Exception as e:
-            pass
+        async with self._physical_command_lock():
+            if await self._owns_output(session_id):
+                try:
+                    await self.controller.stop()
+                except Exception:
+                    pass
+            await self._emit_lifecycle(
+                "session_ended", {"session_id": session_id, "failed": False}
+            )
 
     def _start_poll(self):
         """启动 AirPlay 状态轮询任务（仅在 auto_resume_on_interrupt 开启时）"""
@@ -217,13 +298,20 @@ class SpeakerAirPlay:
                         break
                     if self.airplay_server and not self.airplay_server.is_playing:
                         break
+                    if not await self._owns_output():
+                        self._airplay_active = False
+                        break
 
                     # 重新播放（使用新 URL 防止音箱缓存旧响应）
                     base_url = self._stream_url.split('?')[0]
                     fresh_url = f"{base_url}?sid={int(time.time())}"
                     log.info(f"[{self.device_name}] AirPlay 自动续播: {fresh_url}")
                     self._play_grace_until = time.time() + 10.0
-                    success = await self.controller.play_url(fresh_url)
+                    async with self._physical_command_lock():
+                        if not await self._owns_output():
+                            self._airplay_active = False
+                            break
+                        success = await self.controller.play_url(fresh_url)
                     if success:
                         log.info(f"[{self.device_name}] AirPlay 续播成功")
                     else:
@@ -236,7 +324,7 @@ class SpeakerAirPlay:
         except Exception as e:
             pass
 
-    def _on_volume_change(self, vol_db: float):
+    def _on_volume_change(self, vol_db: float, source_token=None):
         """处理音量改变
 
         注意: 这个回调从 RTSP 线程调用，不在 asyncio 事件循环中。
@@ -260,15 +348,28 @@ class SpeakerAirPlay:
 
         log.info(f"AirPlay 音量同步到 {self.device_name}: {vol_db} dB -> {volume}%")
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.controller.set_volume(volume), self._loop)
+            asyncio.run_coroutine_threadsafe(
+                self._set_volume(volume, source_token), self._loop
+            )
+
+    async def _set_volume(self, volume: int, source_token=None) -> None:
+        if source_token is not None and source_token is not self._source_token:
+            return
+        async with self._physical_command_lock():
+            if await self._owns_output():
+                await self.controller.set_volume(volume)
 
 
 class AirPlayManager:
     """管理所有音箱的 AirPlay 接收器"""
 
-    def __init__(self, hostname: str, config=None):
+    def __init__(self, hostname: str, config=None, *, lifecycle_callback=None,
+                 output_owner=None, operation_lock=None):
         self.hostname = hostname
         self.config = config
+        self.lifecycle_callback = lifecycle_callback
+        self.output_owner = output_owner
+        self.operation_lock = operation_lock
         self.speaker_airplays: dict[str, SpeakerAirPlay] = {}  # did -> SpeakerAirPlay
         self._shared_zeroconf: Zeroconf | None = None
 
@@ -314,6 +415,26 @@ class AirPlayManager:
             controller,
             self._shared_zeroconf,
             config=self.config,
+            target_id=getattr(controller, "target_id", did),
+            lifecycle_callback=(
+                lambda event, details: self.lifecycle_callback(
+                    getattr(controller, "target_id", did), event, details
+                )
+                if self.lifecycle_callback is not None
+                else None
+            ),
+            output_owner=(
+                lambda session_id: self.output_owner(
+                    getattr(controller, "target_id", did), session_id
+                )
+                if self.output_owner is not None
+                else None
+            ),
+            operation_lock=(
+                lambda: self.operation_lock(getattr(controller, "target_id", did))
+                if self.operation_lock is not None
+                else None
+            ),
         )
         await speaker_airplay.start()
         self.speaker_airplays[did] = speaker_airplay
@@ -331,7 +452,7 @@ class AirPlayManager:
         # 关闭共享的 zeroconf
         if self._shared_zeroconf:
             try:
-                self._shared_zeroconf.close()
+                await asyncio.to_thread(self._shared_zeroconf.close)
                 log.info("共享 Zeroconf 已关闭")
             except Exception as e:
                 log.error(f"关闭 Zeroconf 失败: {e}")

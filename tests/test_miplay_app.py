@@ -56,7 +56,13 @@ def test_app_starts_miplay_for_configured_suite():
             assert sink.http_mode == "content-length"
             assert sink.content_type == "audio/x-wav"
             assert sink.audio_format == "l16"
-            assert kwargs["volume_setter"] is controller.set_volume
+            assert await kwargs["volume_setter"](42) is False
+            controller.set_volume.assert_not_awaited()
+            await app._handle_miplay_lifecycle(
+                target.id, "session_started", {"media_format": "mpegts"}
+            )
+            assert await kwargs["volume_setter"](42) is True
+            controller.set_volume.assert_awaited_once_with(42)
             receiver.start.assert_awaited_once()
 
     asyncio.run(scenario())

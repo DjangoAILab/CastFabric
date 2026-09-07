@@ -1,6 +1,6 @@
 # CastFabric current state and session handoff
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 This is the canonical starting point for a new development session. Read it together with
 `AGENTS.md` before using older plans or prototypes: those files preserve design history and may
@@ -70,6 +70,22 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 10. Stable media assets and server-run playlists use the six-table SQLite model in ADR 0011, which
     supersedes the former no-stable-ID/no-server-playlist parts of ADR 0009 and ADR 0010
     (`docs/adr/0011-*`).
+11. Every physical output mutation is serialized per target and fenced by the current session owner;
+    stale protocol callbacks fail closed (`docs/adr/0012-*`).
+
+## Unreleased local boundary hardening (2026-09-07)
+
+- A multi-device/multi-protocol audit fixed false MiPlay sessions from TCP probes, handshake-slot
+  starvation, stale callback output control, cross-protocol state corruption, AirPlay dual-client
+  ownership, orphaned playlist runs, partial-start cleanup and duplicate MiPlay identity hashes.
+- The audit and remaining real-device gates are recorded in
+  `docs/architecture/2026-09-07-multi-device-protocol-boundary-audit.md`.
+- This work is local and not deployed. The Home Server was inspected read-only and its current
+  playback/configuration were not changed. Do not treat the released alpha.4 image as containing
+  these fixes.
+- Local verification: 245 Python tests, the direct audio Seek script, and offline MiPlay
+  WFD/RTP/MPEG-TS/PCM self-test pass. Xiaomi-phone discovery remains a real-device gate; runtime
+  `ready`, self-scan and the bundled simulator are not evidence of MIUI interoperability.
 
 ## Verification and deployment baseline
 

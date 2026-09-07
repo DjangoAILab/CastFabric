@@ -919,6 +919,30 @@ class ContentRepository:
             ).rowcount
         return bool(changed)
 
+    def preempt_session_and_run(self, session_id: str) -> bool:
+        """Atomically end a session and its active playlist run, if any."""
+        now = self._now()
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT run_id FROM media_sessions WHERE id = ? AND state != 'ended'",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            run_id = row[0]
+            if run_id:
+                connection.execute(
+                    "UPDATE playback_runs SET state = 'ended', end_reason = 'preempted', "
+                    "updated_at = ?, ended_at = ? WHERE id = ? AND state = 'active'",
+                    (now, now, run_id),
+                )
+            connection.execute(
+                "UPDATE media_sessions SET state = 'ended', end_reason = 'preempted', "
+                "updated_at = ?, ended_at = ? WHERE id = ? AND state != 'ended'",
+                (now, now, session_id),
+            )
+        return True
+
     def interrupt_active_playback(self) -> dict[str, int]:
         now = self._now()
         with self.transaction() as connection:

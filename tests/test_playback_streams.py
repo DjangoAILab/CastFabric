@@ -16,6 +16,7 @@ class FakeSink:
         self.write = AsyncMock()
         self.stop = AsyncMock()
         self.lifecycle_callback = None
+        self.output_owner = None
 
 
 def _registry(*, lifecycle_callback=None):
@@ -66,6 +67,7 @@ async def test_fixed_pcm_stream_starts_sink_and_mcp_session():
         "sample_rate": 48000,
         "channels": 2,
     }
+    assert sinks[0].output_owner() is True
 
 
 @pytest.mark.asyncio

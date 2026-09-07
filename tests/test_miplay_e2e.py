@@ -71,3 +71,77 @@ def test_loopback_source_reaches_receiver_pcm_sink():
         "session_ended",
     ]
     assert lifecycle[0][1].get("source_app") is None
+
+
+def test_idle_tcp_probe_does_not_claim_a_media_session():
+    async def scenario():
+        lifecycle = []
+
+        async def on_lifecycle(event, details):
+            lifecycle.append((event, details))
+
+        receiver = MiPlayReceiver(
+            host="127.0.0.1",
+            port=0,
+            sink_factory=RecordingPcmSink,
+            advertise=False,
+            lifecycle_callback=on_lifecycle,
+            handshake_timeout=0.05,
+        )
+        await receiver.start()
+        try:
+            _reader, writer = await asyncio.open_connection(
+                "127.0.0.1", receiver.port
+            )
+            for _ in range(20):
+                if receiver.diagnostics()["control_connections"]:
+                    break
+                await asyncio.sleep(0.005)
+            assert receiver.diagnostics()["control_connections"] == 1
+            assert receiver.diagnostics()["active_session"] is False
+            await asyncio.wait_for(receiver.wait_for_idle(), timeout=1)
+            writer.close()
+            await writer.wait_closed()
+            return lifecycle, receiver.diagnostics()
+        finally:
+            await receiver.stop()
+
+    lifecycle, diagnostics = asyncio.run(scenario())
+
+    assert lifecycle == []
+    assert diagnostics["active_session"] is False
+    assert diagnostics["last_session"]["authenticated"] is False
+    assert diagnostics["last_session"]["error"] == "TimeoutError"
+
+
+def test_idle_tcp_probe_does_not_block_a_valid_miplay_sender():
+    async def scenario():
+        receiver = MiPlayReceiver(
+            host="127.0.0.1",
+            port=0,
+            sink_factory=RecordingPcmSink,
+            advertise=False,
+            handshake_timeout=0.5,
+        )
+        await receiver.start()
+        try:
+            _reader, idle_writer = await asyncio.open_connection(
+                "127.0.0.1", receiver.port
+            )
+            result = await MiPlaySourceSimulator(
+                target_host="127.0.0.1",
+                target_port=receiver.port,
+                duration=0.1,
+            ).run()
+            idle_writer.close()
+            await idle_writer.wait_closed()
+            await asyncio.wait_for(receiver.wait_for_idle(), timeout=2)
+            return result
+        finally:
+            await receiver.stop()
+
+    result = asyncio.run(scenario())
+
+    assert result.control_opened is True
+    assert result.rtsp_ready is True
+    assert result.media_frames > 0

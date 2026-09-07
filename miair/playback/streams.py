@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from dataclasses import dataclass
 from typing import Callable
@@ -47,6 +48,13 @@ class PcmStreamRegistry:
         self.lifecycle_callback = lifecycle_callback
         self.id_factory = id_factory
         self._streams: dict[str, PcmStream] = {}
+        self._fallback_locks: dict[str, asyncio.Lock] = {}
+
+    def _operation_lock(self, target_id: str) -> asyncio.Lock:
+        lock_factory = getattr(self.playback_service, "operation_lock", None)
+        if lock_factory is not None:
+            return lock_factory(target_id)
+        return self._fallback_locks.setdefault(target_id, asyncio.Lock())
 
     async def create(
         self,
@@ -63,50 +71,65 @@ class PcmStreamRegistry:
         ):
             raise PcmStreamError("UNSUPPORTED_PCM_FORMAT")
         normalized = normalize_target_id(target_id)
-        controller = self.playback_service.controller_for(normalized)
-        await self.stop_target(normalized)
-        session = await self.playback_service.session_coordinator.begin(
-            normalized,
-            IngressProtocol.MCP,
-            media_format="PCM s16le 48 kHz · 2 ch",
-        )
-        suite = self.playback_service.suite_registry.get(normalized)
-        suite.current_session_id = session.id
-        sink = self.sink_factory(self.hostname, controller)
-        if self.lifecycle_callback is not None and hasattr(sink, "lifecycle_callback"):
-            sink.lifecycle_callback = (
-                lambda event, details: self.lifecycle_callback(
-                    normalized, event, details
+        async with self._operation_lock(normalized):
+            controller = self.playback_service.controller_for(normalized)
+            await self._stop_target_unlocked(normalized)
+            before_session_begin = getattr(
+                self.playback_service, "before_session_begin", None
+            )
+            if before_session_begin is not None:
+                await before_session_begin(normalized)
+            session = await self.playback_service.session_coordinator.begin(
+                normalized,
+                IngressProtocol.MCP,
+                media_format="PCM s16le 48 kHz · 2 ch",
+            )
+            suite = self.playback_service.suite_registry.get(normalized)
+            suite.current_session_id = session.id
+            sink = self.sink_factory(self.hostname, controller)
+            if self.lifecycle_callback is not None and hasattr(sink, "lifecycle_callback"):
+                sink.lifecycle_callback = (
+                    lambda event, details: self.lifecycle_callback(
+                        normalized, event, details
+                    )
                 )
+            if hasattr(sink, "output_owner"):
+                sink.output_owner = lambda: (
+                    getattr(
+                        self.playback_service.session_coordinator.current(normalized),
+                        "id",
+                        None,
+                    )
+                    == session.id
+                )
+            stream_id = self.id_factory()
+            stream = PcmStream(stream_id, normalized, session.id, sink)
+            self._streams[stream_id] = stream
+            try:
+                await sink.start(self.SAMPLE_RATE, self.CHANNELS, self.SAMPLE_WIDTH)
+            except Exception:
+                self._streams.pop(stream_id, None)
+                await self.playback_service.session_coordinator.end(
+                    session.id, failed=True
+                )
+                if suite.current_session_id == session.id:
+                    suite.current_session_id = None
+                raise
+            await self.playback_service.session_coordinator.transition(
+                session.id, SessionState.PLAYING
             )
-        stream_id = self.id_factory()
-        stream = PcmStream(stream_id, normalized, session.id, sink)
-        self._streams[stream_id] = stream
-        try:
-            await sink.start(self.SAMPLE_RATE, self.CHANNELS, self.SAMPLE_WIDTH)
-        except Exception:
-            self._streams.pop(stream_id, None)
-            await self.playback_service.session_coordinator.end(
-                session.id, failed=True
-            )
-            if suite.current_session_id == session.id:
-                suite.current_session_id = None
-            raise
-        await self.playback_service.session_coordinator.transition(
-            session.id, SessionState.PLAYING
-        )
-        return {
-            "ok": True,
-            "target_id": normalized,
-            "session_id": session.id,
-            "stream_id": stream_id,
-            "stream_path": f"/api/v1/playback/streams/{stream_id}",
-            "format": {
-                "sample_format": self.SAMPLE_FORMAT,
-                "sample_rate": self.SAMPLE_RATE,
-                "channels": self.CHANNELS,
-            },
-        }
+            return {
+                "ok": True,
+                "target_id": normalized,
+                "session_id": session.id,
+                "stream_id": stream_id,
+                "stream_path": f"/api/v1/playback/streams/{stream_id}",
+                "format": {
+                    "sample_format": self.SAMPLE_FORMAT,
+                    "sample_rate": self.SAMPLE_RATE,
+                    "channels": self.CHANNELS,
+                },
+            }
 
     def claim_writer(self, stream_id: str) -> PcmStream:
         stream = self._streams.get(stream_id)
@@ -121,6 +144,21 @@ class PcmStreamRegistry:
         await stream.sink.write(bytes(data))
 
     async def close(
+        self,
+        stream_id: str,
+        *,
+        failed: bool = False,
+        stop_output: bool = True,
+    ) -> None:
+        stream = self._streams.get(stream_id)
+        if stream is None:
+            return
+        async with self._operation_lock(stream.target_id):
+            await self._close_unlocked(
+                stream_id, failed=failed, stop_output=stop_output
+            )
+
+    async def _close_unlocked(
         self,
         stream_id: str,
         *,
@@ -146,13 +184,19 @@ class PcmStreamRegistry:
 
     async def stop_target(self, target_id: str, *, stop_output: bool = True) -> None:
         normalized = normalize_target_id(target_id)
+        async with self._operation_lock(normalized):
+            await self._stop_target_unlocked(normalized, stop_output=stop_output)
+
+    async def _stop_target_unlocked(
+        self, target_id: str, *, stop_output: bool = True
+    ) -> None:
         stream_ids = [
             stream_id
             for stream_id, stream in self._streams.items()
-            if stream.target_id == normalized
+            if stream.target_id == target_id
         ]
         for stream_id in stream_ids:
-            await self.close(stream_id, stop_output=stop_output)
+            await self._close_unlocked(stream_id, stop_output=stop_output)
 
     async def close_all(self) -> None:
         for stream_id in list(self._streams):

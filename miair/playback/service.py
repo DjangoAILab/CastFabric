@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 from typing import Any
 
@@ -27,10 +28,13 @@ def normalize_position_seconds(value: int) -> int:
 
 
 class PlaybackService:
-    def __init__(self, suite_registry, session_coordinator, *, before_play=None):
+    def __init__(self, suite_registry, session_coordinator, *, before_play=None,
+                 before_session_begin=None):
         self.suite_registry = suite_registry
         self.session_coordinator = session_coordinator
         self.before_play = before_play
+        self.before_session_begin = before_session_begin
+        self._operation_locks: dict[str, asyncio.Lock] = {}
 
     def _suite_for(self, target_id: str):
         normalized = normalize_target_id(target_id)
@@ -44,6 +48,11 @@ class PlaybackService:
     def controller_for(self, target_id: str):
         _normalized, suite = self._suite_for(target_id)
         return suite.controller
+
+    def operation_lock(self, target_id: str) -> asyncio.Lock:
+        """Return the single physical-command lane for one output target."""
+        normalized = normalize_target_id(target_id)
+        return self._operation_locks.setdefault(normalized, asyncio.Lock())
 
     async def _command(self, target_id: str, method: str, *args, **kwargs):
         normalized, suite = self._suite_for(target_id)
@@ -69,49 +78,57 @@ class PlaybackService:
     ) -> dict[str, Any]:
         position = normalize_position_seconds(start_position_seconds)
         normalized, suite = self._suite_for(target_id)
-        if preempt and self.before_play is not None:
-            await self.before_play(normalized)
-        session = await self.session_coordinator.begin(
-            normalized,
-            IngressProtocol.MCP,
-            media_format=media_format,
-            session_id=session_id,
-            persist=persist_session,
-            session_context=session_context,
-        )
-        suite.current_session_id = session.id
-        output_started = False
-        try:
-            accepted = await suite.controller.play_url(url, play_type=2)
-            if not accepted:
-                raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized)
-            output_started = True
-            if position and not await suite.controller.seek(position):
-                raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
-        except Exception as exc:
-            if output_started:
-                try:
-                    await suite.controller.stop()
-                except Exception:
-                    pass
-            await self.session_coordinator.end(
-                session.id, failed=True,
-                error_code=getattr(exc, "code", "TARGET_COMMAND_FAILED"),
+        async with self.operation_lock(normalized):
+            # A suite may have been disabled while this operation waited.
+            normalized, suite = self._suite_for(normalized)
+            if preempt and self.before_play is not None:
+                await self.before_play(normalized)
+            if self.before_session_begin is not None:
+                await self.before_session_begin(normalized)
+            session = await self.session_coordinator.begin(
+                normalized,
+                IngressProtocol.MCP,
+                media_format=media_format,
+                session_id=session_id,
+                persist=persist_session,
+                session_context=session_context,
             )
-            suite.current_session_id = None
-            if isinstance(exc, PlaybackServiceError):
-                raise
-            raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
-        await self.session_coordinator.transition(session.id, SessionState.PLAYING)
-        result = {
-            "ok": True,
-            "target_id": normalized,
-            "session_id": session.id,
-            "state": SessionState.PLAYING.value,
-        }
-        if position:
-            result["position_seconds"] = position
-        return result
+            suite.current_session_id = session.id
+            output_started = False
+            try:
+                accepted = await suite.controller.play_url(url, play_type=2)
+                if not accepted:
+                    raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized)
+                output_started = True
+                if position and not await suite.controller.seek(position):
+                    raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
+            except Exception as exc:
+                if output_started:
+                    try:
+                        await suite.controller.stop()
+                    except Exception:
+                        pass
+                await self.session_coordinator.end(
+                    session.id, failed=True,
+                    error_code=getattr(exc, "code", "TARGET_COMMAND_FAILED"),
+                )
+                if suite.current_session_id == session.id:
+                    suite.current_session_id = None
+                if isinstance(exc, PlaybackServiceError):
+                    raise
+                raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
+            await self.session_coordinator.transition(
+                session.id, SessionState.PLAYING
+            )
+            result = {
+                "ok": True,
+                "target_id": normalized,
+                "session_id": session.id,
+                "state": SessionState.PLAYING.value,
+            }
+            if position:
+                result["position_seconds"] = position
+            return result
 
     async def seek(
         self,
@@ -122,61 +139,70 @@ class PlaybackService:
     ) -> dict[str, Any]:
         position = normalize_position_seconds(position_seconds)
         normalized, suite = self._suite_for(target_id)
-        session = self.session_coordinator.current(normalized)
-        if if_session_id is not None and (
-            session is None or session.id != if_session_id
-        ):
-            raise PlaybackServiceError("SESSION_CHANGED", normalized)
-        try:
-            accepted = await suite.controller.seek(position)
-        except Exception as exc:
-            raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
-        if not accepted:
-            raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
-        return {
-            "ok": True,
-            "target_id": normalized,
-            "session_id": session.id if session else None,
-            "position_seconds": position,
-            "state": session.state.value if session else "unknown",
-        }
+        async with self.operation_lock(normalized):
+            session = self.session_coordinator.current(normalized)
+            if if_session_id is not None and (
+                session is None or session.id != if_session_id
+            ):
+                raise PlaybackServiceError("SESSION_CHANGED", normalized)
+            try:
+                accepted = await suite.controller.seek(position)
+            except Exception as exc:
+                raise PlaybackServiceError("TARGET_COMMAND_FAILED", normalized) from exc
+            if not accepted:
+                raise PlaybackServiceError("SEEK_UNSUPPORTED", normalized)
+            return {
+                "ok": True,
+                "target_id": normalized,
+                "session_id": session.id if session else None,
+                "position_seconds": position,
+                "state": session.state.value if session else "unknown",
+            }
 
     async def pause(self, target_id: str) -> dict[str, Any]:
-        normalized, suite = await self._command(target_id, "pause")
-        session = self.session_coordinator.current(normalized)
-        if session is not None and session.protocol is IngressProtocol.MCP:
-            await self.session_coordinator.transition(session.id, SessionState.PAUSED)
-        return {"ok": True, "target_id": normalized, "state": "paused"}
+        normalized, _suite = self._suite_for(target_id)
+        async with self.operation_lock(normalized):
+            normalized, _suite = await self._command(normalized, "pause")
+            session = self.session_coordinator.current(normalized)
+            if session is not None:
+                await self.session_coordinator.transition(session.id, SessionState.PAUSED)
+            return {"ok": True, "target_id": normalized, "state": "paused"}
 
     async def resume(self, target_id: str) -> dict[str, Any]:
-        normalized, _suite = await self._command(target_id, "resume")
-        session = self.session_coordinator.current(normalized)
-        if session is not None and session.protocol is IngressProtocol.MCP:
-            await self.session_coordinator.transition(session.id, SessionState.PLAYING)
-        return {"ok": True, "target_id": normalized, "state": "playing"}
+        normalized, _suite = self._suite_for(target_id)
+        async with self.operation_lock(normalized):
+            normalized, _suite = await self._command(normalized, "resume")
+            session = self.session_coordinator.current(normalized)
+            if session is not None:
+                await self.session_coordinator.transition(session.id, SessionState.PLAYING)
+            return {"ok": True, "target_id": normalized, "state": "playing"}
 
     async def stop(self, target_id: str, *, reason: str = "stopped") -> dict[str, Any]:
-        normalized, suite = await self._command(target_id, "stop")
-        session = self.session_coordinator.current(normalized)
-        if session is not None and session.protocol is IngressProtocol.MCP:
-            await self.session_coordinator.end(session.id, reason=reason)
-            if suite.current_session_id == session.id:
-                suite.current_session_id = None
-        return {"ok": True, "target_id": normalized, "state": "stopped"}
+        normalized, _suite = self._suite_for(target_id)
+        async with self.operation_lock(normalized):
+            normalized, suite = await self._command(normalized, "stop")
+            session = self.session_coordinator.current(normalized)
+            if session is not None:
+                await self.session_coordinator.end(session.id, reason=reason)
+                if suite.current_session_id == session.id:
+                    suite.current_session_id = None
+            return {"ok": True, "target_id": normalized, "state": "stopped"}
 
     async def set_volume(self, target_id: str, volume: int) -> dict[str, Any]:
         normalized_volume = max(0, min(100, int(volume)))
-        normalized, _suite = await self._command(
-            target_id,
-            "set_volume",
-            normalized_volume,
-        )
-        result = {
-            "ok": True,
-            "target_id": normalized,
-            "volume": normalized_volume,
-        }
-        return result
+        normalized, _suite = self._suite_for(target_id)
+        async with self.operation_lock(normalized):
+            normalized, _suite = await self._command(
+                normalized,
+                "set_volume",
+                normalized_volume,
+            )
+            result = {
+                "ok": True,
+                "target_id": normalized,
+                "volume": normalized_volume,
+            }
+            return result
 
     async def get_status(self, target_id: str) -> dict[str, Any]:
         normalized, suite = self._suite_for(target_id)

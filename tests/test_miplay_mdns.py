@@ -53,4 +53,23 @@ def test_app_data_container_carries_app_five_control_port_and_uuid():
     assert b"11111111-2222-3333-4444-555555555555" in payload
     assert properties["apps"] == "[5]"
     assert properties["sec"] == "2"
+    assert properties["commonData"] == "0"
 
+
+def test_each_receiver_suite_has_a_stable_distinct_identity_hash():
+    first = MiPlayIdentity(
+        address="127.0.0.1",
+        device_id=uuid.UUID("11111111-2222-3333-4444-555555555555"),
+    ).service_info()
+    repeated = MiPlayIdentity(
+        address="127.0.0.1",
+        device_id=uuid.UUID("11111111-2222-3333-4444-555555555555"),
+    ).service_info()
+    second = MiPlayIdentity(
+        address="127.0.0.1",
+        device_id=uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+    ).service_info()
+
+    assert first.properties[b"idHash"] == repeated.properties[b"idHash"]
+    assert first.properties[b"idHash"] != second.properties[b"idHash"]
+    assert len(first.properties[b"idHash"]) == 4

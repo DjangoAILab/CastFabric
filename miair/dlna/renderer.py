@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import re
 import time
@@ -25,11 +26,16 @@ log = logging.getLogger("miair")
 class DLNARenderer:
     """每个音箱对应一个 DLNA 渲染器实例，管理传输状态"""
 
-    def __init__(self, udn: str, friendly_name: str, speaker: SpeakerController, default_volume: int = 50, config=None):
+    def __init__(self, udn: str, friendly_name: str, speaker: SpeakerController,
+                 default_volume: int = 50, config=None, *, lifecycle_callback=None,
+                 output_owner=None, operation_lock=None):
         self.udn = udn
         self.friendly_name = friendly_name
         self.speaker = speaker
         self.config = config
+        self.lifecycle_callback = lifecycle_callback
+        self.output_owner = output_owner
+        self.operation_lock = operation_lock
         # 保存did以便快速访问
         self.did = speaker.did
         self._lock = asyncio.Lock()
@@ -81,6 +87,67 @@ class DLNARenderer:
         self._stuck_paused_since: float = 0.0
         # 标记是否已应用过默认音量（避免切歌时重复重置）
         self._volume_initialized: bool = False
+        self._session_id: str | None = None
+        self._route_lock = asyncio.Lock()
+
+    def _physical_command_lock(self):
+        if self.operation_lock is not None:
+            return self.operation_lock()
+        return self._route_lock
+
+    async def _emit_lifecycle(self, event: str, details: dict | None = None):
+        if self.lifecycle_callback is None:
+            return None
+        result = self.lifecycle_callback(event, dict(details or {}))
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    async def _owns_output(self) -> bool:
+        if self.output_owner is None:
+            return True
+        try:
+            result = self.output_owner(self._session_id)
+            if inspect.isawaitable(result):
+                result = await result
+            return bool(result)
+        except asyncio.CancelledError:
+            return False
+        except Exception as exc:
+            log.warning(
+                "[%s] 无法确认 DLNA 输出所有权，跳过音箱控制: %s",
+                self.friendly_name,
+                type(exc).__name__,
+            )
+            return False
+
+    async def _ensure_session(self) -> str | None:
+        if self._session_id is not None and await self._owns_output():
+            return self._session_id
+        self._session_id = await self._emit_lifecycle(
+            "session_started", {"media_format": "DLNA URL"}
+        )
+        return self._session_id
+
+    async def _call_output(self, method: str, *args, **kwargs):
+        async with self._physical_command_lock():
+            if not await self._owns_output():
+                return None
+            return await getattr(self.speaker, method)(*args, **kwargs)
+
+    async def _end_session(self, *, failed: bool = False,
+                           error_code: str | None = None) -> None:
+        session_id = self._session_id
+        self._session_id = None
+        if session_id is not None:
+            await self._emit_lifecycle(
+                "session_ended",
+                {
+                    "session_id": session_id,
+                    "failed": failed,
+                    "error_code": error_code,
+                },
+            )
 
     # 视频格式扩展名列表
     VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v', '.3gp', '.ts', '.mts', '.m2ts'}
@@ -156,6 +223,7 @@ class DLNARenderer:
 
     async def play(self) -> bool:
         """开始播放 (DLNA Play)"""
+        await self._ensure_session()
         # 恢复代理访问（暂停时会屏蔽，此处解除以便音箱重新拉取音频）
         if self.resume_proxy_func:
             self.resume_proxy_func(self.udn)
@@ -225,7 +293,7 @@ class DLNARenderer:
 
         # 发送实际播放指令
         async with self._lock:
-            success = await self.speaker.play_url(play_url)
+            success = await self._call_output("play_url", play_url)
             if success:
                 self.transport_state = TRANSPORT_STATE_PLAYING
                 self._play_start_time = time.time()
@@ -234,10 +302,16 @@ class DLNARenderer:
                 log.info(f"[{self.friendly_name}] 播放成功")
                 self._play_check_task = asyncio.create_task(self._check_play_status())
                 asyncio.create_task(self._apply_default_volume())
+                await self._emit_lifecycle(
+                    "media_started", {"session_id": self._session_id}
+                )
             else:
                 self.transport_state = TRANSPORT_STATE_STOPPED
                 self._play_grace_until = 0.0
                 log.error(f"[{self.friendly_name}] 播放失败")
+                await self._end_session(
+                    failed=True, error_code="OUTPUT_PLAY_URL_FAILED"
+                )
         await self.notify_state_change()
         return success
 
@@ -257,7 +331,9 @@ class DLNARenderer:
                 
             await asyncio.sleep(0.5)
             if self.speaker:
-                await self.speaker.set_volume(default_vol)
+                result = await self._call_output("set_volume", default_vol)
+                if result is None:
+                    return
                 self.volume = default_vol
                 self._volume_initialized = True
                 log.info(f"[{self.friendly_name}] 已应用默认音量: {default_vol}%")
@@ -276,7 +352,9 @@ class DLNARenderer:
             if not self.speaker:
                 self.transport_state = TRANSPORT_STATE_PAUSED
                 return True
-            success = await self.speaker.pause()
+            success = await self._call_output("pause")
+            if success is None:
+                success = True
             if success:
                 # 累计播放时间
                 if self._play_start_time > 0:
@@ -308,7 +386,9 @@ class DLNARenderer:
             if not self.speaker:
                 self.transport_state = TRANSPORT_STATE_STOPPED
                 return True
-            success = await self.speaker.stop()
+            success = await self._call_output("stop")
+            if success is None:
+                success = True
             if success:
                 self.transport_state = TRANSPORT_STATE_STOPPED
                 self._accumulated_time = 0.0
@@ -319,6 +399,7 @@ class DLNARenderer:
                     self._play_check_task.cancel()
                     self._play_check_task = None
                 log.info(f"[{self.friendly_name}] 已停止")
+        await self._end_session()
         await self.notify_state_change()
         return success
 
@@ -344,6 +425,7 @@ class DLNARenderer:
                 self._play_check_task = None
             log.info(f"[{self.friendly_name}] 控制端断开，重置为空闲 ({old_state})")
         await self.notify_state_change()
+        await self._end_session()
 
     async def seek(self, unit: str, target: str) -> bool:
         """Seek - 生成格式正确的 seeked 音频并重新播放
@@ -383,15 +465,16 @@ class DLNARenderer:
                     
                     # 如果当前正在播放，先停止
                     if was_playing:
-                        await self.speaker.stop()
-                    
-                    success = await self.speaker.play_url(seek_url)
+                        if await self._call_output("stop") is None:
+                            return False
+
+                    success = await self._call_output("play_url", seek_url)
                     if success:
                         self._accumulated_time = seconds
                         
                         # 如果之前是暂停状态，seek后暂停在当前位置
                         if was_paused:
-                            await self.speaker.pause()
+                            await self._call_output("pause")
                             self._play_start_time = 0.0
                             self.transport_state = TRANSPORT_STATE_PAUSED
                             log.info(f"[{self.friendly_name}] Seek 成功（保持暂停）")
@@ -424,7 +507,8 @@ class DLNARenderer:
             if self.abort_proxy_func:
                 self.abort_proxy_func(self.udn)
             if self.speaker:
-                await self.speaker.stop()
+                if await self._call_output("stop") is None:
+                    return
                 log.info(f"[{self.friendly_name}] 已停止当前播放，准备切换到下一曲")
                 # 增加延迟到 1.0s，确保音箱完全停止播放并清空硬件缓存
                 await asyncio.sleep(1.0)
@@ -445,7 +529,7 @@ class DLNARenderer:
                     play_url = self.proxy_url_func(self.current_uri, self.udn)
                 async with self._lock:
                     self.transport_state = TRANSPORT_STATE_TRANSITIONING
-                success = await self.speaker.play_url(play_url)
+                success = await self._call_output("play_url", play_url)
                 async with self._lock:
                     if success:
                         self.transport_state = TRANSPORT_STATE_PLAYING
@@ -462,7 +546,8 @@ class DLNARenderer:
             # 将位置设到曲末，让控制端判定为自然结束并自动推进播放列表
             # 先停止当前播放，确保不会卡在最后三秒
             if self.speaker:
-                await self.speaker.stop()
+                if await self._call_output("stop") is None:
+                    return
                 log.info(f"[{self.friendly_name}] 已停止当前播放，模拟自然播完")
                 # 添加短暂延迟，确保音箱完全停止播放
                 await asyncio.sleep(0.5)
@@ -480,6 +565,7 @@ class DLNARenderer:
                 f"[{self.friendly_name}] 切歌: 无 next_uri，"
                 f"模拟自然播完 (位置={self._format_time(self._accumulated_time)})"
             )
+            await self._end_session()
         await self.notify_state_change()
 
     async def previous_track(self):
@@ -491,7 +577,7 @@ class DLNARenderer:
             play_url = self.current_uri
             if self.proxy_url_func:
                 play_url = self.proxy_url_func(self.current_uri, self.udn)
-            await self.speaker.play_url(play_url)
+            await self._call_output("play_url", play_url)
         await self.notify_state_change()
 
     async def set_next_av_transport_uri(self, uri: str, metadata: str = ""):
@@ -563,7 +649,9 @@ class DLNARenderer:
         if not self.speaker:
             self.volume = volume
             return True
-        success = await self.speaker.set_volume(volume)
+        success = await self._call_output("set_volume", volume)
+        if success is None:
+            return False
         if success:
             self.volume = volume
             if volume > 0:
@@ -583,12 +671,14 @@ class DLNARenderer:
         if mute and not self.mute:
             self._pre_mute_volume = self.volume
             if self.speaker:
-                success = await self.speaker.set_volume(0)
+                success = await self._call_output("set_volume", 0)
             else:
                 success = True
         elif not mute and self.mute:
             if self.speaker:
-                success = await self.speaker.set_volume(self._pre_mute_volume)
+                success = await self._call_output(
+                    "set_volume", self._pre_mute_volume
+                )
             else:
                 success = True
         else:

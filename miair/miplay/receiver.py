@@ -43,6 +43,7 @@ class MiPlayReceiver:
         volume_setter: Callable[[int], Awaitable[object]] | None = None,
         lifecycle_callback: Callable[[str, dict], Awaitable[object] | object]
         | None = None,
+        handshake_timeout: float = 15.0,
     ):
         self.host = host
         self.port = port
@@ -53,6 +54,7 @@ class MiPlayReceiver:
         self.ffmpeg = ffmpeg
         self.volume_setter = volume_setter
         self.lifecycle_callback = lifecycle_callback
+        self.handshake_timeout = max(0.05, float(handshake_timeout))
         self._server: asyncio.AbstractServer | None = None
         self._zeroconf: Zeroconf | None = None
         self._service_info = None
@@ -60,6 +62,7 @@ class MiPlayReceiver:
         self._idle = asyncio.Event()
         self._idle.set()
         self._active_session = False
+        self._claim_lock = asyncio.Lock()
         self._last_session: dict | None = None
         self._pending_volume: int | None = None
         self._volume_event = asyncio.Event()
@@ -141,6 +144,7 @@ class MiPlayReceiver:
             "listen_port": self.port,
             "advertising": self._service_info is not None,
             "active_session": self._active_session,
+            "control_connections": len(self._session_tasks),
             "last_session": dict(self._last_session) if self._last_session else None,
         }
 
@@ -153,15 +157,6 @@ class MiPlayReceiver:
         self._idle.clear()
         peer = writer.get_extra_info("peername")
         local = writer.get_extra_info("sockname")
-        if self._active_session:
-            log.warning("MiPlay 拒绝并发发送端: %s", peer)
-            writer.close()
-            await writer.wait_closed()
-            self._session_tasks.discard(task)
-            if not self._session_tasks:
-                self._idle.set()
-            return
-        self._active_session = True
         write_lock = asyncio.Lock()
         challenge = str(secrets.randbelow(10**15 - 10**14) + 10**14).encode()
         local_endpoint = (str(local[0]), int(local[1])) if local else None
@@ -185,12 +180,10 @@ class MiPlayReceiver:
             "error": None,
         }
         wfd_task: asyncio.Task | None = None
-        await self._emit_lifecycle(
-            "session_started",
-            {
-                "client_address": str(peer[0]) if peer else "",
-                "media_format": "mpegts",
-            },
+        session_reported = False
+        volume_dirty = False
+        handshake_deadline = (
+            asyncio.get_running_loop().time() + self.handshake_timeout
         )
 
         async def write_control(writes: list[bytes]) -> None:
@@ -204,7 +197,17 @@ class MiPlayReceiver:
             await write_control(session.start())
             decoder = CommandFrameBuffer()
             while True:
-                data = await reader.read(16 * 1024)
+                if wfd_task is None:
+                    remaining = (
+                        handshake_deadline - asyncio.get_running_loop().time()
+                    )
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError()
+                    data = await asyncio.wait_for(
+                        reader.read(16 * 1024), timeout=remaining
+                    )
+                else:
+                    data = await reader.read(16 * 1024)
                 if not data:
                     break
                 for frame in decoder.feed(data):
@@ -226,8 +229,25 @@ class MiPlayReceiver:
                     if not result.accepted:
                         raise ProtocolError(result.reason)
                     if frame.command == Command.SET_VOLUME:
-                        self._queue_volume(session.volume)
+                        volume_dirty = True
+                        if session_reported:
+                            self._queue_volume(session.volume)
                     if result.open_request is not None:
+                        if not session_reported:
+                            async with self._claim_lock:
+                                if self._active_session:
+                                    raise ProtocolError("concurrent sender")
+                                self._active_session = True
+                            await self._emit_lifecycle(
+                                "session_started",
+                                {
+                                    "client_address": str(peer[0]) if peer else "",
+                                    "media_format": "mpegts",
+                                },
+                            )
+                            session_reported = True
+                            if volume_dirty:
+                                self._queue_volume(session.volume)
                         if wfd_task is not None:
                             if not wfd_task.done():
                                 wfd_task.cancel()
@@ -260,14 +280,19 @@ class MiPlayReceiver:
             except (ConnectionError, BrokenPipeError):
                 pass
             self._last_session = report
-            self._active_session = False
-            await self._emit_lifecycle(
-                "session_ended",
-                {
-                    "failed": bool(report["error"]),
-                    "reason_code": "MIPLAY_SESSION_FAILED" if report["error"] else None,
-                },
-            )
+            if session_reported:
+                async with self._claim_lock:
+                    self._active_session = False
+            if session_reported:
+                await self._emit_lifecycle(
+                    "session_ended",
+                    {
+                        "failed": bool(report["error"]),
+                        "error_code": (
+                            "MIPLAY_SESSION_FAILED" if report["error"] else None
+                        ),
+                    },
+                )
             self._session_tasks.discard(task)
             if not self._session_tasks:
                 self._idle.set()

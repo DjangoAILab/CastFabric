@@ -2,6 +2,7 @@ import asyncio
 import struct
 
 import aiohttp
+import pytest
 
 from miair.miplay.receiver import MiPlayReceiver
 from miair.miplay.simulator import MiPlaySourceSimulator
@@ -186,6 +187,42 @@ def test_live_audio_sink_cleans_up_when_speaker_rejects_url():
         assert sink.diagnostics()["active"] is False
 
     asyncio.run(scenario())
+
+
+def test_stale_live_audio_sink_does_not_stop_new_output_owner():
+    async def scenario():
+        controller = FakeSpeakerController()
+        owns_output = True
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1",
+            controller,
+            output_owner=lambda: owns_output,
+        )
+        await sink.start(48_000, 2, 2)
+        owns_output = False
+        await sink.stop()
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    assert controller.stop_calls == 0
+
+
+def test_stale_live_audio_sink_cannot_start_physical_output():
+    async def scenario():
+        controller = FakeSpeakerController()
+        sink = MiAirLiveAudioSink(
+            "127.0.0.1",
+            controller,
+            output_owner=lambda: False,
+        )
+        with pytest.raises(RuntimeError, match="no longer owns"):
+            await sink.start(48_000, 2, 2)
+        return controller
+
+    controller = asyncio.run(scenario())
+
+    assert controller.url is None
 
 
 def test_live_audio_sink_fails_when_control_succeeds_but_renderer_never_pulls():

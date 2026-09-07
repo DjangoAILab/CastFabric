@@ -142,11 +142,9 @@ class AirPlayMDNS:
                 except (ServiceNameAlreadyRegistered, NonUniqueNameException) as e:
                     if attempt < 2:
                         log.warning(f"RAOP 服务名冲突 ({type(e).__name__})，等待 2 秒后重试 ({attempt+1}/3)...")
-                        # 旧进程重启时 zeroconf 可能还未清理，等待旧服务超时
-                        try:
-                            self.zeroconf.unregister_all_services()
-                        except Exception:
-                            pass
+                        # A shared Zeroconf also owns every other target's
+                        # RAOP service. Never unregister them as compensation
+                        # for one target's name collision.
                         time.sleep(2)
                     else:
                         raise

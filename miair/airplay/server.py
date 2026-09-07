@@ -392,6 +392,8 @@ class AirPlayServer:
         self._timing_socket: socket.socket | None = None
         self._timing_request_seq: int = 0
         self._rtsp_client_addr: tuple | None = None  # RTSP 客户端 IP
+        self._client_claim_lock = threading.Lock()
+        self._active_client_token: object | None = None
 
     def _generate_device_id(self) -> str:
         """生成设备 MAC 地址格式的 ID
@@ -466,7 +468,9 @@ class AirPlayServer:
         self._running = False
         if self._rtsp_socket:
             self._rtsp_socket.close()
-        self._mdns.stop()
+        # Zeroconf's synchronous unregister API must not run on the asyncio
+        # loop that backs the shared instance (it raises EventLoopBlocked).
+        await asyncio.to_thread(self._mdns.stop)
         await self._stream_server.stop()
         log.info("AirPlay 服务已停止")
 
@@ -486,7 +490,7 @@ class AirPlayServer:
             except Exception as e:
                 log.error(f"RTSP accept error: {e}")
 
-    def _safe_call_on_play_stop(self):
+    def _safe_call_on_play_stop(self, client_token=None):
         """线程安全地调用 on_play_stop 回调
         
         从同步 RTSP 线程中安全地触发可能涉及异步操作的回调。
@@ -497,11 +501,30 @@ class AirPlayServer:
             return
         try:
             if self._loop and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self.on_play_stop)
+                self._loop.call_soon_threadsafe(self.on_play_stop, client_token)
             else:
-                self.on_play_stop()
+                self.on_play_stop(client_token)
         except Exception as e:
             log.error(f"on_play_stop error: {e}")
+
+    def _claim_client(self, client_token, addr: tuple) -> bool:
+        """Claim the per-target shared RAOP state for one stateful client."""
+        with self._client_claim_lock:
+            if (
+                self._active_client_token is not None
+                and self._active_client_token is not client_token
+            ):
+                return False
+            self._active_client_token = client_token
+        self._rtsp_client_addr = addr
+        return True
+
+    def _release_client(self, client_token) -> bool:
+        with self._client_claim_lock:
+            if self._active_client_token is not client_token:
+                return False
+            self._active_client_token = None
+            return True
 
     def _handle_rtsp_client(self, sock: socket.socket, addr: tuple):
         """处理 RTSP 客户端连接"""
@@ -513,6 +536,15 @@ class AirPlayServer:
         control_socket = None
         timing_socket = None
         teardown_done = False  # 避免 TEARDOWN 和 finally 双重触发回调
+        client_token = object()
+        client_claimed = False
+
+        def claim_client() -> bool:
+            nonlocal client_claimed
+            if not self._claim_client(client_token, addr):
+                return False
+            client_claimed = True
+            return True
 
         # 设置客户端 socket 超时，防止无限阻塞导致线程卡死
         sock.settimeout(30.0)
@@ -592,14 +624,20 @@ class AirPlayServer:
                     self._send_rtsp_response(sock, 200, cseq, response_headers)
 
                 elif method == "ANNOUNCE":
+                    if not claim_client():
+                        self._send_rtsp_response(sock, 453, cseq)
+                        break
                     self._is_playing = True
                     self._handle_announce(sock, headers, body, cseq)
 
                 elif method == "SETUP":
+                    if not claim_client():
+                        self._send_rtsp_response(sock, 453, cseq)
+                        break
                     session_active, rtp_socket, control_socket, timing_socket = self._handle_setup(sock, headers, cseq)
 
                 elif method == "RECORD":
-                    self._handle_record(sock, cseq)
+                    self._handle_record(sock, cseq, client_token)
                     # 启动 RTP 接收线程
                     if rtp_socket and not rtp_thread:
                         rtp_thread = threading.Thread(
@@ -618,7 +656,7 @@ class AirPlayServer:
                     self._client_name = ""
                     self._stream_server.stop_streaming()
                     teardown_done = True
-                    self._safe_call_on_play_stop()
+                    self._safe_call_on_play_stop(client_token)
                     self._send_rtsp_response(sock, 200, cseq)
                     break
 
@@ -680,7 +718,7 @@ class AirPlayServer:
                                 self._last_volume_db = vol_db
                                 log.info(f"AirPlay 调节音量: {vol_db} dB")
                                 if self.on_volume_change:
-                                    self.on_volume_change(vol_db)
+                                    self.on_volume_change(vol_db, client_token)
                             except Exception as e:
                                 log.error(f"解析音量失败: {e}")
                     else:
@@ -688,6 +726,9 @@ class AirPlayServer:
                     self._send_rtsp_response(sock, 200, cseq)
 
                 elif method == "POST" and path == "/fp-setup":
+                    if not claim_client():
+                        self._send_rtsp_response(sock, 453, cseq)
+                        break
                     self._handle_fp_setup(sock, body, cseq)
 
                 elif method == "POST":
@@ -703,9 +744,14 @@ class AirPlayServer:
         except Exception as e:
             log.error(f"RTSP handler error: {e}")
         finally:
-            # 无论正常 TEARDOWN 还是异常断开，都要重置播放状态
-            self._is_playing = False
-            self._client_name = ""
+            owns_shared_state = False
+            if client_claimed:
+                owns_shared_state = self._release_client(client_token)
+            # An unclaimed/rejected candidate must not reset the active
+            # client's shared decoder or playback state.
+            if owns_shared_state:
+                self._is_playing = False
+                self._client_name = ""
             # 关闭所有 socket（RTP、RTCP control、timing）
             for s in (rtp_socket, control_socket, timing_socket):
                 if s:
@@ -716,8 +762,8 @@ class AirPlayServer:
             sock.close()
             log.info(f"AirPlay 客户端断开: {addr}")
             # 异常断开时触发 on_play_stop 回调（TEARDOWN 已触发过则跳过）
-            if not teardown_done:
-                self._safe_call_on_play_stop()
+            if owns_shared_state and not teardown_done:
+                self._safe_call_on_play_stop(client_token)
 
     def _handle_fp_setup(self, sock: socket.socket, body: bytes, cseq: str):
         """处理 FairPlay 认证 (POST /fp-setup)
@@ -1121,13 +1167,13 @@ class AirPlayServer:
             rtcp_socket.close()
             log.info("RTCP 线程已停止")
 
-    def _handle_record(self, sock: socket.socket, cseq: str):
+    def _handle_record(self, sock: socket.socket, cseq: str, client_token=None):
         """处理 RECORD 请求 - 开始播放"""
         self._stream_server.start_streaming()
 
         if self.on_play_start:
             try:
-                self.on_play_start(self._stream_server.stream_url)
+                self.on_play_start(self._stream_server.stream_url, client_token)
             except Exception as e:
                 log.error(f"on_play_start error: {e}")
 
@@ -1483,6 +1529,7 @@ class AirPlayServer:
             400: "Bad Request",
             401: "Unauthorized",
             404: "Not Found",
+            453: "Not Enough Bandwidth",
             500: "Internal Server Error",
         }
         msg = messages.get(code, "Unknown")

@@ -62,3 +62,54 @@ def test_session_coordinator_persists_lifecycle_and_preemption(tmp_path):
         repository.close()
 
     asyncio.run(scenario())
+
+
+def test_preempting_playlist_session_also_ends_owning_run(tmp_path):
+    async def scenario():
+        repository = ContentRepository(tmp_path / "castfabric.sqlite3", clock=lambda: NOW)
+        repository.create_playlist_record("playlist-one", "Morning")
+        repository.create_media_asset(
+            {
+                "id": "asset-one",
+                "source_kind": "external_url",
+                "display_name": "Track",
+                "source_value": "https://example.test/track.mp3",
+            }
+        )
+        repository.add_playlist_item_record(
+            "item-one", "playlist-one", "asset-one", 0
+        )
+        repository.start_run_with_session(
+            "run-one",
+            "session-one",
+            "uuid:living",
+            "playlist-one",
+            order_mode="sequential",
+            repeat_mode="none",
+            asset_id="asset-one",
+            playlist_item_id="item-one",
+            item_title_snapshot="Track",
+            source_type="playlist",
+            source_label="Morning",
+            duration_seconds=60,
+            seek_supported=True,
+        )
+        coordinator = MediaSessionCoordinator(
+            repository=repository,
+            clock=lambda: NOW,
+            id_factory=lambda: "session-two",
+        )
+        await coordinator.begin(
+            "uuid:living",
+            IngressProtocol.MCP,
+            session_id="session-one",
+            persist=False,
+        )
+
+        await coordinator.begin("uuid:living", IngressProtocol.MIPLAY)
+
+        assert repository.get_run("run-one")["state"] == "ended"
+        assert repository.get_run("run-one")["end_reason"] == "preempted"
+        repository.close()
+
+    asyncio.run(scenario())

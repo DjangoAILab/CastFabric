@@ -147,6 +147,20 @@ async def test_stop_cleans_every_miplay_receiver(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_explicit_runtime_shutdown_stops_outputs_and_ends_sessions(tmp_path):
+    app, controllers = _app(tmp_path)
+    await app.playback_service.play_url(
+        "uuid:living", "https://example.test/track.mp3"
+    )
+
+    await app._stop_dlna_services(stop_outputs=True)
+
+    controllers["uuid:living"].stop.assert_awaited_once_with()
+    assert app.session_coordinator.current("uuid:living") is None
+    assert app.suite_registry.values() == ()
+
+
+@pytest.mark.asyncio
 async def test_lifecycle_records_verified_states_without_guessing_source_app(tmp_path):
     app, _ = _app(tmp_path)
     target_id = "uuid:living"
@@ -200,3 +214,49 @@ async def test_lifecycle_records_verified_states_without_guessing_source_app(tmp
     )
     assert app.session_coordinator.current(target_id) is None
     assert app.suite_registry.get(target_id).current_session_id is None
+
+
+@pytest.mark.asyncio
+async def test_stale_miplay_end_cannot_clear_a_newer_mcp_session(tmp_path):
+    app, _ = _app(tmp_path)
+    target_id = "uuid:living"
+    app.suite_registry.set_ingress(
+        target_id,
+        IngressProtocol.MIPLAY,
+        IngressState.READY,
+        handle=object(),
+        port=18900,
+    )
+
+    await app._handle_miplay_lifecycle(
+        target_id,
+        "session_started",
+        {"media_format": "mpegts"},
+    )
+    stale_id = app._miplay_session_ids[target_id]
+    await app.playback_service.play_url(
+        target_id, "https://example.test/new.mp3", media_format="audio/mpeg"
+    )
+    current = app.session_coordinator.current(target_id)
+    assert (
+        app.suite_registry.get(target_id).get_ingress(IngressProtocol.MIPLAY).state
+        is IngressState.READY
+    )
+
+    await app._handle_miplay_output_lifecycle(
+        target_id,
+        "output_stopped",
+        {},
+    )
+    await app._handle_miplay_lifecycle(
+        target_id,
+        "session_ended",
+        {"failed": False},
+    )
+
+    assert app.session_coordinator.current(target_id).id == current.id
+    assert app.suite_registry.get(target_id).current_session_id == current.id
+    assert target_id not in app._miplay_session_ids
+    output_event = app.activity_journal.query(target_id=target_id)[0]
+    assert output_event.type == "miplay.output_stopped"
+    assert output_event.session_id == stale_id

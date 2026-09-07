@@ -20,6 +20,13 @@ MIPLAY_AUDIO_APP_ID = 5
 MICONNECT_COAP_PORT = 56_666
 
 
+def identity_hash(device_id: uuid.UUID) -> str:
+    """Return a stable, compact identity that is unique per receiver suite."""
+    return base64.b64encode(hashlib.sha256(device_id.bytes).digest()[:3]).decode(
+        "ascii"
+    )
+
+
 def encode_app_data(device_id: uuid.UUID, control_port: int) -> str:
     if not 1 <= control_port <= 65535:
         raise ValueError("control port out of range")
@@ -90,7 +97,8 @@ class MiPlayIdentity:
             "dev": "4",
             "sec": "2",
             "flags": "Ag==",
-            "idHash": "T1hD",
+            "idHash": identity_hash(self.device_id),
+            "commonData": "0",
         }
         return ServiceInfo(
             MIPLAY_SERVICE_TYPE,

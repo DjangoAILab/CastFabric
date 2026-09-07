@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -173,12 +174,83 @@ async def test_play_at_stops_started_output_when_initial_seek_is_unsupported():
 
 
 @pytest.mark.asyncio
-async def test_stop_does_not_end_a_session_owned_by_another_ingress():
+async def test_target_stop_ends_the_current_session_regardless_of_ingress():
     service, suite, _controller, sessions = _service()
     airplay = await sessions.begin("uuid:living", IngressProtocol.AIRPLAY)
     suite.current_session_id = airplay.id
 
     await service.stop("uuid:living")
 
-    assert sessions.current("uuid:living").id == airplay.id
-    assert suite.current_session_id == airplay.id
+    assert sessions.current("uuid:living") is None
+    assert suite.current_session_id is None
+
+
+@pytest.mark.asyncio
+async def test_overlapping_play_commands_are_serialized_per_target():
+    target = OutputTargetConfig(
+        id="uuid:living",
+        name="Living",
+        virtual_udn="living-virtual",
+    )
+    active_commands = 0
+    max_active_commands = 0
+
+    async def play_url(_url, *, play_type):
+        nonlocal active_commands, max_active_commands
+        active_commands += 1
+        max_active_commands = max(max_active_commands, active_commands)
+        await asyncio.sleep(0.01)
+        active_commands -= 1
+        return True
+
+    controller = SimpleNamespace(play_url=play_url)
+    suites = ReceiverSuiteRegistry(device_name_prefix="CastFabric")
+    suite = suites.register(target, "living-controller", controller)
+    ids = iter(["session-one", "session-two"])
+    sessions = MediaSessionCoordinator(id_factory=lambda: next(ids))
+    service = PlaybackService(suites, sessions)
+
+    first, second = await asyncio.gather(
+        service.play_url(target.id, "https://example.test/one.mp3"),
+        service.play_url(target.id, "https://example.test/two.mp3"),
+    )
+
+    assert max_active_commands == 1
+    assert first["session_id"] == "session-one"
+    assert second["session_id"] == "session-two"
+    assert sessions.current(target.id).id == "session-two"
+    assert suite.current_session_id == "session-two"
+
+
+@pytest.mark.asyncio
+async def test_different_targets_keep_independent_physical_command_lanes():
+    active_commands = 0
+    max_active_commands = 0
+
+    async def play_url(_url, *, play_type):
+        nonlocal active_commands, max_active_commands
+        active_commands += 1
+        max_active_commands = max(max_active_commands, active_commands)
+        await asyncio.sleep(0.01)
+        active_commands -= 1
+        return True
+
+    suites = ReceiverSuiteRegistry(device_name_prefix="CastFabric")
+    for target_id in ("uuid:living", "uuid:bedroom"):
+        target = OutputTargetConfig(id=target_id, name=target_id)
+        suites.register(
+            target,
+            target_id,
+            SimpleNamespace(play_url=play_url),
+        )
+    ids = iter(["session-one", "session-two"])
+    service = PlaybackService(
+        suites, MediaSessionCoordinator(id_factory=lambda: next(ids))
+    )
+
+    await asyncio.gather(
+        service.play_url("uuid:living", "https://example.test/one.mp3"),
+        service.play_url("uuid:bedroom", "https://example.test/two.mp3"),
+    )
+
+    assert max_active_commands == 2
