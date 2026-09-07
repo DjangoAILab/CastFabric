@@ -73,44 +73,39 @@ contract is recorded in `docs/plans/2026-09-01-castfabric-mcp-agent-skill-design
 11. Every physical output mutation is serialized per target and fenced by the current session owner;
     stale protocol callbacks fail closed (`docs/adr/0012-*`).
 
-## Unreleased local boundary hardening (2026-09-07)
+## Released multi-protocol boundary hardening (2026-09-07)
 
 - A multi-device/multi-protocol audit fixed false MiPlay sessions from TCP probes, handshake-slot
   starvation, stale callback output control, cross-protocol state corruption, AirPlay dual-client
   ownership, orphaned playlist runs, partial-start cleanup and duplicate MiPlay identity hashes.
 - The audit and remaining real-device gates are recorded in
   `docs/architecture/2026-09-07-multi-device-protocol-boundary-audit.md`.
-- This work is local and not deployed. The Home Server was inspected read-only and its current
-  playback/configuration were not changed. Do not treat the released alpha.4 image as containing
-  these fixes.
+- This work is released as `v0.11.0-alpha.5` and deployed to the Home Server. The previous alpha.4
+  container remains stopped as `castfabric-rollback-20260907-d6e7a07-pre-alpha5`.
 - Local verification: 245 Python tests, the direct audio Seek script, and offline MiPlay
   WFD/RTP/MPEG-TS/PCM self-test pass. Xiaomi-phone discovery remains a real-device gate; runtime
   `ready`, self-scan and the bundled simulator are not evidence of MIUI interoperability.
 
 ## Verification and deployment baseline
 
-- Current released code commit: `d6e7a076ad325c4800562c27f9df400f79c8909c`.
-- Current published prerelease: `v0.11.0-alpha.4`.
+- Current released code commit: `9d400f711b82c8a0a463c6a6e09e9c1b1d932a36`.
+- Current published prerelease: `v0.11.0-alpha.5`.
 - Canonical repository: `https://github.com/DjangoAILab/CastFabric`.
-- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.4`, published for
+- GHCR image: `ghcr.io/djangoailab/castfabric:v0.11.0-alpha.5`, published for
   `linux/amd64` and `linux/arm64`.
 - Landing page: `https://djangoailab.github.io/CastFabric/`.
-- GitHub Actions publish run `34032488040` (attempt 2) passed Python/integration tests, Agent Skill tests,
-  offline MiPlay validation, container cold-start/HTTP checks, multi-architecture publishing and
-  prerelease creation.
-- The Home Server runs alpha.4, pinned to OCI index
-  `sha256:68c889784f2e0fc59ca3b11593f227a55122e6bebb5caf39e2b5235a63ecd38a`.
-  Final restart: `2026-09-06T14:24:25Z`. The container is healthy, all three protocols are `1/1`
-  ready, active/playing counts are zero, and actual renderer status is stopped at volume `0`
-  (the user's preflight setting, not changed by this release). Published-image isolated and
-  domain-side gates passed: canonical SVG/static bytes, bilingual desktop/mobile dialogs, 32 MCP
-  tools, 20 audio Range reads, diagnostics privacy, six-table integrity and restart persistence.
-  All 20 missing MP3 durations were backfilled without changing existing IDs, names, credits,
-  timestamps, playlist order or revisions. Rollback container:
-  `castfabric-rollback-20260906-94e993e-pre-alpha4`. The initial restart harness incorrectly
-  checked full protocol readiness at aggregate health before initialization completed and rolled
-  back; the corrected harness waits for all three ready counters. The same release passed both
-  redeployment and final restart. See `docs/testing/2026-09-06-header-dialog-release.md`.
+- Main publish run `34081095632` and tag publish run `34081736315` passed Python/integration tests,
+  Agent Skill tests, offline MiPlay validation, container cold-start/HTTP checks, multi-architecture
+  publishing and prerelease creation.
+- The Home Server runs alpha.5, pinned to OCI index
+  `sha256:010654cd4ec99926115b316e96f5028a506bf8f7f8913a6f8a11bd3271961ff6`.
+  Final restart: `2026-09-07T04:19:57Z`. The container is healthy, DLNA, AirPlay and MiPlay are all
+  ready, active session/run counts are zero, and the physical renderer is stopped at the preserved
+  volume `28`. The exact published image passed an isolated cold start, domain TLS, 32 MCP tools,
+  all 20 managed-file Range reads, diagnostic privacy, six-table integrity, a restart, stable MiPlay
+  identity, an idle-probe deadline test and a controlled MiPlay-to-physical-DMR chain. The latter
+  confirmed the renderer GET and non-silent PCM but is not a human audible-listening claim. See
+  `docs/testing/2026-09-07-multi-protocol-boundary-release.md`.
 - The preceding physical-chain validation used candidate `94e993e4ec8abf8200e577dfc3ffb97586529320`,
   image `sha-94e993e`, pinned to OCI index
   `sha256:9adaac8ead99c8e210a8e7644077db26795acc2d58275286b3b1cd888e781b74`.

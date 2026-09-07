@@ -1,14 +1,14 @@
 # CastFabric Home Server verification
 
-Latest verification: 2026-09-06 (alpha.4 deployment and silent acceptance complete)
+Latest verification: 2026-09-07 (alpha.5 multi-protocol boundary deployment accepted)
 
-Published baseline: `v0.11.0-alpha.4`
+Published baseline: `v0.11.0-alpha.5`
 
 Network: `192.168.133.0/24`
 
-Deployment baseline: `v0.11.0-alpha.4`, commit `d6e7a076ad325c4800562c27f9df400f79c8909c`.
+Deployment baseline: `v0.11.0-alpha.5`, commit `9d400f711b82c8a0a463c6a6e09e9c1b1d932a36`.
 
-Deployed image index: `sha256:68c889784f2e0fc59ca3b11593f227a55122e6bebb5caf39e2b5235a63ecd38a` (`linux/amd64` host).
+Deployed image index: `sha256:010654cd4ec99926115b316e96f5028a506bf8f7f8913a6f8a11bd3271961ff6` (`linux/amd64` host).
 
 Pre-fix rollback container: `castfabric-rollback-0.11.0a1-pre-proxy-origin`
 
@@ -17,6 +17,39 @@ Pre-seek rollback container: `castfabric-rollback-0.11.0a2-pre-seek`
 Server-playlists rollback container: `castfabric-rollback-20260905-3563c5b-pre-playlists`
 
 Alpha.4 rollback container: `castfabric-rollback-20260906-94e993e-pre-alpha4`
+
+Alpha.5 rollback container: `castfabric-rollback-20260907-d6e7a07-pre-alpha5`
+
+## Multi-protocol boundary release acceptance (2026-09-07)
+
+- [x] Main run `34081095632` and tag run `34081736315` passed all Python, Agent Skill,
+  offline MiPlay, Docker cold-start and multi-architecture publish gates. The GitHub prerelease uses
+  the checked-in alpha.5 notes.
+- [x] Exact OCI index and image revision were verified before replacement. The published image also
+  passed an isolated Home Server cold start; its temporary container and volume were removed.
+- [x] Original host network, persistent `/app/conf` bind mount, CastFabric environment values and
+  `unless-stopped` policy were preserved. The alpha.4 container is retained stopped for rollback.
+- [x] The preflight renderer was paused at second 13 of 695, volume 28. Restart correctly marked the
+  stale MCP session `interrupted` while preserving its progress; no automatic playback occurred.
+- [x] An idle TCP connection appeared only in diagnostic `control_connections`, created no media
+  session, and was removed at the 15-second handshake deadline. Reading the buffered 24-byte
+  challenge through EOF confirmed server-side closure.
+- [x] MiPlay mDNS self-scan found one audio-capable receiver on port 8899. Its target-derived identity
+  remained unchanged across the final restart.
+- [x] A controlled 0.35-second MiPlay source completed authentication and RTSP, delivered six media
+  frames, produced non-silent PCM (`peak=2969`, first PCM 14 ms), caused the physical DMR to GET the
+  WAV stream, and ended with `output_stopped` and no MiPlay failure event. Final renderer state is
+  stopped at the preserved volume 28. This is transport-chain evidence, not a human listening claim.
+- [x] Post-restart domain TLS, 32 MCP tools/read-only status, all 20 managed files with 128-byte Range
+  reads, the two curated playlist IDs/revisions, diagnostic privacy, exactly six business tables,
+  SQLite integrity/foreign keys, and zero active sessions/runs passed. Runtime logs contain no
+  `EventLoopBlocked`, traceback or error entry.
+- [ ] A Xiaomi phone must still confirm appearance in the current MIUI system cast picker and a real
+  Open; server self-scan and the bundled simulator cannot prove that private discovery filter.
+- [ ] Two simultaneous physical speakers remain unverified because only one output exists.
+
+Detailed evidence and the corrected validation-harness assumptions are recorded in
+`docs/testing/2026-09-07-multi-protocol-boundary-release.md`.
 
 ## Approved header/dialog release acceptance (2026-09-06)
 
