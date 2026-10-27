@@ -27,6 +27,36 @@ from .rtsp import ReceiverRtspSession, RtspBuffer
 log = logging.getLogger("miair")
 
 
+def _enable_tcp_keepalive(
+    writer: asyncio.StreamWriter,
+    *,
+    idle: int = 30,
+    interval: int = 10,
+    probes: int = 3,
+) -> None:
+    """Let the kernel reap half-open peers instead of blocking reads forever.
+
+    Android drops the Wi-Fi link without ever sending a FIN when the phone
+    switches bands, kills the music app, or walks out of coverage.  The Linux
+    default is 7200s + 75s*9 before such a socket is reaped, so ``read()`` stays
+    suspended for hours and a session can never be released.  30s idle plus
+    3 probes at 10s bounds the detection to roughly one minute.
+    """
+    sock = writer.get_extra_info("socket")
+    if sock is None:
+        return
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        if hasattr(socket, "TCP_KEEPIDLE"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, idle)
+        if hasattr(socket, "TCP_KEEPINTVL"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, interval)
+        if hasattr(socket, "TCP_KEEPCNT"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, probes)
+    except OSError as exc:  # pragma: no cover - platform dependent
+        log.debug("MiPlay TCP keepalive 设置失败: %s", exc)
+
+
 class MiPlayReceiver:
     """One TCP 8899-compatible receiver with a single active media source."""
 
@@ -62,6 +92,7 @@ class MiPlayReceiver:
         self._idle = asyncio.Event()
         self._idle.set()
         self._active_session = False
+        self._active_owner: asyncio.Task | None = None
         self._claim_lock = asyncio.Lock()
         self._last_session: dict | None = None
         self._pending_volume: int | None = None
@@ -155,6 +186,7 @@ class MiPlayReceiver:
         assert task is not None
         self._session_tasks.add(task)
         self._idle.clear()
+        _enable_tcp_keepalive(writer)
         peer = writer.get_extra_info("peername")
         local = writer.get_extra_info("sockname")
         write_lock = asyncio.Lock()
@@ -234,10 +266,25 @@ class MiPlayReceiver:
                             self._queue_volume(session.volume)
                     if result.open_request is not None:
                         if not session_reported:
+                            victim: asyncio.Task | None = None
                             async with self._claim_lock:
                                 if self._active_session:
-                                    raise ProtocolError("concurrent sender")
+                                    # 上一次投送的手机可能已经离线（切频段、杀 App、
+                                    # 走出覆盖），但半开连接让旧会话一直占着通道。
+                                    # 与其拒绝新手，不如把旧会话踢掉，让用户点了就响。
+                                    victim = self._active_owner
+                                    self._active_session = False
+                                    self._active_owner = None
                                 self._active_session = True
+                                self._active_owner = task
+                            if victim is not None and victim is not task:
+                                log.warning(
+                                    "MiPlay 通道被旧会话占用, 抢占并释放旧会话"
+                                )
+                                victim.cancel()
+                                await asyncio.gather(
+                                    victim, return_exceptions=True
+                                )
                             await self._emit_lifecycle(
                                 "session_started",
                                 {
@@ -282,7 +329,10 @@ class MiPlayReceiver:
             self._last_session = report
             if session_reported:
                 async with self._claim_lock:
-                    self._active_session = False
+                    # 只释放自己持有的锁，被抢占的旧会话不能清掉新会话的占用
+                    if self._active_owner is task:
+                        self._active_session = False
+                        self._active_owner = None
             if session_reported:
                 await self._emit_lifecycle(
                     "session_ended",
@@ -343,6 +393,8 @@ class MiPlayReceiver:
                     )
                 )
             (rtsp_reader, rtsp_writer), (_, aux_writer), (media_reader, media_writer) = connections
+            for _, media_connection_writer in connections:
+                _enable_tcp_keepalive(media_connection_writer)
             ready = asyncio.get_running_loop().create_future()
             rtsp_task = asyncio.create_task(
                 self._run_rtsp_control(
